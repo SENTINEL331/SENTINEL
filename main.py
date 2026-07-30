@@ -13,6 +13,10 @@ def main():
     print(manager.get_status())
     print(manager.get_version())
     print(f"Data Provider: {manager.get_provider()}")
+    data = manager.download_history("NVDA")
+
+    print(data.head())
+
 if __name__ == "__main__":
-	main()
+      main()
 

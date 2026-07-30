@@ -1,3 +1,5 @@
+import yfinance as yf
+
 class MarketDataManager:
     """Handles historical market data for Sentinel."""
 
@@ -14,3 +16,14 @@ class MarketDataManager:
 
     def get_status(self):
         return self.status
+
+    def download_history(self, symbol, period="30d", interval="1d"):
+        """Download historical market data from Yahoo Finance."""
+
+        data = yf.download(
+            symbol,
+            period=period,
+            interval=interval
+        )
+
+        return data
