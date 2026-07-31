@@ -29,7 +29,7 @@ The goal is to build an evidence-driven research platform that continually impro
 
 Current Version
 
-**v0.6**
+**v0.8**
 
 Current Development Stage
 
@@ -53,7 +53,7 @@ History Manager
 Feature Engine
       │
       ▼
-Feature Store (Planned)
+Feature Store (In progress)
       │
       ▼
 Research Engine (Planned)
