@@ -1,33 +1,146 @@
-# Sentinel
+# 🛡️ Sentinel
 
-Sentinel is an AI-assisted quantitative research platform designed to discover,
-test, validate and monitor trading strategies using historical and live market data.
+> **AI Trading Research Platform**
 
-## Goals
+Sentinel is an AI-driven trading research platform designed to discover, test, validate and rank trading opportunities using historical market data, statistical analysis and artificial intelligence.
 
-- Learn Python through a real-world project
-- Build a professional software engineering portfolio
-- Develop an extensible quantitative research platform
-- Follow best software engineering practices
+---
 
-## Current Version
+# Vision
 
-v0.6 (Foundation)
+Sentinel is being designed as an autonomous research scientist for financial markets.
 
-## Status
+Rather than simply executing trading strategies, Sentinel will:
 
-🚧 Under Development
+- Generate research hypotheses
+- Engineer market features
+- Backtest ideas
+- Validate results
+- Learn from previous research
+- Rank trading opportunities
+- Recommend Buy / Sell / Hold decisions
+- Optionally execute validated strategies
 
-## Current Status
+The goal is to build an evidence-driven research platform that continually improves over time.
 
-Sentinel is currently capable of:
+---
 
-- Downloading historical market data.
-- Maintaining a local historical database.
-- Managing data history.
-- Building analytical market features.
-- Extending analytical capabilities through a modular Feature Engine.
+# Current Status
 
 Current Version
 
-v0.6
+**v0.6**
+
+Current Development Stage
+
+- ✅ Market Data Management
+- ✅ Historical Data Storage
+- ✅ Feature Engine
+- ✅ Feature Registry
+- ✅ Modular Analytics Architecture
+
+---
+
+# Current Architecture
+
+```
+Market Data
+      │
+      ▼
+History Manager
+      │
+      ▼
+Feature Engine
+      │
+      ▼
+Feature Store (Planned)
+      │
+      ▼
+Research Engine (Planned)
+      │
+      ▼
+Backtesting Engine (Planned)
+      │
+      ▼
+Decision Engine (Planned)
+      │
+      ▼
+Paper / Live Trading (Optional)
+```
+
+---
+
+# Features
+
+Implemented
+
+- Historical market downloads
+- Local market database
+- Incremental history management
+- Modular Feature Engine
+- Feature Registry
+- Simple Moving Average (SMA)
+
+Planned
+
+- EMA
+- RSI
+- ATR
+- MACD
+- Bollinger Bands
+- Feature Store
+- Hypothesis Generator
+- Validation Engine
+- Trade Ranking
+- AI Research Agent
+
+---
+
+# Project Philosophy
+
+Sentinel follows several core principles:
+
+- Build reliable foundations before AI.
+- Every module has one responsibility.
+- Every feature must justify its existence.
+- Evidence over opinion.
+- Memory is a first-class component.
+- AI performs research rather than deterministic calculations.
+
+---
+
+# Roadmap
+
+See:
+
+- ROADMAP.md
+- ARCHITECTURE.md
+- CHANGELOG.md
+
+---
+
+# Technology
+
+- Python
+- Pandas
+- Yahoo Finance
+- Git
+- GitHub
+
+Future
+
+- Machine Learning
+- Large Language Models
+- Statistical Modelling
+- Paper Trading
+- Live Trading
+
+---
+
+# Author
+
+Created by Lloyd
+
+Project Name
+
+Sentinel
