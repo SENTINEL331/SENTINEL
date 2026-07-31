@@ -16,7 +16,7 @@ class HistoryManager:
         filename = f"{symbol}_{interval.upper()}.csv"
         filepath = data_directory / filename
 
-        data.to_csv(filepath)
+        data.to_csv(filepath, index=False)
 
         return filepath
 
@@ -25,7 +25,10 @@ class HistoryManager:
 
         filepath = Path("data/raw") / f"{symbol}_{interval.upper()}.csv"
 
-        return pd.read_csv(filepath)
+        data = pd.read_csv(filepath)
+
+
+        return data
 
     def get_latest_date(self, symbol, interval=DEFAULT_INTERVAL):
         """Return the most recent date in the historical data."""
@@ -42,3 +45,23 @@ class HistoryManager:
         filepath = Path("data/raw") / f"{symbol}_{interval.upper()}.csv"
 
         return filepath.exists()
+
+    def get_history_status(self, symbol, interval=DEFAULT_INTERVAL):
+        """Return the current status of local historical data."""
+
+        exists = self.history_exists(symbol, interval)
+
+        if not exists:
+            return {
+                "exists": False,
+                "latest_date": None,
+                "status": "Missing",
+            }
+
+        latest = self.get_latest_date(symbol, interval)
+
+        return {
+            "exists": True,
+            "latest_date": latest,
+            "status": "Available",
+        }

@@ -1,0 +1,47 @@
+# Sentinel Roadmap
+
+## Completed
+
+### v0.1
+- Project structure
+- Logging
+- Banner
+
+### v0.2
+- Yahoo Finance integration
+- Historical downloads
+
+### v0.3
+- Configuration
+- Watchlists
+
+### v0.4
+- History detection
+- Refactoring
+
+### v0.5
+- HistoryManager
+- Data normalisation
+- Latest-date detection
+
+---
+
+## Planned
+
+### v0.6
+- Smart history updates
+
+### v0.7
+- Indicator Engine
+
+### v0.8
+- Backtesting Engine
+
+### v0.9
+- Validation Engine
+
+### v1.0
+- Research Pipeline
+
+### v2.0
+- AI Research Agent

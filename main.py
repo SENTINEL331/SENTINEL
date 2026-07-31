@@ -3,6 +3,7 @@ from utils.banner import show_banner
 from utils.logger import setup_logger
 from config.settings import WATCHLIST
 from market.history_manager import HistoryManager
+from analytics.feature_engine import FeatureEngine
 
 def main():
     logger = setup_logger()
@@ -19,12 +20,28 @@ def main():
 
     for symbol in WATCHLIST:
 
-        if history.history_exists(symbol):
-            
-            latest = history.get_latest_date(symbol)
+        status = history.get_history_status(symbol)
 
-            logger.info(f"{symbol}: Latest data = {latest.date()}")
+        logger.info(f"{symbol}: {status}")
+
+        if status["exists"]:
+
+            logger.info(f"{symbol}: Latest data = {status['latest_date'].date()}")
             logger.info(f"{symbol}: Existing data found. Skipping download.")
+
+            data = history.load_history(symbol)
+
+            engine = FeatureEngine()
+
+            engine.add_feature(
+                "SMA",
+                period=20
+            )
+
+            data = engine.calculate(data)
+
+            print(data.tail())
+
             continue
 
         logger.info(f"{symbol}: No data found.")
