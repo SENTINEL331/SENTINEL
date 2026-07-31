@@ -1,19 +1,22 @@
-# Python
-__pycache__/
-*.pyc
-
-# Virtual Environment
+# Virtual environment
 .venv/
-venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
 
 # Logs
 logs/
-
-# Database
-*.db
+*.log
 
 # VS Code
 .vscode/
 
-# Environment Variables
+# macOS
+.DS_Store
+
+# Environment variables
 .env
+
+# Jupyter
+.ipynb_checkpoints/
