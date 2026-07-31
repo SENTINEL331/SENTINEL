@@ -2,36 +2,43 @@ from analytics.feature_registry import FEATURE_REGISTRY
 
 
 class FeatureEngine:
-    """Creates market features from historical data."""
+    """Calculates market features."""
 
     def __init__(self):
+
         self.features = []
 
-    def add_feature(self, name, **parameters):
-        """Register a feature for calculation."""
+    def add_feature(
+        self,
+        name,
+        **parameters,
+    ):
+        """Register a feature to calculate."""
 
         self.features.append(
             {
-                "name": name.upper(),
+                "name": name,
                 "parameters": parameters,
             }
         )
 
-    def calculate(self, data):
+    def calculate(
+        self,
+        data,
+    ):
         """Calculate all registered features."""
-
-        data = data.copy()
 
         for feature in self.features:
 
             name = feature["name"]
-            params = feature["parameters"]
 
-            calculator = FEATURE_REGISTRY.get(name)
+            parameters = feature["parameters"]
 
-            if calculator is None:
-                raise ValueError(f"Unknown feature: {name}")
+            calculate = FEATURE_REGISTRY[name]
 
-            data = calculator(data, **params)
+            data = calculate(
+                data,
+                **parameters,
+            )
 
         return data

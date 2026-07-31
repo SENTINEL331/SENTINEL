@@ -1,5 +1,5 @@
 APP_NAME = "Sentinel"
-VERSION = "v0.7"
+VERSION = "v0.8"
 
 DATA_PROVIDER = "Yahoo Finance"
 
@@ -12,3 +12,18 @@ WATCHLIST = [
 
 DEFAULT_PERIOD = "30d"
 DEFAULT_INTERVAL = "1d"
+
+FEATURE_SET = [
+    {
+        "name": "SMA",
+        "parameters": {
+            "period": 20,
+        },
+    },
+    {
+        "name": "EMA",
+        "parameters": {
+            "period": 20,
+        },
+    },
+]
