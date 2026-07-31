@@ -1,12 +1,7 @@
 from market.data_manager import MarketDataManager 
 from utils.banner import show_banner
 from utils.logger import setup_logger
-WATCHLIST = [
-    "NVDA",
-    "AAPL",
-    "MSFT",
-    "TSLA",
-]
+from config.settings import WATCHLIST
 
 def main():
     logger = setup_logger()

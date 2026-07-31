@@ -1,12 +1,13 @@
 import yfinance as yf
 from pathlib import Path
+from config.settings import VERSION, DATA_PROVIDER, DEFAULT_PERIOD, DEFAULT_INTERVAL
 
 class MarketDataManager:
     """Handles historical market data for Sentinel."""
 
     def __init__(self):
-        self.provider = "YFinance"
-        self.version = "0.3"
+        self.version = VERSION
+        self.provider = DATA_PROVIDER
         self.status = "Market Module Online"
 
     def get_provider(self):
@@ -18,13 +19,18 @@ class MarketDataManager:
     def get_status(self):
         return self.status
 
-    def download_history(self, symbol, period="30d", interval="1d"):
+    def download_history(
+        self,
+        symbol,
+        period=DEFAULT_PERIOD,
+        interval=DEFAULT_INTERVAL,
+    ):
         """Download historical market data from Yahoo Finance."""
 
         data = yf.download(
             symbol,
             period=period,
-            interval=interval
+            interval=interval,
         )
 
         return data
