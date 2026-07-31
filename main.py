@@ -1,9 +1,14 @@
-from market.data_manager import MarketDataManager 
+from market.data_manager import MarketDataManager
+from market.history_manager import HistoryManager
+
+from analytics.feature_engine import FeatureEngine
+from analytics.feature_store import FeatureStore
+
 from utils.banner import show_banner
 from utils.logger import setup_logger
+
 from config.settings import WATCHLIST
-from market.history_manager import HistoryManager
-from analytics.feature_engine import FeatureEngine
+
 
 def main():
     logger = setup_logger()
@@ -11,8 +16,9 @@ def main():
 
     manager = MarketDataManager()
     history = HistoryManager()
+    features = FeatureStore()
 
-    show_banner() 
+    show_banner()
 
     print(manager.get_status())
     print(manager.get_version())
@@ -20,39 +26,55 @@ def main():
 
     for symbol in WATCHLIST:
 
-        status = history.get_history_status(symbol)
+        # Check historical data
+        history_status = history.get_history_status(symbol)
 
-        logger.info(f"{symbol}: {status}")
+        logger.info(f"{symbol}: {history_status}")
 
-        if status["exists"]:
+        if not history_status["exists"]:
 
-            logger.info(f"{symbol}: Latest data = {status['latest_date'].date()}")
-            logger.info(f"{symbol}: Existing data found. Skipping download.")
+            logger.info(f"{symbol}: No data found.")
+            logger.info(f"Downloading {symbol}...")
 
-            data = history.load_history(symbol)
+            data = manager.download_history(symbol)
+
+            filepath = history.save_history(data, symbol)
+
+            logger.info(f"Data saved to {filepath}")
+
+        # Load historical data
+        data = history.load_history(symbol)
+
+        # Check feature data
+        feature_status = features.get_feature_status(symbol)
+
+        logger.info(f"{symbol} Features: {feature_status}")
+
+        if feature_status["exists"]:
+
+            logger.info(f"{symbol}: Loading existing features...")
+
+            data = features.load_features(symbol)
+
+        else:
+
+            logger.info(f"{symbol}: Calculating features...")
 
             engine = FeatureEngine()
 
             engine.add_feature(
                 "SMA",
-                period=20
+                period=20,
             )
 
             data = engine.calculate(data)
 
-            print(data.tail())
+            filepath = features.save_features(data, symbol)
 
-            continue
+            logger.info(f"{symbol}: Features saved to {filepath}")
 
-        logger.info(f"{symbol}: No data found.")
-        logger.info(f"Downloading {symbol}...")
+        print(data.tail())
 
-        data = manager.download_history(symbol)
-
-        filepath = history.save_history(data, symbol)
-
-        logger.info(f"Data saved to {filepath}")
 
 if __name__ == "__main__":
-      main()
-
+    main()
