@@ -12,8 +12,22 @@ test, validate and monitor trading strategies using historical and live market d
 
 ## Current Version
 
-v0.2 (Foundation)
+v0.6 (Foundation)
 
 ## Status
 
 🚧 Under Development
+
+## Current Status
+
+Sentinel is currently capable of:
+
+- Downloading historical market data.
+- Maintaining a local historical database.
+- Managing data history.
+- Building analytical market features.
+- Extending analytical capabilities through a modular Feature Engine.
+
+Current Version
+
+v0.6

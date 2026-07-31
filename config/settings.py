@@ -1,5 +1,5 @@
 APP_NAME = "Sentinel"
-VERSION = "v0.5"
+VERSION = "v0.6"
 
 DATA_PROVIDER = "Yahoo Finance"
 

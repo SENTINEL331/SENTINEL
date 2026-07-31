@@ -1,47 +1,57 @@
-# Sentinel Roadmap
+# Roadmap
 
-## Completed
+## ✅ Completed
 
-### v0.1
 - Project structure
+- Configuration system
 - Logging
-- Banner
-
-### v0.2
-- Yahoo Finance integration
-- Historical downloads
-
-### v0.3
-- Configuration
-- Watchlists
-
-### v0.4
-- History detection
-- Refactoring
-
-### v0.5
-- HistoryManager
-- Data normalisation
-- Latest-date detection
+- Market data download
+- Local history management
+- Historical data storage
+- History status detection
+- Feature Engine
+- Feature Registry
+- First analytical feature (SMA)
 
 ---
 
-## Planned
+## 🚧 In Progress
 
-### v0.6
-- Smart history updates
+- Feature Store
+- Additional market features
+- Incremental data updates
 
-### v0.7
-- Indicator Engine
+---
 
-### v0.8
-- Backtesting Engine
+## 📋 Planned
 
-### v0.9
-- Validation Engine
+### Analytics
+- EMA
+- RSI
+- ATR
+- MACD
+- Bollinger Bands
+- Volume features
+- Volatility features
+- Statistical features
 
-### v1.0
-- Research Pipeline
+### Research
+- Research memory
+- Hypothesis engine
+- Feature importance analysis
+- Strategy generation
 
-### v2.0
-- AI Research Agent
+### Validation
+- Backtesting engine
+- Walk-forward testing
+- Cross-validation
+- Paper trading
+
+### Decision Making
+- Trade ranking
+- Confidence scoring
+- Risk management
+- Position sizing
+
+### Execution
+- Optional live trading

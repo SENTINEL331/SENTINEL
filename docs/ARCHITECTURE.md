@@ -1,51 +1,86 @@
 # Sentinel Architecture
 
-## Overview
+## Data Layer
 
-Sentinel is an autonomous quantitative research platform designed to discover, test, validate and rank profitable trading opportunities while managing risk.
+MarketDataManager
+    ↓
+HistoryManager
+    ↓
+Historical Market Database
 
-Rather than relying on fixed trading rules, Sentinel continuously researches market behaviour and builds evidence-based trade recommendations.
-
----
-
-## Core Modules
-
-config/
-- Application settings
-
-market/
-- Downloads market data
-
-history/
-- Stores and manages historical market data
-
-research/
-- Generates trading hypotheses
-
-backtesting/
-- Tests hypotheses on historical data
-
-validation/
-- Validates successful hypotheses using unseen data
-
-paper_trading/
-- Simulates live trading
-
-ranking/
-- Scores and ranks opportunities
-
-reporting/
-- Produces research reports and recommendations
-
-ai/
-- AI research agents
+Responsibilities:
+- Download market data
+- Store historical data
+- Manage history
+- Synchronise updates
 
 ---
 
-## Design Principles
+## Analytics Layer
 
-- Single Responsibility Principle
-- Modular architecture
-- Evidence-based decisions
-- Complete audit trail
-- Continuous improvement
+FeatureEngine
+    ↓
+Feature Registry
+    ↓
+Feature Modules
+
+Responsibilities:
+- Register available features
+- Calculate requested features
+- Produce reusable market measurements
+
+Current Features
+
+- SMA
+
+Future Features
+
+- EMA
+- RSI
+- ATR
+- MACD
+- Bollinger Bands
+- Statistical Features
+- Fundamental Features
+
+---
+
+## Research Layer (Planned)
+
+Research Memory
+Hypothesis Generator
+Backtesting Engine
+Validation Engine
+
+Responsibilities
+
+- Generate hypotheses
+- Test hypotheses
+- Rank hypotheses
+- Learn from previous research
+
+---
+
+## Decision Layer (Planned)
+
+Risk Assessment
+Trade Ranking
+Recommendation Engine
+
+Responsibilities
+
+- Rank opportunities
+- Recommend Buy / Sell / Hold
+- Explain reasoning
+
+---
+
+## Execution Layer (Optional)
+
+Paper Trading
+Live Trading
+
+Responsibilities
+
+- Execute validated strategies
+- Record execution performance

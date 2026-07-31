@@ -11,3 +11,11 @@ Sentinel exists to generate profitable trading opportunities through disciplined
 - AI proposes. Sentinel proves.
 - No trade is a valid outcome.
 - Research never stops.
+## Design Principles
+
+- Build reliable foundations before AI.
+- AI performs research, not deterministic calculations.
+- Every module has a single responsibility.
+- Every feature must justify its existence through evidence.
+- Memory is a first-class component of Sentinel.
+- Every decision should be explainable.
