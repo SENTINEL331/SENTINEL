@@ -16,10 +16,15 @@ def main():
     print(f"Data Provider: {manager.get_provider()}")
 
     for symbol in WATCHLIST:
+
+        if manager.history_exists(symbol):
+            logger.info(f"{symbol}: Existing data found.")
+        else:
+            logger.info(f"{symbol}: No data found.")
+
         logger.info(f"Downloading {symbol}...")
 
         data = manager.download_history(symbol)
-
         filepath = manager.save_history(data, symbol)
 
         logger.info(f"Data saved to {filepath}")
