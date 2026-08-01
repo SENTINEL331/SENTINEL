@@ -3,7 +3,8 @@ from os import name
 from analytics.features import sma
 from analytics.features import ema
 from analytics.features import rsi
-
+from analytics.features import atr
+from analytics.features import bollinger
 
 FEATURE_REGISTRY = {
 
@@ -66,6 +67,53 @@ FEATURE_REGISTRY = {
         ],
 
         "unit": "Index",
+
+        "source": "Calculated",
+    },
+
+    "ATR": {
+
+        "function": atr.calculate,
+
+        "category": "Volatility",
+
+        "description": "Average True Range",
+
+        "inputs": [
+            "High",
+            "Low",
+            "Close",
+        ],
+
+        "outputs": [
+            "ATR_14",
+        ],
+
+        "unit": "Price",
+
+        "source": "Calculated",
+    },
+
+    "BOLLINGER": {
+
+        "function": bollinger.calculate,
+
+        "category": "Volatility",
+
+        "description": "Bollinger Bands",
+
+        "inputs": [
+            "Close",
+        ],
+
+        "outputs": [
+            "BB_MIDDLE",
+            "BB_UPPER",
+            "BB_LOWER",
+        ],
+
+
+        "unit": "Price",
 
         "source": "Calculated",
     },

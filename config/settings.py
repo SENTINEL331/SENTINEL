@@ -32,4 +32,17 @@ FEATURE_SET = [
             "period": 14,
         },
     },
+    {
+        "name": "ATR",
+        "parameters": {
+            "period": 14,
+        },
+    },
+    {
+        "name": "BOLLINGER",
+        "parameters": {
+            "period": 20,
+            "deviations": 2,
+        },
+    },
 ]
