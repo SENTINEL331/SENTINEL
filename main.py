@@ -4,11 +4,21 @@ from market.history_manager import HistoryManager
 from analytics.feature_engine import FeatureEngine
 from analytics.feature_store import FeatureStore
 
+from ai.researcher import Researcher
+from sentinel.sentinel import Sentinel
+
 from utils.banner import show_banner
-from utils.display import show_symbol_summary
+from utils.display import (
+    show_symbol_status,
+    show_summary,
+)
+
 from utils.logger import setup_logger
 
-from config.settings import WATCHLIST, FEATURE_SET
+from config.settings import (
+    WATCHLIST,
+    FEATURE_SET,
+)
 
 
 def main():
@@ -20,22 +30,20 @@ def main():
     history = HistoryManager()
     features = FeatureStore()
 
-    # ----------------------------------------
     # Configure Feature Engine
-    # ----------------------------------------
-
     engine = FeatureEngine()
 
     for feature in FEATURE_SET:
+
         engine.add_feature(
             feature["name"],
             **feature["parameters"],
         )
 
-    # ----------------------------------------
-    # Startup Information
-    # ----------------------------------------
+    # Create Sentinel Interface
+    sentinel = Sentinel()
 
+    # Startup
     show_banner()
 
     print(manager.get_status())
@@ -49,77 +57,70 @@ def main():
     ready = 0
     failed = 0
 
-    # ----------------------------------------
     # Process Watchlist
-    # ----------------------------------------
-
     for symbol in WATCHLIST:
 
-        try:
+        logger.info(f"Processing {symbol}...")
 
-            # ----------------------------
-            # History
-            # ----------------------------
+        history_status = history.get_history_status(symbol)
 
-            history_status = history.get_history_status(symbol)
+        if not history_status["exists"]:
 
-            if not history_status["exists"]:
+            logger.info("Downloading historical data...")
 
-                data = manager.download_history(symbol)
+            data = manager.download_history(symbol)
 
-                history.save_history(
-                    data,
-                    symbol,
-                )
+            filepath = history.save_history(
+                data,
+                symbol,
+            )
 
-            data = history.load_history(symbol)
+            logger.info(f"History saved to {filepath}")
 
-            # ----------------------------
-            # Features
-            # ----------------------------
+        data = history.load_history(symbol)
 
-            feature_status = features.get_feature_status(symbol)
+        feature_status = features.get_feature_status(symbol)
 
-            if feature_status["exists"]:
+        if feature_status["exists"]:
 
-                data = features.load_features(symbol)
+            logger.info("Loading cached features...")
 
-            else:
+            data = features.load_features(symbol)
 
-                data = engine.calculate(data)
+        else:
 
-                features.save_features(
-                    data,
-                    symbol,
-                )
+            logger.info("Calculating features...")
 
-            # ----------------------------
-            # Display
-            # ----------------------------
+            data = engine.calculate(data)
 
-            show_symbol_summary(symbol)
+            filepath = features.save_features(
+                data,
+                symbol,
+            )
 
-            ready += 1
+            logger.info(f"Features saved to {filepath}")
 
-        except Exception as error:
+        show_symbol_status(
+            symbol,
+            history_status["exists"],
+            True,
+        )
 
-            logger.exception(error)
-            failed += 1
+        ready += 1
 
-    # ----------------------------------------
-    # Summary
-    # ----------------------------------------
+    show_summary(
+        processed=len(WATCHLIST),
+        ready=ready,
+        failed=failed,
+    )
 
-    print("=" * 40)
-    print("Summary")
-    print("=" * 40)
+    #
+    # AI Research Cycle
+    #
 
-    print(f"Symbols Processed : {len(WATCHLIST)}")
-    print(f"Ready             : {ready}")
-    print(f"Failed            : {failed}")
+    researcher = Researcher(sentinel)
 
-    print()
-    print("Market Module Complete")
+    researcher.research()
 
 
 if __name__ == "__main__":
