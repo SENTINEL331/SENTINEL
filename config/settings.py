@@ -1,5 +1,5 @@
 APP_NAME = "Sentinel"
-VERSION = "v0.8"
+VERSION = "v0.9"
 
 DATA_PROVIDER = "Yahoo Finance"
 
@@ -24,6 +24,12 @@ FEATURE_SET = [
         "name": "EMA",
         "parameters": {
             "period": 20,
+        },
+    },
+    {
+        "name": "RSI",
+        "parameters": {
+            "period": 14,
         },
     },
 ]

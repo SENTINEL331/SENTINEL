@@ -12,6 +12,7 @@ from config.settings import WATCHLIST, FEATURE_SET
 
 
 def main():
+
     logger = setup_logger()
     logger.info("Sentinel is starting...")
 
@@ -19,7 +20,10 @@ def main():
     history = HistoryManager()
     features = FeatureStore()
 
+    # ----------------------------------------
     # Configure Feature Engine
+    # ----------------------------------------
+
     engine = FeatureEngine()
 
     for feature in FEATURE_SET:
@@ -28,67 +32,94 @@ def main():
             **feature["parameters"],
         )
 
-    # Display startup information
+    # ----------------------------------------
+    # Startup Information
+    # ----------------------------------------
+
     show_banner()
 
     print(manager.get_status())
     print(manager.get_version())
     print(f"Data Provider: {manager.get_provider()}")
 
-    # Process each symbol
+    print()
+    print(f"Processing Watchlist ({len(WATCHLIST)} symbols)")
+    print()
+
+    ready = 0
+    failed = 0
+
+    # ----------------------------------------
+    # Process Watchlist
+    # ----------------------------------------
+
     for symbol in WATCHLIST:
 
-        logger.info(f"Processing {symbol}...")
+        try:
 
-        # ----------------------------------------
-        # History
-        # ----------------------------------------
+            # ----------------------------
+            # History
+            # ----------------------------
 
-        history_status = history.get_history_status(symbol)
+            history_status = history.get_history_status(symbol)
 
-        if not history_status["exists"]:
+            if not history_status["exists"]:
 
-            logger.info("Downloading historical data...")
+                data = manager.download_history(symbol)
 
-            data = manager.download_history(symbol)
+                history.save_history(
+                    data,
+                    symbol,
+                )
 
-            filepath = history.save_history(data, symbol)
+            data = history.load_history(symbol)
 
-            logger.info(f"History saved to {filepath}")
+            # ----------------------------
+            # Features
+            # ----------------------------
 
-        # Load history
-        data = history.load_history(symbol)
+            feature_status = features.get_feature_status(symbol)
 
-        # ----------------------------------------
-        # Features
-        # ----------------------------------------
+            if feature_status["exists"]:
 
-        feature_status = features.get_feature_status(symbol)
+                data = features.load_features(symbol)
 
-        if feature_status["exists"]:
+            else:
 
-            logger.info("Loading cached features...")
+                data = engine.calculate(data)
 
-            data = features.load_features(symbol)
+                features.save_features(
+                    data,
+                    symbol,
+                )
 
-        else:
+            # ----------------------------
+            # Display
+            # ----------------------------
 
-            logger.info("Calculating features...")
+            show_symbol_summary(symbol)
 
-            data = engine.calculate(data)
+            ready += 1
 
-            filepath = features.save_features(data, symbol)
+        except Exception as error:
 
-            logger.info(f"Features saved to {filepath}")
+            logger.exception(error)
+            failed += 1
 
-        # ----------------------------------------
-        # Display Summary
-        # ----------------------------------------
+    # ----------------------------------------
+    # Summary
+    # ----------------------------------------
 
-        show_symbol_summary(
-            symbol,
-            data,
-        )
+    print("=" * 40)
+    print("Summary")
+    print("=" * 40)
+
+    print(f"Symbols Processed : {len(WATCHLIST)}")
+    print(f"Ready             : {ready}")
+    print(f"Failed            : {failed}")
+
+    print()
+    print("Market Module Complete")
 
 
 if __name__ == "__main__":

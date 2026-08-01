@@ -1,19 +1,19 @@
-from analytics.feature_registry import FEATURE_REGISTRY
+from analytics.feature_registry import FeatureRegistry
 
 
 class FeatureEngine:
-    """Calculates market features."""
+    """Calculates configured market features."""
 
     def __init__(self):
-
         self.features = []
+        self.registry = FeatureRegistry()
 
     def add_feature(
         self,
         name,
         **parameters,
     ):
-        """Register a feature to calculate."""
+        """Register a feature for calculation."""
 
         self.features.append(
             {
@@ -31,10 +31,14 @@ class FeatureEngine:
         for feature in self.features:
 
             name = feature["name"]
-
             parameters = feature["parameters"]
 
-            calculate = FEATURE_REGISTRY[name]
+            if not self.registry.exists(name):
+                raise ValueError(f"Unknown feature: {name}")
+
+            feature_definition = self.registry.get(name)
+
+            calculate = feature_definition["function"]
 
             data = calculate(
                 data,
