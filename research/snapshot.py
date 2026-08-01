@@ -4,12 +4,6 @@ class ResearchSnapshot:
     def __init__(
         self,
         symbol,
-        dateclass ResearchSnapshot:
-    """Represents everything Sentinel currently knows about one market."""
-
-    def __init__(
-        self,
-        symbol,
         date,
         open_price,
         high,
