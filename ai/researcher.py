@@ -26,23 +26,44 @@ class Researcher:
         self.memory = ResearchMemory()
 
     def research(self):
-        """
-        Begin one research cycle.
-        """
+        """Begin one research cycle."""
 
         watchlist = self.sentinel.get_watchlist()
+
+        capabilities = self.sentinel.list_capabilities()
 
         print()
         print("=" * 50)
         print("AI Research Cycle")
         print("=" * 50)
+
         print()
+        print(f"Capabilities Available : {len(capabilities)}")
+
+        ready = 0
 
         for symbol in watchlist:
 
-            print(f"Reviewing {symbol}...")
+            print()
+            print("=" * 50)
+            print(symbol)
+            print("=" * 50)
+
+            #
+            # Evidence
+            #
+
+            print()
+            print("Evidence")
+            print("-" * 8)
 
             snapshot = self.sentinel.get_snapshot(symbol)
+
+            print("✓ Market snapshot reviewed")
+
+            #
+            # Research
+            #
 
             record = ResearchRecord(
                 symbol=snapshot.symbol,
@@ -53,15 +74,35 @@ class Researcher:
 
             self.memory.add(record)
 
-            print("✓ Snapshot Reviewed")
             print()
+            print("Research")
+            print("-" * 8)
 
+            print(f"Research Records : {len(self.memory.get_symbol(symbol))}")
+
+            #
+            # Status
+            #
+
+            print()
+            print("Status")
+            print("-" * 6)
+
+            print("✓ Research Active")
+
+            ready += 1
+
+        #
+        # Daily Summary
+        #
+
+        print()
         print("=" * 50)
-        print("Research Summary")
+        print("Daily Summary")
         print("=" * 50)
 
-        print(f"Symbols Reviewed : {len(watchlist)}")
+        print(f"Symbols Reviewed : {ready}")
         print(f"Research Records : {self.memory.count()}")
 
         print()
-        print("Research cycle complete.")
+        print("Research Cycle Complete")

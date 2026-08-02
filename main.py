@@ -8,11 +8,6 @@ from ai.researcher import Researcher
 from sentinel.sentinel import Sentinel
 
 from utils.banner import show_banner
-from utils.display import (
-    show_symbol_status,
-    show_summary,
-)
-
 from utils.logger import setup_logger
 
 from config.settings import (
@@ -30,7 +25,10 @@ def main():
     history = HistoryManager()
     features = FeatureStore()
 
+    #
     # Configure Feature Engine
+    #
+
     engine = FeatureEngine()
 
     for feature in FEATURE_SET:
@@ -40,10 +38,16 @@ def main():
             **feature["parameters"],
         )
 
+    #
     # Create Sentinel Interface
+    #
+
     sentinel = Sentinel()
 
+    #
     # Startup
+    #
+
     show_banner()
 
     print(manager.get_status())
@@ -54,13 +58,17 @@ def main():
     print(f"Processing Watchlist ({len(WATCHLIST)} symbols)")
     print()
 
-    ready = 0
-    failed = 0
+    #
+    # Prepare Market Data
+    #
 
-    # Process Watchlist
     for symbol in WATCHLIST:
 
         logger.info(f"Processing {symbol}...")
+
+        #
+        # History
+        #
 
         history_status = history.get_history_status(symbol)
 
@@ -78,6 +86,10 @@ def main():
             logger.info(f"History saved to {filepath}")
 
         data = history.load_history(symbol)
+
+        #
+        # Features
+        #
 
         feature_status = features.get_feature_status(symbol)
 
@@ -100,22 +112,8 @@ def main():
 
             logger.info(f"Features saved to {filepath}")
 
-        show_symbol_status(
-            symbol,
-            history_status["exists"],
-            True,
-        )
-
-        ready += 1
-
-    show_summary(
-        processed=len(WATCHLIST),
-        ready=ready,
-        failed=failed,
-    )
-
     #
-    # AI Research Cycle
+    # AI Research
     #
 
     researcher = Researcher(sentinel)
