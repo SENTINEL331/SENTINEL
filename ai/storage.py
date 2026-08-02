@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from research.observation import Observation
+
 
 class Storage:
     """
@@ -9,36 +11,38 @@ class Storage:
 
     def __init__(self):
 
-        self.base = (
-            Path(__file__).parent /
-            "memory"
-        )
+        self.base = Path(__file__).parent / "memory"
 
     def save_observations(
         self,
         symbol,
-        records,
+        observations,
     ):
         """
         Save observations for one symbol.
         """
 
         path = (
-            self.base /
-            "observations" /
-            f"{symbol}.json"
+            self.base
+            / "observations"
+            / f"{symbol}.json"
+        )
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
         )
 
         data = []
 
-        for record in records:
+        for observation in observations:
 
             data.append(
                 {
-                    "symbol": record.symbol,
-                    "category": record.category,
-                    "summary": record.summary,
-                    "created": record.created,
+                    "symbol": observation.symbol,
+                    "statement": observation.statement,
+                    "importance": observation.importance,
+                    "created": observation.created,
                 }
             )
 
@@ -58,11 +62,14 @@ class Storage:
         self,
         symbol,
     ):
+        """
+        Load observations for one symbol.
+        """
 
         path = (
-            self.base /
-            "observations" /
-            f"{symbol}.json"
+            self.base
+            / "observations"
+            / f"{symbol}.json"
         )
 
         if not path.exists():
@@ -75,4 +82,19 @@ class Storage:
             encoding="utf-8",
         ) as f:
 
-            return json.load(f)
+            data = json.load(f)
+
+        observations = []
+
+        for item in data:
+
+            observations.append(
+                Observation(
+                    symbol=item["symbol"],
+                    statement=item["statement"],
+                    importance=item["importance"],
+                    created=item["created"],
+                )
+            )
+
+        return observations

@@ -1,32 +1,32 @@
 [
     {
         "symbol": "AAPL",
-        "category": "Observation",
-        "summary": "The intraday low (300.0) was below the lower Bollinger Band (303.3813).",
+        "statement": "Close (305.209991) is below the 20-day SMA (324.181999) by 18.972008 and below the 20-day EMA (322.258636) by 17.048645.",
+        "importance": 1,
         "created": "2026-08-02"
     },
     {
         "symbol": "AAPL",
-        "category": "Observation",
-        "summary": "The close (305.20999) was below both the 20-day SMA/BB middle (324.1820) and the 20-day EMA (322.2586).",
+        "statement": "Intraday low (300.000000) fell below the Bollinger lower band (303.381315); the close (305.209991) finished 1.828677 above the lower band.",
+        "importance": 2,
         "created": "2026-08-02"
     },
     {
         "symbol": "AAPL",
-        "category": "Observation",
-        "summary": "The close (305.20999) was between the lower (303.3813) and middle (324.1820) Bollinger Bands.",
+        "statement": "RSI_14 is 43.202241 (below 50 and above 30).",
+        "importance": 3,
         "created": "2026-08-02"
     },
     {
         "symbol": "AAPL",
-        "category": "Observation",
-        "summary": "RSI_14 was 43.20 (below 50 and above 30).",
+        "statement": "Daily high\u2013low range was 6.899994 (306.899994 - 300.000000), which is below ATR_14 of 9.902145.",
+        "importance": 4,
         "created": "2026-08-02"
     },
     {
         "symbol": "AAPL",
-        "category": "Observation",
-        "summary": "The session's high-low range (6.90) was below ATR_14 (9.9021).",
+        "statement": "Close (305.209991) was slightly above open (304.809998) by 0.399994.",
+        "importance": 5,
         "created": "2026-08-02"
     }
 ]

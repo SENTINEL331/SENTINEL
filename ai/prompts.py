@@ -49,3 +49,39 @@ Market Evidence:
 
 {snapshot}
 """
+
+COMPARISON_PROMPT = """
+You are reviewing two sets of market observations.
+
+Previous observations:
+
+{previous}
+
+Current observations:
+
+{current}
+
+Your task:
+
+- Identify what has changed.
+- Identify what has remained the same.
+- Do not create hypotheses.
+- Do not recommend trades.
+- Return VALID JSON ONLY.
+
+Return this exact structure:
+
+{{
+    "changes": [
+        {{
+            "importance": 1,
+            "statement": "..."
+        }}
+    ],
+    "unchanged": [
+        {{
+            "statement": "..."
+        }}
+    ]
+}}
+"""

@@ -2,7 +2,7 @@ import json
 
 from datetime import date
 
-from research.record import ResearchRecord
+from research.observation import Observation
 
 
 def parse_observations(
@@ -11,27 +11,27 @@ def parse_observations(
 ):
     """
     Convert an AI observation response into
-    ResearchRecord objects.
+    Observation objects.
     """
 
     data = json.loads(response)
 
-    records = []
+    observations = []
 
-    for observation in data["observations"]:
+    for item in data["observations"]:
 
-        record = ResearchRecord(
+        observation = Observation(
 
             symbol=symbol,
 
-            category="Observation",
+            statement=item["statement"],
 
-            summary=observation["statement"],
+            importance=item["importance"],
 
             created=str(date.today()),
 
         )
 
-        records.append(record)
+        observations.append(observation)
 
-    return records
+    return observations

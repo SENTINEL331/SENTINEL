@@ -60,7 +60,7 @@ class Researcher:
 
             response = self.ai.observe(snapshot)
 
-            records = parse_observations(
+            observations = parse_observations(
                 snapshot.symbol,
                 response,
             )
@@ -69,11 +69,11 @@ class Researcher:
             # Memory
             #
 
-            for record in records:
+            for observation in observations:
 
-                self.memory.add(record)
+                self.memory.add(observation)
 
-                print(f"• {record.summary}")
+                print(f"• {observation.statement}")
 
             #
             # Persistent Storage
@@ -81,14 +81,14 @@ class Researcher:
 
             self.storage.save_observations(
                 symbol,
-                records,
+                observations,
             )
 
             print()
             print("Storage")
             print("-" * 7)
 
-            print(f"✓ Saved {len(records)} observations")
+            print(f"✓ Saved {len(observations)} observations")
 
             #
             # Status
@@ -108,7 +108,7 @@ class Researcher:
         print("=" * 50)
 
         print(f"Symbols Reviewed : {symbols_processed}")
-        print(f"Research Records : {self.memory.count()}")
+        print(f"Observations Stored : {self.memory.count()}")
 
         print()
         print("Research cycle complete.")

@@ -9,6 +9,7 @@ from config.settings import AI_MODEL
 from ai.prompts import (
     SYSTEM_PROMPT,
     OBSERVATION_PROMPT,
+    COMPARISON_PROMPT,
 )
 
 
@@ -26,7 +27,6 @@ class AIClient:
         api_key = os.getenv("OPENAI_API_KEY")
 
         if not api_key:
-
             raise ValueError(
                 "OPENAI_API_KEY not found in .env"
             )
@@ -64,12 +64,31 @@ class AIClient:
         snapshot,
     ):
         """
-        Ask the AI to produce objective observations
-        from a market snapshot.
+        Produce objective observations from
+        a market snapshot.
         """
 
         prompt = OBSERVATION_PROMPT.format(
             snapshot=snapshot.to_text(),
+        )
+
+        return self.chat(
+            SYSTEM_PROMPT,
+            prompt,
+        )
+
+    def compare(
+        self,
+        previous,
+        current,
+    ):
+        """
+        Compare two observation sets.
+        """
+
+        prompt = COMPARISON_PROMPT.format(
+            previous=previous,
+            current=current,
         )
 
         return self.chat(
