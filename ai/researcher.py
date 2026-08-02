@@ -1,19 +1,12 @@
-from datetime import date
-
 from research.memory import ResearchMemory
-from research.record import ResearchRecord
+from research.parser import parse_observations
+
+from ai.client import AIClient
 
 
 class Researcher:
     """
-    Represents the AI researcher.
-
-    The Researcher reviews market evidence,
-    develops hypotheses,
-    requests experiments,
-    and manages research.
-
-    The Researcher never executes experiments directly.
+    Represents Sentinel's autonomous AI researcher.
     """
 
     def __init__(
@@ -25,22 +18,19 @@ class Researcher:
 
         self.memory = ResearchMemory()
 
+        self.ai = AIClient()
+
     def research(self):
-        """Begin one research cycle."""
+        """Run one complete AI research cycle."""
 
         watchlist = self.sentinel.get_watchlist()
-
-        capabilities = self.sentinel.list_capabilities()
 
         print()
         print("=" * 50)
         print("AI Research Cycle")
         print("=" * 50)
 
-        print()
-        print(f"Capabilities Available : {len(capabilities)}")
-
-        ready = 0
+        symbols_processed = 0
 
         for symbol in watchlist:
 
@@ -53,32 +43,34 @@ class Researcher:
             # Evidence
             #
 
+            snapshot = self.sentinel.get_snapshot(symbol)
+
             print()
             print("Evidence")
             print("-" * 8)
 
-            snapshot = self.sentinel.get_snapshot(symbol)
-
-            print("✓ Market snapshot reviewed")
+            print("✓ Snapshot collected")
 
             #
-            # Research
+            # AI Observation
             #
-
-            record = ResearchRecord(
-                symbol=snapshot.symbol,
-                category="Snapshot",
-                summary="Latest market snapshot reviewed.",
-                created=str(date.today()),
-            )
-
-            self.memory.add(record)
 
             print()
-            print("Research")
-            print("-" * 8)
+            print("AI")
+            print("-" * 2)
 
-            print(f"Research Records : {len(self.memory.get_symbol(symbol))}")
+            response = self.ai.observe(snapshot)
+
+            records = parse_observations(
+                snapshot.symbol,
+                response,
+            )
+
+            for record in records:
+
+                self.memory.add(record)
+
+                print(f"• {record.summary}")
 
             #
             # Status
@@ -88,21 +80,23 @@ class Researcher:
             print("Status")
             print("-" * 6)
 
-            print("✓ Research Active")
+            print(
+                f"✓ {len(records)} observations stored"
+            )
 
-            ready += 1
+            symbols_processed += 1
 
         #
-        # Daily Summary
+        # Summary
         #
 
         print()
         print("=" * 50)
-        print("Daily Summary")
+        print("Research Summary")
         print("=" * 50)
 
-        print(f"Symbols Reviewed : {ready}")
+        print(f"Symbols Reviewed : {symbols_processed}")
         print(f"Research Records : {self.memory.count()}")
 
         print()
-        print("Research Cycle Complete")
+        print("Research cycle complete.")

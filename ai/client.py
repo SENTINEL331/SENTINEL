@@ -6,6 +6,11 @@ from openai import OpenAI
 
 from config.settings import AI_MODEL
 
+from ai.prompts import (
+    SYSTEM_PROMPT,
+    OBSERVATION_PROMPT,
+)
+
 
 class AIClient:
     """
@@ -13,28 +18,12 @@ class AIClient:
     """
 
     def __init__(self):
-        """Create the AI client."""
-
-        #
-        # Load .env from the Sentinel project root.
-        #
 
         env_path = Path(__file__).resolve().parent.parent / ".env"
 
-        print()
-        print("AI Client")
-        print("-" * 50)
-        print(f"Looking for .env at:")
-        print(env_path)
-
-        loaded = load_dotenv(env_path)
-
-        print()
-        print(f".env loaded : {loaded}")
+        load_dotenv(env_path)
 
         api_key = os.getenv("OPENAI_API_KEY")
-
-        print(f"API key found : {api_key is not None}")
 
         if not api_key:
 
@@ -53,10 +42,6 @@ class AIClient:
         system_prompt,
         user_prompt,
     ):
-        """
-        Send a conversation to the AI and
-        return the response.
-        """
 
         response = self.client.responses.create(
             model=self.model,
@@ -73,3 +58,21 @@ class AIClient:
         )
 
         return response.output_text
+
+    def observe(
+        self,
+        snapshot,
+    ):
+        """
+        Ask the AI to produce objective observations
+        from a market snapshot.
+        """
+
+        prompt = OBSERVATION_PROMPT.format(
+            snapshot=snapshot.to_text(),
+        )
+
+        return self.chat(
+            SYSTEM_PROMPT,
+            prompt,
+        )
