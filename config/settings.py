@@ -1,5 +1,5 @@
 APP_NAME = "Sentinel"
-VERSION = "v0.9"
+VERSION = "v1.0"
 AI_MODEL = "gpt-5"
 
 DATA_PROVIDER = "Yahoo Finance"

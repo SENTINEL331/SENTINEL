@@ -1,0 +1,32 @@
+[
+    {
+        "symbol": "MSFT",
+        "category": "Observation",
+        "summary": "The closing price (462.1499938964844) is above the Bollinger Band upper value (439.5408949416312).",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "MSFT",
+        "category": "Observation",
+        "summary": "RSI_14 is 74.55825037088499 (above 70).",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "MSFT",
+        "category": "Observation",
+        "summary": "The close is above the 20-day SMA (396.7375) and 20-day EMA (400.5382072650067) by 65.41249389648439 and 61.61178663147771, respectively.",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "MSFT",
+        "category": "Observation",
+        "summary": "The intraday high-low range was 15.2479858398438, which is below ATR_14 (16.282712663922997).",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "MSFT",
+        "category": "Observation",
+        "summary": "The close was 2.6499938964844 below the day's high and 12.5650024414063 above the open.",
+        "created": "2026-08-02"
+    }
+]

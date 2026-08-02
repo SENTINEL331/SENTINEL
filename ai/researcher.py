@@ -2,17 +2,15 @@ from research.memory import ResearchMemory
 from research.parser import parse_observations
 
 from ai.client import AIClient
+from ai.storage import Storage
 
 
 class Researcher:
     """
-    Represents Sentinel's autonomous AI researcher.
+    Sentinel's autonomous AI researcher.
     """
 
-    def __init__(
-        self,
-        sentinel,
-    ):
+    def __init__(self, sentinel):
 
         self.sentinel = sentinel
 
@@ -20,8 +18,9 @@ class Researcher:
 
         self.ai = AIClient()
 
+        self.storage = Storage()
+
     def research(self):
-        """Run one complete AI research cycle."""
 
         watchlist = self.sentinel.get_watchlist()
 
@@ -52,7 +51,7 @@ class Researcher:
             print("✓ Snapshot collected")
 
             #
-            # AI Observation
+            # AI Research
             #
 
             print()
@@ -66,11 +65,30 @@ class Researcher:
                 response,
             )
 
+            #
+            # Memory
+            #
+
             for record in records:
 
                 self.memory.add(record)
 
                 print(f"• {record.summary}")
+
+            #
+            # Persistent Storage
+            #
+
+            self.storage.save_observations(
+                symbol,
+                records,
+            )
+
+            print()
+            print("Storage")
+            print("-" * 7)
+
+            print(f"✓ Saved {len(records)} observations")
 
             #
             # Status
@@ -80,15 +98,9 @@ class Researcher:
             print("Status")
             print("-" * 6)
 
-            print(
-                f"✓ {len(records)} observations stored"
-            )
+            print("✓ Research complete")
 
             symbols_processed += 1
-
-        #
-        # Summary
-        #
 
         print()
         print("=" * 50)

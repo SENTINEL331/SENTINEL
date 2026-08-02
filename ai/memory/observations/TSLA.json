@@ -1,0 +1,32 @@
+[
+    {
+        "symbol": "TSLA",
+        "category": "Observation",
+        "summary": "RSI_14 is 17.33, which is below 30.",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "TSLA",
+        "category": "Observation",
+        "summary": "Close (310.01) is below both SMA_20 (363.87) by 53.86 and EMA_20 (349.92) by 39.91.",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "TSLA",
+        "category": "Observation",
+        "summary": "Close is between Bollinger Bands, 31.44 above BB_LOWER (278.57) and 53.86 below BB_MIDDLE (363.87).",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "TSLA",
+        "category": "Observation",
+        "summary": "Intraday range was 13.53 (High 315.50 minus Low 301.97), which is below ATR_14 of 15.85.",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "TSLA",
+        "category": "Observation",
+        "summary": "Close (310.01) was 0.41 above Open (309.60).",
+        "created": "2026-08-02"
+    }
+]

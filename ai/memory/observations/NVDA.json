@@ -1,0 +1,32 @@
+[
+    {
+        "symbol": "NVDA",
+        "category": "Observation",
+        "summary": "The close (200.06) is below both the 20-day EMA (201.94) and the 20-day SMA/Bollinger middle (203.26).",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "NVDA",
+        "category": "Observation",
+        "summary": "RSI_14 is 47.16, which is below 50.",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "NVDA",
+        "category": "Observation",
+        "summary": "The close (200.06) is between the Bollinger lower band (190.20) and the Bollinger middle band (203.26).",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "NVDA",
+        "category": "Observation",
+        "summary": "The day\u2019s high\u2013low range (~6.17) is smaller than ATR_14 (7.58).",
+        "created": "2026-08-02"
+    },
+    {
+        "symbol": "NVDA",
+        "category": "Observation",
+        "summary": "The close (200.06) is higher than the open (198.44).",
+        "created": "2026-08-02"
+    }
+]
