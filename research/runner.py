@@ -1,3 +1,6 @@
+import json
+
+from ai.experiment_request_service import ExperimentRequestService
 from ai.hypothesis_service import HypothesisService
 from ai.journal import ResearchJournal
 from ai.storage import Storage
@@ -61,6 +64,69 @@ def run_manual_hypothesis_generation(
 		print("No hypotheses generated.")
 
 	return hypotheses
+
+
+def run_manual_experiment_request_generation(
+	symbol=DEFAULT_SYMBOL,
+	journal=None,
+	storage=None,
+	experiment_request_service=None,
+):
+	"""Run one-symbol experiment request generation on demand."""
+
+	storage = storage or Storage()
+	journal = journal or ResearchJournal()
+	journal.storage = storage
+	experiment_request_service = experiment_request_service or ExperimentRequestService(
+		storage=storage
+	)
+
+	journal_text = journal.build(symbol)
+	hypotheses = storage.load_hypotheses(symbol)
+	observations = storage.load_observations(symbol)
+
+	experiment_requests = experiment_request_service.generate_for_symbol(
+		symbol=symbol,
+		journal=journal_text,
+		hypotheses=hypotheses,
+		observations=json.dumps(
+			[
+				{
+					"observation_id": observation.observation_id,
+					"statement": observation.statement,
+				}
+				for observation in observations
+			],
+			indent=4,
+		),
+	)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Experiment Request Generation: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Hypotheses Loaded : {len(hypotheses)}")
+	print(f"Experiment Requests Generated : {len(experiment_requests)}")
+
+	if experiment_requests:
+		print()
+		print("Experiment Requests")
+		print("-------------------")
+
+		for experiment_request in experiment_requests:
+			print(
+				f"- {experiment_request.title} "
+				f"[{experiment_request.status.value}] "
+				f"test_type={experiment_request.test_type.value}"
+			)
+			print(f"  objective: {experiment_request.objective}")
+
+	else:
+		print()
+		print("No experiment requests generated.")
+
+	return experiment_requests
 
 
 def main():
