@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import Mock
 
 from ai.journal import ResearchJournal
@@ -6,6 +7,11 @@ from research.experiment import (
     ExperimentRequest,
     ExperimentRequestStatus,
     ExperimentTestType,
+)
+from research.experiment_result import (
+    ExperimentMetrics,
+    ExperimentResult,
+    ExperimentResultStatus,
 )
 from research.hypothesis import Hypothesis, HypothesisStatus
 from research.observation import Observation
@@ -56,6 +62,26 @@ class ResearchJournalOutputTests(unittest.TestCase):
                 source_observation_ids=("obs-1",),
             )
         ]
+        journal.storage.load_experiment_results.return_value = [
+            ExperimentResult(
+                experiment_result_id="expr-001",
+                experiment_request_id="expreq-001",
+                hypothesis_id="hyp-001",
+                symbol="NVDA",
+                test_type=ExperimentTestType.INITIAL_BACKTEST,
+                status=ExperimentResultStatus.COMPLETED,
+                started_at=datetime(2026, 8, 3, 0, 0, tzinfo=timezone.utc),
+                completed_at=datetime(2026, 8, 3, 0, 20, tzinfo=timezone.utc),
+                metrics=ExperimentMetrics(
+                    total_return=0.12,
+                    win_rate=0.60,
+                    max_drawdown=-0.08,
+                    trade_count=25,
+                    profit_factor=1.4,
+                ),
+                summary="Completed with positive expectancy and manageable drawdown.",
+            )
+        ]
 
         result = journal.build("NVDA")
 
@@ -75,6 +101,19 @@ class ResearchJournalOutputTests(unittest.TestCase):
             "  objective: Test whether breakout continuation persists over five sessions.",
             result,
         )
+        self.assertIn("Experiment Results", result)
+        self.assertIn(
+            "- initial_backtest [completed] id=expr-001",
+            result,
+        )
+        self.assertIn(
+            "  metrics: total_return=0.1200, win_rate=0.6000, max_drawdown=-0.0800, trade_count=25, profit_factor=1.4000",
+            result,
+        )
+        self.assertIn(
+            "  detail: Completed with positive expectancy and manageable drawdown.",
+            result,
+        )
 
     def test_build_shows_empty_experiment_requests_state(self):
         journal = ResearchJournal()
@@ -83,6 +122,7 @@ class ResearchJournalOutputTests(unittest.TestCase):
         journal.storage.load_observations.return_value = []
         journal.storage.load_hypotheses.return_value = []
         journal.storage.load_experiment_requests.return_value = []
+        journal.storage.load_experiment_results.return_value = []
 
         result = journal.build("NVDA")
 
@@ -92,6 +132,8 @@ class ResearchJournalOutputTests(unittest.TestCase):
         self.assertIn("No active hypotheses.", result)
         self.assertIn("Experiment Requests", result)
         self.assertIn("No experiment requests.", result)
+        self.assertIn("Experiment Results", result)
+        self.assertIn("No experiment results.", result)
 
 
 if __name__ == "__main__":

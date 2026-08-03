@@ -37,6 +37,42 @@ class ResearchJournal:
             f"  objective: {experiment_request.objective}"
         )
 
+    def _format_experiment_result(self, experiment_result):
+        metric_parts = []
+
+        if experiment_result.metrics.total_return is not None:
+            metric_parts.append(f"total_return={experiment_result.metrics.total_return:.4f}")
+
+        if experiment_result.metrics.win_rate is not None:
+            metric_parts.append(f"win_rate={experiment_result.metrics.win_rate:.4f}")
+
+        if experiment_result.metrics.max_drawdown is not None:
+            metric_parts.append(
+                f"max_drawdown={experiment_result.metrics.max_drawdown:.4f}"
+            )
+
+        if experiment_result.metrics.trade_count is not None:
+            metric_parts.append(f"trade_count={experiment_result.metrics.trade_count}")
+
+        if experiment_result.metrics.profit_factor is not None:
+            metric_parts.append(
+                f"profit_factor={experiment_result.metrics.profit_factor:.4f}"
+            )
+
+        metrics_text = ", ".join(metric_parts) if metric_parts else "no key metrics"
+
+        detail = experiment_result.summary or experiment_result.failure_reason or "No summary."
+
+        return (
+            f"- {experiment_result.test_type.value} "
+            f"[{experiment_result.status.value}] "
+            f"id={experiment_result.experiment_result_id}"
+            "\n"
+            f"  metrics: {metrics_text}"
+            "\n"
+            f"  detail: {detail}"
+        )
+
     def build(
         self,
         symbol,
@@ -48,6 +84,7 @@ class ResearchJournal:
         observations = self.storage.load_observations(symbol)
         hypotheses = self.storage.load_hypotheses(symbol)
         experiment_requests = self.storage.load_experiment_requests(symbol)
+        experiment_results = self.storage.load_experiment_results(symbol)
         active_hypotheses = [
             hypothesis
             for hypothesis in hypotheses
@@ -109,6 +146,24 @@ class ResearchJournal:
 
             lines.append(
                 "No experiment requests."
+            )
+
+        lines.append("")
+        lines.append("Experiment Results")
+        lines.append("------------------")
+
+        if experiment_results:
+
+            for experiment_result in experiment_results:
+
+                lines.append(
+                    self._format_experiment_result(experiment_result)
+                )
+
+        else:
+
+            lines.append(
+                "No experiment results."
             )
 
         return "\n".join(lines)
