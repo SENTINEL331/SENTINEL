@@ -5,7 +5,7 @@ def main():
 
     storage = Storage()
 
-    records = storage.load_observations("NVDA")
+    observations = storage.load_observations("NVDA")
 
     print()
 
@@ -15,13 +15,13 @@ def main():
 
     print()
 
-    print(f"Loaded : {len(records)}")
+    print(f"Loaded : {len(observations)}")
 
     print()
 
-    for record in records:
+    for observation in observations:
 
-        print(f"• {record.summary}")
+        print(f"• {observation.statement}")
 
 
 if __name__ == "__main__":

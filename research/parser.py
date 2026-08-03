@@ -1,13 +1,17 @@
 import json
+from hashlib import sha256
 
-from datetime import date
+from datetime import datetime, timezone
 
 from research.observation import Observation
 
 
 def parse_observations(
-    symbol,
+    snapshot,
     response,
+    research_cycle_id="unknown-cycle",
+    ai_call_id="unknown-ai-call",
+    schema_version="1.0",
 ):
     """
     Convert an AI observation response into
@@ -18,17 +22,41 @@ def parse_observations(
 
     observations = []
 
+    snapshot_ref = f"snapshot:{snapshot.symbol}:{snapshot.date}"
+
+    effective_time = str(snapshot.date)
+
+    created_at = datetime.now(timezone.utc).isoformat()
+
     for item in data["observations"]:
+
+        statement = item["statement"]
+
+        digest = sha256(
+            f"{snapshot.symbol}|{effective_time}|{statement}".encode("utf-8")
+        ).hexdigest()[:12]
 
         observation = Observation(
 
-            symbol=symbol,
+            observation_id=f"obs-{snapshot.symbol}-{digest}",
 
-            statement=item["statement"],
+            symbol_id=snapshot.symbol,
+
+            statement=statement,
+
+            evidence_refs=[snapshot_ref],
 
             importance=item["importance"],
 
-            created=str(date.today()),
+            effective_time=effective_time,
+
+            created_at=created_at,
+
+            research_cycle_id=research_cycle_id,
+
+            ai_call_id=ai_call_id,
+
+            schema_version=schema_version,
 
         )
 

@@ -1,43 +1,43 @@
-from research.record import ResearchRecord
+from research.observation import Observation
 
 
 class ResearchMemory:
-    """Stores all research records."""
+    """Stores accepted observations for the active run."""
 
     def __init__(self):
 
-        self.records = []
+        self.observations: list[Observation] = []
 
     def add(
         self,
-        record,
+        observation,
     ):
-        """Add a research record."""
+        """Add an observation."""
 
-        self.records.append(record)
+        self.observations.append(observation)
 
     def get_all(self):
-        """Return every research record."""
+        """Return every observation."""
 
-        return self.records
+        return self.observations
 
     def get_symbol(
         self,
         symbol,
     ):
-        """Return research for one symbol."""
+        """Return observations for one symbol."""
 
         return [
 
-            record
+            observation
 
-            for record in self.records
+            for observation in self.observations
 
-            if record.symbol == symbol
+            if observation.symbol_id == symbol
 
         ]
 
     def count(self):
-        """Return total number of records."""
+        """Return total number of observations."""
 
-        return len(self.records)
+        return len(self.observations)

@@ -61,7 +61,7 @@ class Researcher:
             response = self.ai.observe(snapshot)
 
             observations = parse_observations(
-                snapshot.symbol,
+                snapshot,
                 response,
             )
 

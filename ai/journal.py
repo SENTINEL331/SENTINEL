@@ -33,7 +33,7 @@ class ResearchJournal:
             for observation in observations:
 
                 lines.append(
-                    f"- {observation.summary}"
+                    f"- {observation.statement}"
                 )
 
         else:
