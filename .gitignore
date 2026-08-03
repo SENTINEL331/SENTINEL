@@ -20,3 +20,5 @@ logs/
 
 # Jupyter
 .ipynb_checkpoints/
+
+ai/memory/observations/*.json
