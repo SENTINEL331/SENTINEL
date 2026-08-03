@@ -1,4 +1,6 @@
+import argparse
 import json
+import sys
 
 from ai.experiment_request_service import ExperimentRequestService
 from ai.hypothesis_service import HypothesisService
@@ -129,9 +131,63 @@ def run_manual_experiment_request_generation(
 	return experiment_requests
 
 
-def main():
-	run_manual_hypothesis_generation()
+def _build_arg_parser():
+	"""Build command-line parser for manual research runners."""
+
+	parser = argparse.ArgumentParser(
+		prog="python -m research.runner",
+		description="Manual one-symbol research runners.",
+	)
+	subparsers = parser.add_subparsers(dest="mode")
+
+	hypotheses_parser = subparsers.add_parser(
+		"hypotheses",
+		help="Generate hypotheses for one symbol.",
+	)
+	hypotheses_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
+	experiment_requests_parser = subparsers.add_parser(
+		"experiment-requests",
+		help="Generate experiment requests for one symbol.",
+	)
+	experiment_requests_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
+	return parser
+
+
+def main(argv=None):
+	parser = _build_arg_parser()
+
+	if argv is None:
+		argv = sys.argv[1:]
+
+	if not argv:
+		parser.print_help()
+		return 0
+
+	args = parser.parse_args(argv)
+
+	if args.mode == "hypotheses":
+		run_manual_hypothesis_generation(symbol=args.symbol)
+		return 0
+
+	if args.mode == "experiment-requests":
+		run_manual_experiment_request_generation(symbol=args.symbol)
+		return 0
+
+	parser.print_help()
+	return 0
 
 
 if __name__ == "__main__":
-	main()
+	raise SystemExit(main())
