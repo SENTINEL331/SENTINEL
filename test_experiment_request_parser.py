@@ -98,6 +98,88 @@ class ExperimentRequestParserTests(unittest.TestCase):
         ):
             parse_experiment_requests("NVDA", "not-json")
 
+    def test_parser_populates_missing_timestamps(self):
+        response = json.dumps(
+            {
+                "experiment_requests": [
+                    {
+                        "experiment_request_id": "expreq-002",
+                        "hypothesis_id": "hyp-002",
+                        "hypothesis_version_id": "hyp-002:v1",
+                        "symbol": "NVDA",
+                        "title": "Validate pullback continuation",
+                        "objective": "Test whether pullbacks within trend recover within three sessions.",
+                        "test_type": "initial_backtest",
+                        "entry_conditions": "Enter after pullback close above trend support.",
+                        "exit_conditions": "Exit on invalidation or three-session horizon.",
+                        "time_horizon": "3D",
+                        "status": "proposed",
+                        "source_observation_ids": ["obs-3"],
+                    }
+                ]
+            }
+        )
+
+        requests = parse_experiment_requests("NVDA", response)
+
+        self.assertEqual(1, len(requests))
+        self.assertIsNotNone(requests[0].created_at)
+        self.assertIsNotNone(requests[0].updated_at)
+        self.assertEqual(timezone.utc, requests[0].created_at.tzinfo)
+        self.assertEqual(timezone.utc, requests[0].updated_at.tzinfo)
+        self.assertGreaterEqual(requests[0].updated_at, requests[0].created_at)
+
+    def test_parser_uses_provided_timestamp_when_other_is_missing(self):
+        created_at = datetime(2026, 8, 3, 0, 0, tzinfo=timezone.utc).isoformat()
+
+        response = {
+            "experiment_requests": [
+                {
+                    "experiment_request_id": "expreq-003",
+                    "hypothesis_id": "hyp-003",
+                    "hypothesis_version_id": "hyp-003:v1",
+                    "symbol": "NVDA",
+                    "title": "Validate gap follow-through",
+                    "objective": "Test whether opening gap strength persists intraday.",
+                    "test_type": "exploratory",
+                    "entry_conditions": "Enter after gap confirmation.",
+                    "exit_conditions": "Exit on invalidation.",
+                    "time_horizon": "1D",
+                    "created_at": created_at,
+                }
+            ]
+        }
+
+        requests = parse_experiment_requests("NVDA", response)
+
+        self.assertEqual(created_at, requests[0].created_at.isoformat())
+        self.assertEqual(created_at, requests[0].updated_at.isoformat())
+
+    def test_parser_generates_missing_experiment_request_id(self):
+        response = {
+            "experiment_requests": [
+                {
+                    "hypothesis_id": "hyp-004",
+                    "hypothesis_version_id": "hyp-004:v1",
+                    "symbol": "NVDA",
+                    "title": "Validate opening strength",
+                    "objective": "Test whether opening strength leads to follow-through.",
+                    "test_type": "exploratory",
+                    "entry_conditions": "Enter after opening strength confirmation.",
+                    "exit_conditions": "Exit on invalidation or end of day.",
+                    "time_horizon": "1D",
+                }
+            ]
+        }
+
+        first_parse = parse_experiment_requests("NVDA", response)
+        second_parse = parse_experiment_requests("NVDA", response)
+
+        generated_id = first_parse[0].experiment_request_id
+
+        self.assertTrue(generated_id.startswith("expreq-NVDA-"))
+        self.assertEqual(generated_id, second_parse[0].experiment_request_id)
+
 
 if __name__ == "__main__":
     unittest.main()

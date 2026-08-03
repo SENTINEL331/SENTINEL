@@ -33,6 +33,30 @@ def _parse_datetime(value, field_name):
     return parsed
 
 
+def _parse_optional_datetime(value):
+    if value is None or value == "":
+        return None
+
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("timestamps must be timezone-aware")
+
+        return value
+
+    if not isinstance(value, str):
+        raise ValueError("timestamps must be ISO 8601 strings")
+
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("timestamps must be ISO 8601 timestamps") from exc
+
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    return parsed
+
+
 def _normalize_hypothesis_payload(response):
     if isinstance(response, str):
         try:
@@ -244,15 +268,13 @@ def parse_experiment_requests(
 
     experiment_requests = []
 
+    seen_request_ids = set()
+
     for index, item in enumerate(items):
         if not isinstance(item, dict):
             raise ValueError(f"experiment_requests[{index}] must be an object")
 
         experiment_request_id = item.get("experiment_request_id")
-        if not experiment_request_id:
-            raise ValueError(
-                f"experiment_requests[{index}].experiment_request_id is required"
-            )
 
         hypothesis_id = item.get("hypothesis_id")
         if not hypothesis_id:
@@ -306,6 +328,29 @@ def parse_experiment_requests(
         if not time_horizon:
             raise ValueError(f"experiment_requests[{index}].time_horizon is required")
 
+        if not experiment_request_id:
+            digest = sha256(
+                "|".join(
+                    [
+                        hypothesis_id,
+                        hypothesis_version_id,
+                        item_symbol,
+                        title,
+                        objective,
+                        test_type_value,
+                        entry_conditions,
+                        exit_conditions,
+                        time_horizon,
+                    ]
+                ).encode("utf-8")
+            ).hexdigest()[:12]
+            experiment_request_id = f"expreq-{item_symbol}-{digest}"
+
+        if experiment_request_id in seen_request_ids:
+            experiment_request_id = f"{experiment_request_id}-{index}"
+
+        seen_request_ids.add(experiment_request_id)
+
         status_value = item.get("status", ExperimentRequestStatus.PROPOSED.value)
 
         try:
@@ -324,14 +369,20 @@ def parse_experiment_requests(
                 f"experiment_requests[{index}].source_observation_ids must be a list"
             )
 
-        created_at = _parse_datetime(
-            item.get("created_at", item.get("created")),
-            f"experiment_requests[{index}].created_at",
+        created_at = _parse_optional_datetime(
+            item.get("created_at", item.get("created"))
         )
-        updated_at = _parse_datetime(
-            item.get("updated_at", item.get("updated")),
-            f"experiment_requests[{index}].updated_at",
+        updated_at = _parse_optional_datetime(
+            item.get("updated_at", item.get("updated"))
         )
+
+        if created_at is None and updated_at is None:
+            created_at = datetime.now(timezone.utc)
+            updated_at = created_at
+        elif created_at is None:
+            created_at = updated_at
+        elif updated_at is None:
+            updated_at = created_at
 
         if updated_at < created_at:
             raise ValueError(
