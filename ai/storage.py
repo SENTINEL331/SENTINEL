@@ -8,6 +8,11 @@ from research.experiment import (
     ExperimentRequestStatus,
     ExperimentTestType,
 )
+from research.experiment_result import (
+    ExperimentMetrics,
+    ExperimentResult,
+    ExperimentResultStatus,
+)
 from research.hypothesis import Hypothesis, HypothesisStatus
 from research.observation import Observation
 
@@ -266,6 +271,99 @@ class Storage:
                 indent=4,
             )
 
+    def save_experiment_results(
+        self,
+        symbol,
+        experiment_results,
+    ):
+        """
+        Save experiment results for one symbol.
+        """
+
+        path = (
+            self.base
+            / "experiments"
+            / "results"
+            / f"{symbol}.json"
+        )
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        data = []
+
+        if path.exists():
+
+            with open(
+                path,
+                "r",
+                encoding="utf-8",
+            ) as f:
+
+                data = json.load(f)
+
+        existing_ids = {
+            item["experiment_result_id"]
+            for item in data
+            if "experiment_result_id" in item
+        }
+
+        for result in experiment_results:
+
+            if result.experiment_result_id in existing_ids:
+                continue
+
+            existing_ids.add(result.experiment_result_id)
+
+            data.append(
+                {
+                    "experiment_result_id": result.experiment_result_id,
+                    "experiment_request_id": result.experiment_request_id,
+                    "hypothesis_id": result.hypothesis_id,
+                    "symbol": result.symbol,
+                    "test_type": result.test_type.value,
+                    "status": result.status.value,
+                    "started_at": result.started_at.isoformat(),
+                    "completed_at": (
+                        result.completed_at.isoformat()
+                        if result.completed_at is not None
+                        else None
+                    ),
+                    "metrics": {
+                        "total_return": result.metrics.total_return,
+                        "win_rate": result.metrics.win_rate,
+                        "max_drawdown": result.metrics.max_drawdown,
+                        "trade_count": result.metrics.trade_count,
+                        "average_return": result.metrics.average_return,
+                        "average_holding_period": result.metrics.average_holding_period,
+                        "profit_factor": result.metrics.profit_factor,
+                        "annualized_return": result.metrics.annualized_return,
+                        "volatility": result.metrics.volatility,
+                        "sharpe_ratio": result.metrics.sharpe_ratio,
+                        "expectancy": result.metrics.expectancy,
+                        "extra_metrics": dict(result.metrics.extra_metrics),
+                    },
+                    "summary": result.summary,
+                    "failure_reason": result.failure_reason,
+                    "created_at": result.created_at.isoformat(),
+                    "updated_at": result.updated_at.isoformat(),
+                }
+            )
+
+        with open(
+            path,
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                data,
+                f,
+                indent=4,
+            )
+
     def load_observations(
         self,
         symbol,
@@ -451,3 +549,82 @@ class Storage:
             )
 
         return experiment_requests
+
+    def load_experiment_results(
+        self,
+        symbol,
+    ):
+        """
+        Load experiment results for one symbol.
+        """
+
+        path = (
+            self.base
+            / "experiments"
+            / "results"
+            / f"{symbol}.json"
+        )
+
+        if not path.exists():
+
+            return []
+
+        with open(
+            path,
+            "r",
+            encoding="utf-8",
+        ) as f:
+
+            data = json.load(f)
+
+        experiment_results = []
+
+        for item in data:
+            metrics_item = item.get("metrics", {})
+            extra_metrics = {}
+
+            if isinstance(metrics_item, dict):
+                extra_metrics = metrics_item.get("extra_metrics", {})
+
+            experiment_results.append(
+                ExperimentResult(
+                    experiment_result_id=item["experiment_result_id"],
+                    experiment_request_id=item["experiment_request_id"],
+                    hypothesis_id=item["hypothesis_id"],
+                    symbol=item.get("symbol", symbol),
+                    test_type=ExperimentTestType(item["test_type"]),
+                    status=ExperimentResultStatus(
+                        item.get("status", ExperimentResultStatus.RUNNING.value)
+                    ),
+                    started_at=self._parse_timestamp(item.get("started_at")),
+                    completed_at=(
+                        self._parse_timestamp(item.get("completed_at"))
+                        if item.get("completed_at")
+                        else None
+                    ),
+                    metrics=ExperimentMetrics(
+                        total_return=metrics_item.get("total_return"),
+                        win_rate=metrics_item.get("win_rate"),
+                        max_drawdown=metrics_item.get("max_drawdown"),
+                        trade_count=metrics_item.get("trade_count"),
+                        average_return=metrics_item.get("average_return"),
+                        average_holding_period=metrics_item.get("average_holding_period"),
+                        profit_factor=metrics_item.get("profit_factor"),
+                        annualized_return=metrics_item.get("annualized_return"),
+                        volatility=metrics_item.get("volatility"),
+                        sharpe_ratio=metrics_item.get("sharpe_ratio"),
+                        expectancy=metrics_item.get("expectancy"),
+                        extra_metrics=extra_metrics,
+                    ),
+                    summary=item.get("summary", ""),
+                    failure_reason=item.get("failure_reason"),
+                    created_at=self._parse_timestamp(
+                        item.get("created_at", item.get("created"))
+                    ),
+                    updated_at=self._parse_timestamp(
+                        item.get("updated_at", item.get("updated"))
+                    ),
+                )
+            )
+
+        return experiment_results
