@@ -6,6 +6,7 @@ from ai.experiment_request_service import ExperimentRequestService
 from ai.hypothesis_service import HypothesisService
 from ai.journal import ResearchJournal
 from ai.storage import Storage
+from research.executor import ExperimentExecutor
 
 
 DEFAULT_SYMBOL = "NVDA"
@@ -131,6 +132,72 @@ def run_manual_experiment_request_generation(
 	return experiment_requests
 
 
+def run_manual_experiment_execution(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	executor=None,
+):
+	"""Run one-symbol experiment execution on demand using stored requests."""
+
+	storage = storage or Storage()
+	executor = executor or ExperimentExecutor()
+
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = []
+	skipped_count = 0
+
+	for request in experiment_requests:
+		if request.symbol and request.symbol != symbol:
+			skipped_count += 1
+			continue
+
+		experiment_results.append(executor.execute(request))
+
+	if experiment_results:
+		storage.save_experiment_results(symbol, experiment_results)
+
+	not_implemented_count = sum(
+		1
+		for result in experiment_results
+		if result.failure_reason == "execution_not_implemented"
+	)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Experiment Execution: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Requests Loaded : {len(experiment_requests)}")
+	print(f"Requests Executed : {len(experiment_results)}")
+	print(f"Requests Skipped : {skipped_count}")
+	print(f"Results Saved : {len(experiment_results)}")
+	print(f"Not Implemented : {not_implemented_count}")
+
+	if experiment_results:
+		print()
+		print("Experiment Results")
+		print("------------------")
+
+		for result in experiment_results:
+			print(
+				f"- {result.test_type.value} "
+				f"[{result.status.value}] "
+				f"request_id={result.experiment_request_id} "
+				f"result_id={result.experiment_result_id}"
+			)
+
+			if result.failure_reason:
+				print(f"  reason: {result.failure_reason}")
+			elif result.summary:
+				print(f"  summary: {result.summary}")
+
+	else:
+		print()
+		print("No experiment requests to execute.")
+
+	return experiment_results
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -162,6 +229,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	experiment_execution_parser = subparsers.add_parser(
+		"experiment-execution",
+		help="Execute stored experiment requests for one symbol.",
+	)
+	experiment_execution_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	return parser
 
 
@@ -183,6 +261,10 @@ def main(argv=None):
 
 	if args.mode == "experiment-requests":
 		run_manual_experiment_request_generation(symbol=args.symbol)
+		return 0
+
+	if args.mode == "experiment-execution":
+		run_manual_experiment_execution(symbol=args.symbol)
 		return 0
 
 	parser.print_help()
