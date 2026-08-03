@@ -11,6 +11,7 @@ from ai.prompts import (
     OBSERVATION_PROMPT,
     COMPARISON_PROMPT,
     HYPOTHESIS_PROMPT,
+    EXPERIMENT_REQUEST_PROMPT,
 )
 
 
@@ -125,6 +126,38 @@ class AIClient:
             )
 
         prompt = HYPOTHESIS_PROMPT.format(
+            journal="\n\n".join(prompt_sections),
+            observations=observations,
+        )
+
+        return self.chat(
+            SYSTEM_PROMPT,
+            prompt,
+        )
+
+    def experiment_request(
+        self,
+        symbol,
+        journal,
+        hypotheses,
+        observations="[]",
+    ):
+        """
+        Request experiment requests for one symbol.
+        """
+
+        prompt_sections = [
+            f"Symbol: {symbol}",
+        ]
+
+        if journal:
+
+            prompt_sections.append(
+                f"Journal Context:\n{journal}"
+            )
+
+        prompt = EXPERIMENT_REQUEST_PROMPT.format(
+            hypotheses=hypotheses,
             journal="\n\n".join(prompt_sections),
             observations=observations,
         )
