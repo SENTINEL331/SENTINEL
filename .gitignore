@@ -22,3 +22,6 @@ logs/
 .ipynb_checkpoints/
 
 ai/memory/observations/*.json
+
+# Runtime AI memory/state
+ai/memory/
