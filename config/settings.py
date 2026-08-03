@@ -1,6 +1,7 @@
 APP_NAME = "Sentinel"
 VERSION = "v1.0"
 AI_MODEL = "gpt-5"
+ENABLE_HYPOTHESIS_GENERATION = False
 
 DATA_PROVIDER = "Yahoo Finance"
 

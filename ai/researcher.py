@@ -1,7 +1,10 @@
 from research.memory import ResearchMemory
 from research.parser import parse_observations
 
+from config.settings import ENABLE_HYPOTHESIS_GENERATION
 from ai.client import AIClient
+from ai.hypothesis_service import HypothesisService
+from ai.journal import ResearchJournal
 from ai.storage import Storage
 
 
@@ -19,6 +22,13 @@ class Researcher:
         self.ai = AIClient()
 
         self.storage = Storage()
+
+        self.journal = ResearchJournal()
+
+        self.hypothesis_service = HypothesisService(
+            ai_client=self.ai,
+            storage=self.storage,
+        )
 
     def research(self):
 
@@ -89,6 +99,19 @@ class Researcher:
             print("-" * 7)
 
             print(f"✓ Saved {len(observations)} observations")
+
+            if ENABLE_HYPOTHESIS_GENERATION:
+
+                journal_text = self.journal.build(symbol)
+
+                hypotheses = self.hypothesis_service.generate_for_symbol(
+                    symbol=symbol,
+                    journal=journal_text,
+                    observations=observations,
+                    snapshot_text=snapshot.to_text(),
+                )
+
+                print(f"✓ Generated {len(hypotheses)} hypotheses")
 
             #
             # Status
