@@ -75,6 +75,67 @@ Observation Evidence:
 """
 
 
+EXPERIMENT_REQUEST_PROMPT = """
+Review the following hypotheses and evidence context.
+
+Your task:
+
+- Convert eligible hypotheses into testable experiment requests.
+- Propose research intent only; do not execute any experiment.
+- Do not claim that you ran a backtest, validation, or paper trade.
+- Sentinel executes tests; you only propose structured Experiment Requests.
+- Base every request on supplied hypotheses and evidence context.
+- Do not fabricate missing evidence, prices, features, or results.
+- Return VALID JSON ONLY.
+- Do not include markdown.
+- Do not include explanations before or after the JSON.
+- Your response will be parsed automatically by Sentinel.
+
+Rules:
+
+- Each request must target one hypothesis version.
+- Each request must declare a supported test type.
+- Entry and exit conditions must be explicit and testable.
+- Requests must not include trade execution instructions.
+- If no hypothesis is ready for testing, return an empty experiment_requests list.
+
+Return this exact structure:
+
+{{
+    "experiment_requests": [
+        {{
+            "experiment_request_id": "optional-stable-id-or-empty-string",
+            "hypothesis_id": "...",
+            "hypothesis_version_id": "...",
+            "symbol": "...",
+            "title": "...",
+            "objective": "...",
+            "test_type": "initial_backtest",
+            "entry_conditions": "...",
+            "exit_conditions": "...",
+            "time_horizon": "...",
+            "status": "proposed",
+            "source_observation_ids": ["obs-1"],
+            "created_at": "optional-iso-8601-timestamp",
+            "updated_at": "optional-iso-8601-timestamp"
+        }}
+    ]
+}}
+
+Hypotheses Context:
+
+{hypotheses}
+
+Journal Context:
+
+{journal}
+
+Observation Evidence:
+
+{observations}
+"""
+
+
 OBSERVATION_PROMPT = """
 Review the following market evidence.
 
