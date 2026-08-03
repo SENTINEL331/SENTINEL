@@ -39,6 +39,7 @@ class ExperimentResultStatus(str, Enum):
 
     RUNNING = "running"
     COMPLETED = "completed"
+    NOT_IMPLEMENTED = "not_implemented"
     FAILED = "failed"
     CANCELLED = "cancelled"
     TIMED_OUT = "timed_out"
@@ -151,6 +152,7 @@ class ExperimentResult:
                 raise ValueError("completed_at is required when status is completed")
 
         if self.status in {
+            ExperimentResultStatus.NOT_IMPLEMENTED,
             ExperimentResultStatus.FAILED,
             ExperimentResultStatus.CANCELLED,
             ExperimentResultStatus.TIMED_OUT,

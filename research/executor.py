@@ -29,7 +29,7 @@ class ExperimentExecutor:
             hypothesis_id=request.hypothesis_id,
             symbol=request.symbol,
             test_type=request.test_type,
-            status=ExperimentResultStatus.FAILED,
+            status=ExperimentResultStatus.NOT_IMPLEMENTED,
             started_at=now,
             completed_at=now,
             summary="Experiment execution is not implemented.",

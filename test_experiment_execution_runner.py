@@ -48,7 +48,7 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
             hypothesis_id="hyp-001",
             symbol="NVDA",
             test_type=ExperimentTestType.INITIAL_BACKTEST,
-            status=ExperimentResultStatus.FAILED,
+            status=ExperimentResultStatus.NOT_IMPLEMENTED,
             started_at=now,
             completed_at=now,
             summary="Experiment execution is not implemented.",
@@ -77,7 +77,7 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
         mock_print.assert_any_call("Results Saved : 1")
         mock_print.assert_any_call("Not Implemented : 1")
         mock_print.assert_any_call(
-            "- initial_backtest [failed] request_id=expreq-001 result_id=expr-001"
+            "- initial_backtest [not_implemented] request_id=expreq-001 result_id=expr-001"
         )
         mock_print.assert_any_call("  reason: execution_not_implemented")
 

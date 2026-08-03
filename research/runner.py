@@ -7,6 +7,7 @@ from ai.hypothesis_service import HypothesisService
 from ai.journal import ResearchJournal
 from ai.storage import Storage
 from research.executor import ExperimentExecutor
+from research.experiment_result import ExperimentResultStatus
 
 
 DEFAULT_SYMBOL = "NVDA"
@@ -159,7 +160,7 @@ def run_manual_experiment_execution(
 	not_implemented_count = sum(
 		1
 		for result in experiment_results
-		if result.failure_reason == "execution_not_implemented"
+		if result.status == ExperimentResultStatus.NOT_IMPLEMENTED
 	)
 
 	print()

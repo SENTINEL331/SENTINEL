@@ -47,7 +47,7 @@ class ExperimentExecutorTests(unittest.TestCase):
         executor = ExperimentExecutor()
         result = executor.execute(request)
 
-        self.assertEqual(ExperimentResultStatus.FAILED, result.status)
+        self.assertEqual(ExperimentResultStatus.NOT_IMPLEMENTED, result.status)
         self.assertEqual("execution_not_implemented", result.failure_reason)
         self.assertIn("not implemented", result.summary.lower())
         self.assertIsNotNone(result.started_at)
