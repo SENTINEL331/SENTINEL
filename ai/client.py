@@ -10,6 +10,7 @@ from ai.prompts import (
     SYSTEM_PROMPT,
     OBSERVATION_PROMPT,
     COMPARISON_PROMPT,
+    HYPOTHESIS_PROMPT,
 )
 
 
@@ -89,6 +90,43 @@ class AIClient:
         prompt = COMPARISON_PROMPT.format(
             previous=previous,
             current=current,
+        )
+
+        return self.chat(
+            SYSTEM_PROMPT,
+            prompt,
+        )
+
+    def hypothesis(
+        self,
+        symbol,
+        journal,
+        observations,
+        snapshot_text=None,
+    ):
+        """
+        Request hypotheses for one symbol.
+        """
+
+        prompt_sections = [
+            f"Symbol: {symbol}",
+        ]
+
+        if journal:
+
+            prompt_sections.append(
+                f"Journal Context:\n{journal}"
+            )
+
+        if snapshot_text:
+
+            prompt_sections.append(
+                f"Snapshot Evidence:\n{snapshot_text}"
+            )
+
+        prompt = HYPOTHESIS_PROMPT.format(
+            journal="\n\n".join(prompt_sections),
+            observations=observations,
         )
 
         return self.chat(
