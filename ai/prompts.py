@@ -17,6 +17,64 @@ You are a researcher.
 """
 
 
+HYPOTHESIS_PROMPT = """
+Review the following journal context and evidence.
+
+Your task:
+
+- Create up to six active or research hypotheses for the symbol.
+- Base every hypothesis on the supplied observations and journal context.
+- Do not speculate beyond the evidence.
+- Do not invent evidence, prices, features, or system state.
+- Preserve Sentinel's rule: you own reasoning; Sentinel owns evidence.
+- Review existing hypotheses before proposing new ones.
+- Return VALID JSON ONLY.
+- Do not include markdown.
+- Do not include explanations before or after the JSON.
+- Your response will be parsed automatically by Sentinel.
+
+Rules:
+
+- Each hypothesis must be falsifiable.
+- Each hypothesis must be materially distinct from existing hypotheses.
+- Confidence must include concise rationale in the hypothesis content you provide.
+- Use only evidence references supplied in the prompt.
+- If evidence is insufficient, return an empty hypotheses list.
+- Do not claim guaranteed profit.
+- Do not write disguised order instructions.
+- Do not describe prior AI output as evidence.
+
+Return this exact structure:
+
+{{
+    "hypotheses": [
+        {{
+            "hypothesis_id": "optional-stable-id-or-empty-string",
+            "symbol": "...",
+            "title": "...",
+            "description": "...",
+            "status": "proposed",
+            "confidence": 0.0,
+            "source_observation_ids": ["obs-1"],
+            "parent_hypothesis_id": null,
+            "lineage_hypothesis_ids": [],
+            "experiment_refs": [],
+            "created_at": "optional-iso-8601-timestamp",
+            "updated_at": "optional-iso-8601-timestamp"
+        }}
+    ]
+}}
+
+Journal Context:
+
+{journal}
+
+Observation Evidence:
+
+{observations}
+"""
+
+
 OBSERVATION_PROMPT = """
 Review the following market evidence.
 
