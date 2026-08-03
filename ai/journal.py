@@ -27,6 +27,16 @@ class ResearchJournal:
             f"id={hypothesis.hypothesis_id}"
         )
 
+    def _format_experiment_request(self, experiment_request):
+        return (
+            f"- {experiment_request.title} "
+            f"[{experiment_request.status.value}] "
+            f"test_type={experiment_request.test_type.value} "
+            f"id={experiment_request.experiment_request_id}"
+            "\n"
+            f"  objective: {experiment_request.objective}"
+        )
+
     def build(
         self,
         symbol,
@@ -37,6 +47,7 @@ class ResearchJournal:
 
         observations = self.storage.load_observations(symbol)
         hypotheses = self.storage.load_hypotheses(symbol)
+        experiment_requests = self.storage.load_experiment_requests(symbol)
         active_hypotheses = [
             hypothesis
             for hypothesis in hypotheses
@@ -80,6 +91,24 @@ class ResearchJournal:
 
             lines.append(
                 "No active hypotheses."
+            )
+
+        lines.append("")
+        lines.append("Experiment Requests")
+        lines.append("-------------------")
+
+        if experiment_requests:
+
+            for experiment_request in experiment_requests:
+
+                lines.append(
+                    self._format_experiment_request(experiment_request)
+                )
+
+        else:
+
+            lines.append(
+                "No experiment requests."
             )
 
         return "\n".join(lines)
