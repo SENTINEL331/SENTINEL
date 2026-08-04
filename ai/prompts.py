@@ -155,6 +155,55 @@ Observation Evidence:
 """
 
 
+HYPOTHESIS_REVIEW_PROMPT = """
+Review the following hypotheses and deterministic evidence context.
+
+Your task:
+
+- Review each supplied hypothesis against journal evidence.
+- Recommend one next step per hypothesis.
+- Record recommendations only; do not execute changes.
+- Do not claim that any hypothesis was edited, retired, or promoted by you.
+- Base recommendations only on supplied context.
+- Return VALID JSON ONLY.
+- Do not include markdown.
+- Do not include explanations before or after the JSON.
+- Your response will be parsed automatically by Sentinel.
+
+Rules:
+
+- Use one recommendation per hypothesis.
+- recommendation must be one of: keep, refine, retire, needs_more_tests.
+- confidence must be numeric between 0.0 and 1.0.
+- rationale must be concise and evidence-based.
+- If no hypotheses are supplied, return an empty hypothesis_reviews list.
+
+Return this exact structure:
+
+{{
+    "hypothesis_reviews": [
+        {{
+            "review_id": "optional-stable-id-or-empty-string",
+            "hypothesis_id": "...",
+            "symbol": "...",
+            "recommendation": "keep",
+            "rationale": "...",
+            "confidence": 0.0,
+            "created_at": "optional-iso-8601-timestamp"
+        }}
+    ]
+}}
+
+Hypotheses Context:
+
+{hypotheses}
+
+Journal Context:
+
+{journal}
+"""
+
+
 OBSERVATION_PROMPT = """
 Review the following market evidence.
 

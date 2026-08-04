@@ -8,6 +8,8 @@ from research.experiment import (
     ExperimentRequestStatus,
     ExperimentTestType,
 )
+from research.hypothesis_review import HypothesisReview
+from research.hypothesis_review import HypothesisReviewRecommendation
 from research.hypothesis import Hypothesis, HypothesisStatus
 from research.observation import Observation
 
@@ -451,3 +453,110 @@ def parse_experiment_requests(
             raise
 
     return experiment_requests
+
+
+def _normalize_hypothesis_review_payload(response):
+    if isinstance(response, str):
+        try:
+            response = json.loads(response)
+        except json.JSONDecodeError as exc:
+            raise ValueError("hypothesis review response must be valid JSON") from exc
+
+    if not isinstance(response, dict):
+        raise ValueError("hypothesis review response must be a dict or JSON object")
+
+    if "hypothesis_reviews" not in response:
+        raise ValueError(
+            "hypothesis review response must include a 'hypothesis_reviews' field"
+        )
+
+    hypothesis_reviews = response["hypothesis_reviews"]
+
+    if not isinstance(hypothesis_reviews, list):
+        raise ValueError("'hypothesis_reviews' must be a list")
+
+    return hypothesis_reviews
+
+
+def parse_hypothesis_reviews(symbol, response):
+    """Convert validated hypothesis review data into HypothesisReview objects."""
+
+    items = _normalize_hypothesis_review_payload(response)
+
+    hypothesis_reviews = []
+    seen_review_ids = set()
+
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise ValueError(f"hypothesis_reviews[{index}] must be an object")
+
+        hypothesis_id = item.get("hypothesis_id")
+        if not hypothesis_id:
+            raise ValueError(f"hypothesis_reviews[{index}].hypothesis_id is required")
+
+        item_symbol = item.get("symbol", symbol)
+        if not item_symbol:
+            raise ValueError(f"hypothesis_reviews[{index}].symbol is required")
+
+        recommendation_value = item.get("recommendation")
+        if not recommendation_value:
+            raise ValueError(f"hypothesis_reviews[{index}].recommendation is required")
+
+        try:
+            recommendation = HypothesisReviewRecommendation(recommendation_value)
+        except ValueError as exc:
+            raise ValueError(
+                "hypothesis_reviews[{}].recommendation must be one of {}".format(
+                    index,
+                    [option.value for option in HypothesisReviewRecommendation],
+                )
+            ) from exc
+
+        rationale = item.get("rationale")
+        if not rationale:
+            raise ValueError(f"hypothesis_reviews[{index}].rationale is required")
+
+        confidence = item.get("confidence")
+        if confidence is None:
+            raise ValueError(f"hypothesis_reviews[{index}].confidence is required")
+
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            raise ValueError(f"hypothesis_reviews[{index}].confidence must be numeric")
+
+        review_id = item.get("review_id")
+        if not review_id:
+            digest = sha256(
+                "|".join(
+                    [
+                        hypothesis_id,
+                        item_symbol,
+                        recommendation.value,
+                        rationale,
+                        str(confidence),
+                    ]
+                ).encode("utf-8")
+            ).hexdigest()[:12]
+            review_id = f"hyprev-{item_symbol}-{digest}"
+
+        if review_id in seen_review_ids:
+            review_id = f"{review_id}-{index}"
+
+        seen_review_ids.add(review_id)
+
+        created_at = _parse_optional_datetime(item.get("created_at", item.get("created")))
+        if created_at is None:
+            created_at = datetime.now(timezone.utc)
+
+        hypothesis_reviews.append(
+            HypothesisReview(
+                review_id=review_id,
+                hypothesis_id=hypothesis_id,
+                symbol=item_symbol,
+                recommendation=recommendation,
+                rationale=rationale,
+                confidence=float(confidence),
+                created_at=created_at,
+            )
+        )
+
+    return hypothesis_reviews

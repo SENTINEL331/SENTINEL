@@ -12,6 +12,7 @@ from ai.prompts import (
     COMPARISON_PROMPT,
     HYPOTHESIS_PROMPT,
     EXPERIMENT_REQUEST_PROMPT,
+    HYPOTHESIS_REVIEW_PROMPT,
 )
 
 
@@ -160,6 +161,34 @@ class AIClient:
             hypotheses=hypotheses,
             journal="\n\n".join(prompt_sections),
             observations=observations,
+        )
+
+        return self.chat(
+            SYSTEM_PROMPT,
+            prompt,
+        )
+
+    def hypothesis_review(
+        self,
+        symbol,
+        journal,
+        hypotheses,
+    ):
+        """Request hypothesis reviews for one symbol."""
+
+        prompt_sections = [
+            f"Symbol: {symbol}",
+        ]
+
+        if journal:
+
+            prompt_sections.append(
+                f"Journal Context:\n{journal}"
+            )
+
+        prompt = HYPOTHESIS_REVIEW_PROMPT.format(
+            hypotheses=hypotheses,
+            journal="\n\n".join(prompt_sections),
         )
 
         return self.chat(

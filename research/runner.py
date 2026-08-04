@@ -4,6 +4,7 @@ import sys
 
 from ai.experiment_request_service import ExperimentRequestService
 from ai.hypothesis_service import HypothesisService
+from ai.hypothesis_review_service import HypothesisReviewService
 from ai.journal import ResearchJournal
 from ai.storage import Storage
 from research.executor import ExperimentExecutor
@@ -321,6 +322,47 @@ def run_manual_hypothesis_evaluation(
 	return evaluations
 
 
+def run_manual_hypothesis_reviews(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	hypothesis_review_service=None,
+):
+	"""Run one-symbol hypothesis review generation on demand."""
+
+	storage = storage or Storage()
+	hypothesis_review_service = hypothesis_review_service or HypothesisReviewService(
+		storage=storage
+	)
+
+	reviews = hypothesis_review_service.generate_for_symbol(symbol=symbol)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Hypothesis Reviews: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Hypothesis Reviews Generated : {len(reviews)}")
+
+	if reviews:
+		print()
+		print("Hypothesis Reviews")
+		print("------------------")
+
+		for review in reviews:
+			print(
+				f"- {review.hypothesis_id} "
+				f"recommendation={review.recommendation.value} "
+				f"confidence={review.confidence:.2f} "
+				f"id={review.review_id}"
+			)
+			print(f"  rationale: {review.rationale}")
+	else:
+		print()
+		print("No hypothesis reviews generated.")
+
+	return reviews
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -374,6 +416,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	hypothesis_reviews_parser = subparsers.add_parser(
+		"hypothesis-reviews",
+		help="Generate AI hypothesis review recommendations for one symbol.",
+	)
+	hypothesis_reviews_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	return parser
 
 
@@ -403,6 +456,10 @@ def main(argv=None):
 
 	if args.mode == "hypothesis-evaluation":
 		run_manual_hypothesis_evaluation(symbol=args.symbol)
+		return 0
+
+	if args.mode == "hypothesis-reviews":
+		run_manual_hypothesis_reviews(symbol=args.symbol)
 		return 0
 
 	parser.print_help()

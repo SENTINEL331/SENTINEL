@@ -14,6 +14,8 @@ from research.experiment_result import (
     ExperimentResultStatus,
 )
 from research.hypothesis import Hypothesis, HypothesisStatus
+from research.hypothesis_review import HypothesisReview
+from research.hypothesis_review import HypothesisReviewRecommendation
 from research.observation import Observation
 
 
@@ -368,6 +370,76 @@ class Storage:
                 indent=4,
             )
 
+    def save_hypothesis_reviews(
+        self,
+        symbol,
+        hypothesis_reviews,
+    ):
+        """
+        Save hypothesis reviews for one symbol.
+        """
+
+        path = (
+            self.base
+            / "hypotheses"
+            / "reviews"
+            / f"{symbol}.json"
+        )
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        data = []
+
+        if path.exists():
+
+            with open(
+                path,
+                "r",
+                encoding="utf-8",
+            ) as f:
+
+                data = json.load(f)
+
+        existing_ids = {
+            item["review_id"]
+            for item in data
+            if "review_id" in item
+        }
+
+        for review in hypothesis_reviews:
+
+            if review.review_id in existing_ids:
+                continue
+
+            existing_ids.add(review.review_id)
+
+            data.append(
+                {
+                    "review_id": review.review_id,
+                    "hypothesis_id": review.hypothesis_id,
+                    "symbol": review.symbol,
+                    "recommendation": review.recommendation.value,
+                    "rationale": review.rationale,
+                    "confidence": review.confidence,
+                    "created_at": review.created_at.isoformat(),
+                }
+            )
+
+        with open(
+            path,
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                data,
+                f,
+                indent=4,
+            )
+
     def load_observations(
         self,
         symbol,
@@ -636,3 +708,47 @@ class Storage:
             )
 
         return experiment_results
+
+    def load_hypothesis_reviews(
+        self,
+        symbol,
+    ):
+        """
+        Load hypothesis reviews for one symbol.
+        """
+
+        path = (
+            self.base
+            / "hypotheses"
+            / "reviews"
+            / f"{symbol}.json"
+        )
+
+        if not path.exists():
+
+            return []
+
+        with open(
+            path,
+            "r",
+            encoding="utf-8",
+        ) as f:
+
+            data = json.load(f)
+
+        hypothesis_reviews = []
+
+        for item in data:
+            hypothesis_reviews.append(
+                HypothesisReview(
+                    review_id=item["review_id"],
+                    hypothesis_id=item["hypothesis_id"],
+                    symbol=item.get("symbol", symbol),
+                    recommendation=HypothesisReviewRecommendation(item["recommendation"]),
+                    rationale=item["rationale"],
+                    confidence=item["confidence"],
+                    created_at=self._parse_timestamp(item.get("created_at", item.get("created"))),
+                )
+            )
+
+        return hypothesis_reviews
