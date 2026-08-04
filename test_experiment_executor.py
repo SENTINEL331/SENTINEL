@@ -6,6 +6,7 @@ import pandas as pd
 
 from research.executor import ExperimentExecutor
 from research.experiment import ExperimentRequest, ExperimentTestType
+from research.experiment import ExperimentRequestStatus
 from research.experiment_result import ExperimentResult, ExperimentResultStatus
 
 
@@ -213,6 +214,39 @@ class ExperimentExecutorTests(unittest.TestCase):
 
         self.assertEqual(ExperimentResultStatus.NOT_IMPLEMENTED, result.status)
         self.assertEqual("historical_data_unavailable", result.failure_reason)
+        basic_backtest_runner.run.assert_not_called()
+
+    def test_execute_ignores_obsolete_request_statuses(self):
+        request = ExperimentRequest(
+            experiment_request_id="expreq-007",
+            hypothesis_id="hyp-007",
+            hypothesis_version_id="hyp-007:v1",
+            symbol="NVDA",
+            title="Validate momentum continuation",
+            objective="Test whether breakouts continue higher over one session.",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Enter when close is above 100.",
+            machine_readable_entry_conditions=(
+                {"field": "Close", "operator": ">", "value": 100.0},
+            ),
+            exit_conditions="Exit after one session.",
+            time_horizon="1D",
+            forward_horizon=1,
+            status=ExperimentRequestStatus.REJECTED,
+        )
+        historical_data_loader = Mock()
+        basic_backtest_runner = Mock()
+
+        executor = ExperimentExecutor(
+            basic_backtest_runner=basic_backtest_runner,
+            historical_data_loader=historical_data_loader,
+        )
+        result = executor.execute(request)
+
+        self.assertEqual(ExperimentResultStatus.NOT_IMPLEMENTED, result.status)
+        self.assertEqual("unsupported_experiment_request", result.failure_reason)
+        self.assertIn("obsolete", result.summary.lower())
+        historical_data_loader.load.assert_not_called()
         basic_backtest_runner.run.assert_not_called()
 
 

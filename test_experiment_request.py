@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from research.experiment import (
     ExperimentRequest,
+    ExperimentRequestExecutionState,
     ExperimentRequestStatus,
     ExperimentTestType,
 )
@@ -36,6 +37,8 @@ class ExperimentRequestTests(unittest.TestCase):
         self.assertEqual(ExperimentRequestStatus.PROPOSED, request.status)
         self.assertIsNone(request.forward_horizon)
         self.assertEqual((), request.machine_readable_entry_conditions)
+        self.assertEqual(ExperimentRequestExecutionState.NON_EXECUTABLE, request.execution_state)
+        self.assertFalse(request.is_executable)
         self.assertEqual((), request.source_observation_ids)
         self.assertEqual(created_at, request.created_at)
         self.assertEqual(created_at, request.updated_at)
@@ -73,10 +76,38 @@ class ExperimentRequestTests(unittest.TestCase):
 
         self.assertEqual(5, request.forward_horizon)
         self.assertEqual(2, len(request.machine_readable_entry_conditions))
+        self.assertEqual(ExperimentRequestExecutionState.EXECUTABLE, request.execution_state)
+        self.assertTrue(request.is_executable)
         self.assertEqual(
             "EMA_20",
             request.machine_readable_entry_conditions[0]["other_field"],
         )
+
+    def test_execution_state_marks_obsolete_statuses(self):
+        request = ExperimentRequest(
+            experiment_request_id="expreq-lifecycle-001",
+            hypothesis_id="hyp-001",
+            hypothesis_version_id="hyp-001:v1",
+            symbol="NVDA",
+            title="Validate momentum continuation",
+            objective="Objective",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Entry",
+            machine_readable_entry_conditions=(
+                {
+                    "field": "Close",
+                    "operator": ">",
+                    "value": 100,
+                },
+            ),
+            exit_conditions="Exit",
+            time_horizon="5D",
+            forward_horizon=5,
+            status=ExperimentRequestStatus.REJECTED,
+        )
+
+        self.assertEqual(ExperimentRequestExecutionState.OBSOLETE, request.execution_state)
+        self.assertFalse(request.is_executable)
 
     def test_rejects_malformed_machine_readable_entry_conditions(self):
         created_at = datetime(2026, 8, 3, 0, 0, tzinfo=timezone.utc)

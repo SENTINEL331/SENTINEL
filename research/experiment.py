@@ -138,6 +138,14 @@ class ExperimentRequestStatus(str, Enum):
 	TIMED_OUT = "timed_out"
 
 
+class ExperimentRequestExecutionState(str, Enum):
+	"""Execution readiness state derived from lifecycle status and fields."""
+
+	EXECUTABLE = "executable"
+	NON_EXECUTABLE = "non_executable"
+	OBSOLETE = "obsolete"
+
+
 ALLOWED_STATUS_TRANSITIONS: dict[ExperimentRequestStatus, set[ExperimentRequestStatus]] = {
 	ExperimentRequestStatus.PROPOSED: {
 		ExperimentRequestStatus.ACCEPTED,
@@ -246,6 +254,33 @@ class ExperimentRequest:
 	@property
 	def id(self) -> str:
 		return self.experiment_request_id
+
+	@property
+	def has_machine_readable_execution_fields(self) -> bool:
+		return bool(self.machine_readable_entry_conditions) and self.forward_horizon is not None
+
+	@property
+	def execution_state(self) -> ExperimentRequestExecutionState:
+		if self.status in {
+			ExperimentRequestStatus.REJECTED,
+			ExperimentRequestStatus.COMPLETED,
+			ExperimentRequestStatus.FAILED,
+			ExperimentRequestStatus.CANCELLED,
+			ExperimentRequestStatus.TIMED_OUT,
+		}:
+			return ExperimentRequestExecutionState.OBSOLETE
+
+		if self.status == ExperimentRequestStatus.RUNNING:
+			return ExperimentRequestExecutionState.NON_EXECUTABLE
+
+		if self.has_machine_readable_execution_fields:
+			return ExperimentRequestExecutionState.EXECUTABLE
+
+		return ExperimentRequestExecutionState.NON_EXECUTABLE
+
+	@property
+	def is_executable(self) -> bool:
+		return self.execution_state == ExperimentRequestExecutionState.EXECUTABLE
 
 	def with_status(
 		self,

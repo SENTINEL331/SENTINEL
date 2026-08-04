@@ -9,11 +9,10 @@ from uuid import uuid4
 import pandas as pd
 
 from market.historical_data_loader import HistoricalDataLoader
-from research.basic_backtest_runner import (
-    BasicBacktestRunner,
-    _parse_time_horizon,
-)
+from research.basic_backtest_runner import BasicBacktestRunner
 from research.experiment import ExperimentRequest
+from research.experiment import ExperimentRequestExecutionState
+from research.experiment import ExperimentRequestStatus
 from research.experiment_result import (
     ExperimentResult,
     ExperimentResultStatus,
@@ -103,16 +102,20 @@ class ExperimentExecutor:
         )
 
     def _request_support_error(self, request: ExperimentRequest) -> str | None:
+        if request.execution_state == ExperimentRequestExecutionState.OBSOLETE:
+            return f"request is obsolete in status '{request.status.value}'"
+
+        if request.execution_state == ExperimentRequestExecutionState.NON_EXECUTABLE:
+            if request.status == ExperimentRequestStatus.RUNNING:
+                return "request is already running"
+
+            return "machine_readable_entry_conditions are required for deterministic execution"
+
         if request.machine_readable_entry_conditions:
             if request.forward_horizon is None:
                 return "forward_horizon is required when machine_readable_entry_conditions are provided"
 
             return None
-
-        try:
-            _parse_time_horizon(request.time_horizon)
-        except ValueError as exc:
-            return str(exc)
 
         return "machine_readable_entry_conditions are required for deterministic execution"
 
