@@ -14,6 +14,9 @@ from research.experiment_result import (
     ExperimentResultStatus,
 )
 from research.hypothesis import Hypothesis, HypothesisStatus
+from research.hypothesis_lifecycle import HypothesisLifecycleAction
+from research.hypothesis_revision_proposal import HypothesisRevisionProposal
+from research.hypothesis_revision_proposal import HypothesisRevisionProposalType
 from research.hypothesis_review import HypothesisReview
 from research.hypothesis_review import HypothesisReviewRecommendation
 from research.observation import Observation
@@ -440,6 +443,80 @@ class Storage:
                 indent=4,
             )
 
+    def save_hypothesis_revision_proposals(
+        self,
+        symbol,
+        proposals,
+    ):
+        """
+        Save hypothesis revision proposals for one symbol.
+        """
+
+        path = (
+            self.base
+            / "hypotheses"
+            / "revision_proposals"
+            / f"{symbol}.json"
+        )
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        data = []
+
+        if path.exists():
+
+            with open(
+                path,
+                "r",
+                encoding="utf-8",
+            ) as f:
+
+                data = json.load(f)
+
+        existing_ids = {
+            item["proposal_id"]
+            for item in data
+            if "proposal_id" in item
+        }
+
+        for proposal in proposals:
+
+            if proposal.proposal_id in existing_ids:
+                continue
+
+            existing_ids.add(proposal.proposal_id)
+
+            data.append(
+                {
+                    "proposal_id": proposal.proposal_id,
+                    "symbol": proposal.symbol,
+                    "parent_hypothesis_id": proposal.parent_hypothesis_id,
+                    "source_review_id": proposal.source_review_id,
+                    "lifecycle_action": proposal.lifecycle_action.value,
+                    "proposal_type": proposal.proposal_type.value,
+                    "proposed_title": proposal.proposed_title,
+                    "proposed_description": proposal.proposed_description,
+                    "rationale": proposal.rationale,
+                    "confidence": proposal.confidence,
+                    "created_at": proposal.created_at.isoformat(),
+                }
+            )
+
+        with open(
+            path,
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                data,
+                f,
+                indent=4,
+            )
+
     def load_observations(
         self,
         symbol,
@@ -752,3 +829,51 @@ class Storage:
             )
 
         return hypothesis_reviews
+
+    def load_hypothesis_revision_proposals(
+        self,
+        symbol,
+    ):
+        """
+        Load hypothesis revision proposals for one symbol.
+        """
+
+        path = (
+            self.base
+            / "hypotheses"
+            / "revision_proposals"
+            / f"{symbol}.json"
+        )
+
+        if not path.exists():
+
+            return []
+
+        with open(
+            path,
+            "r",
+            encoding="utf-8",
+        ) as f:
+
+            data = json.load(f)
+
+        proposals = []
+
+        for item in data:
+            proposals.append(
+                HypothesisRevisionProposal(
+                    proposal_id=item["proposal_id"],
+                    symbol=item.get("symbol", symbol),
+                    parent_hypothesis_id=item["parent_hypothesis_id"],
+                    source_review_id=item.get("source_review_id"),
+                    lifecycle_action=HypothesisLifecycleAction(item["lifecycle_action"]),
+                    proposal_type=HypothesisRevisionProposalType(item["proposal_type"]),
+                    proposed_title=item.get("proposed_title", ""),
+                    proposed_description=item.get("proposed_description", ""),
+                    rationale=item["rationale"],
+                    confidence=item["confidence"],
+                    created_at=self._parse_timestamp(item.get("created_at", item.get("created"))),
+                )
+            )
+
+        return proposals

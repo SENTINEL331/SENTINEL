@@ -3,6 +3,7 @@ import json
 import sys
 
 from ai.experiment_request_service import ExperimentRequestService
+from ai.hypothesis_revision_service import HypothesisRevisionService
 from ai.hypothesis_service import HypothesisService
 from ai.hypothesis_review_service import HypothesisReviewService
 from ai.journal import ResearchJournal
@@ -435,6 +436,59 @@ def run_manual_hypothesis_lifecycle(
 	return recommendations
 
 
+def run_manual_hypothesis_revisions(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	hypothesis_revision_service=None,
+):
+	"""Run one-symbol hypothesis revision proposal generation on demand."""
+
+	storage = storage or Storage()
+	hypothesis_revision_service = hypothesis_revision_service or HypothesisRevisionService(
+		storage=storage
+	)
+
+	proposals = hypothesis_revision_service.generate_for_symbol(symbol=symbol)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Hypothesis Revisions: {symbol}")
+	print("=" * 50)
+	print()
+	print("Proposals only; no hypotheses are mutated.")
+	print(f"Hypothesis Revision Proposals Generated : {len(proposals)}")
+
+	if proposals:
+		print()
+		print("Hypothesis Revision Proposals")
+		print("-----------------------------")
+
+		for proposal in proposals:
+			print(
+				f"- parent_id={proposal.parent_hypothesis_id} "
+				f"proposal_type={proposal.proposal_type.value} "
+				f"lifecycle_action={proposal.lifecycle_action.value} "
+				f"confidence={proposal.confidence:.2f} "
+				f"id={proposal.proposal_id}"
+			)
+
+			if proposal.source_review_id:
+				print(f"  source_review_id: {proposal.source_review_id}")
+
+			if proposal.proposed_title:
+				print(f"  proposed_title: {proposal.proposed_title}")
+
+			if proposal.proposed_description:
+				print(f"  proposed_description: {proposal.proposed_description}")
+
+			print(f"  rationale: {proposal.rationale}")
+	else:
+		print()
+		print("No hypothesis revision proposals generated.")
+
+	return proposals
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -510,6 +564,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	hypothesis_revisions_parser = subparsers.add_parser(
+		"hypothesis-revisions",
+		help="Generate hypothesis revision proposals for one symbol.",
+	)
+	hypothesis_revisions_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	return parser
 
 
@@ -547,6 +612,10 @@ def main(argv=None):
 
 	if args.mode == "hypothesis-lifecycle":
 		run_manual_hypothesis_lifecycle(symbol=args.symbol)
+		return 0
+
+	if args.mode == "hypothesis-revisions":
+		run_manual_hypothesis_revisions(symbol=args.symbol)
 		return 0
 
 	parser.print_help()

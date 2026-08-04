@@ -8,6 +8,9 @@ from research.experiment import (
     ExperimentRequestStatus,
     ExperimentTestType,
 )
+from research.hypothesis_lifecycle import HypothesisLifecycleAction
+from research.hypothesis_revision_proposal import HypothesisRevisionProposal
+from research.hypothesis_revision_proposal import HypothesisRevisionProposalType
 from research.hypothesis_review import HypothesisReview
 from research.hypothesis_review import HypothesisReviewRecommendation
 from research.hypothesis import Hypothesis, HypothesisStatus
@@ -573,3 +576,144 @@ def parse_hypothesis_reviews(symbol, response):
         )
 
     return hypothesis_reviews
+
+
+def _normalize_hypothesis_revision_proposal_payload(response):
+    if isinstance(response, str):
+        try:
+            response = json.loads(response)
+        except json.JSONDecodeError as exc:
+            raise ValueError("hypothesis revision proposal response must be valid JSON") from exc
+
+    if not isinstance(response, dict):
+        raise ValueError("hypothesis revision proposal response must be a dict or JSON object")
+
+    if "hypothesis_revision_proposals" not in response:
+        raise ValueError(
+            "hypothesis revision proposal response must include a 'hypothesis_revision_proposals' field"
+        )
+
+    proposals = response["hypothesis_revision_proposals"]
+
+    if not isinstance(proposals, list):
+        raise ValueError("'hypothesis_revision_proposals' must be a list")
+
+    return proposals
+
+
+def parse_hypothesis_revision_proposals(symbol, response):
+    """Convert validated revision proposal data into HypothesisRevisionProposal objects."""
+
+    items = _normalize_hypothesis_revision_proposal_payload(response)
+
+    proposals = []
+    seen_proposal_ids = set()
+
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise ValueError(f"hypothesis_revision_proposals[{index}] must be an object")
+
+        item_symbol = item.get("symbol", symbol)
+        if not item_symbol:
+            raise ValueError(f"hypothesis_revision_proposals[{index}].symbol is required")
+
+        parent_hypothesis_id = item.get("parent_hypothesis_id")
+        if not parent_hypothesis_id:
+            raise ValueError(
+                f"hypothesis_revision_proposals[{index}].parent_hypothesis_id is required"
+            )
+
+        lifecycle_action_value = item.get("lifecycle_action")
+        if not lifecycle_action_value:
+            raise ValueError(
+                f"hypothesis_revision_proposals[{index}].lifecycle_action is required"
+            )
+
+        try:
+            lifecycle_action = HypothesisLifecycleAction(lifecycle_action_value)
+        except ValueError as exc:
+            raise ValueError(
+                "hypothesis_revision_proposals[{}].lifecycle_action must be one of {}".format(
+                    index,
+                    [option.value for option in HypothesisLifecycleAction],
+                )
+            ) from exc
+
+        proposal_type_value = item.get("proposal_type")
+        if not proposal_type_value:
+            raise ValueError(
+                f"hypothesis_revision_proposals[{index}].proposal_type is required"
+            )
+
+        try:
+            proposal_type = HypothesisRevisionProposalType(proposal_type_value)
+        except ValueError as exc:
+            raise ValueError(
+                "hypothesis_revision_proposals[{}].proposal_type must be one of {}".format(
+                    index,
+                    [option.value for option in HypothesisRevisionProposalType],
+                )
+            ) from exc
+
+        rationale = item.get("rationale")
+        if not rationale:
+            raise ValueError(f"hypothesis_revision_proposals[{index}].rationale is required")
+
+        confidence = item.get("confidence")
+        if confidence is None:
+            raise ValueError(f"hypothesis_revision_proposals[{index}].confidence is required")
+
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            raise ValueError(
+                f"hypothesis_revision_proposals[{index}].confidence must be numeric"
+            )
+
+        proposal_id = item.get("proposal_id")
+        if not proposal_id:
+            digest = sha256(
+                "|".join(
+                    [
+                        item_symbol,
+                        parent_hypothesis_id,
+                        lifecycle_action.value,
+                        proposal_type.value,
+                        item.get("proposed_title", ""),
+                        item.get("proposed_description", ""),
+                        rationale,
+                        str(confidence),
+                        str(item.get("source_review_id", "")),
+                    ]
+                ).encode("utf-8")
+            ).hexdigest()[:12]
+            proposal_id = f"hyprevp-{item_symbol}-{digest}"
+
+        if proposal_id in seen_proposal_ids:
+            proposal_id = f"{proposal_id}-{index}"
+
+        seen_proposal_ids.add(proposal_id)
+
+        created_at_value = item.get("created_at", item.get("created"))
+        if _is_date_only_timestamp(created_at_value):
+            created_at_value = None
+
+        created_at = _parse_optional_datetime(created_at_value)
+        if created_at is None:
+            created_at = datetime.now(timezone.utc)
+
+        proposals.append(
+            HypothesisRevisionProposal(
+                proposal_id=proposal_id,
+                symbol=item_symbol,
+                parent_hypothesis_id=parent_hypothesis_id,
+                source_review_id=item.get("source_review_id"),
+                lifecycle_action=lifecycle_action,
+                proposal_type=proposal_type,
+                proposed_title=item.get("proposed_title", ""),
+                proposed_description=item.get("proposed_description", ""),
+                rationale=rationale,
+                confidence=float(confidence),
+                created_at=created_at,
+            )
+        )
+
+    return proposals

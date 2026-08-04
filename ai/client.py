@@ -13,6 +13,7 @@ from ai.prompts import (
     HYPOTHESIS_PROMPT,
     EXPERIMENT_REQUEST_PROMPT,
     HYPOTHESIS_REVIEW_PROMPT,
+    HYPOTHESIS_REVISION_PROPOSAL_PROMPT,
 )
 
 
@@ -188,6 +189,36 @@ class AIClient:
 
         prompt = HYPOTHESIS_REVIEW_PROMPT.format(
             hypotheses=hypotheses,
+            journal="\n\n".join(prompt_sections),
+        )
+
+        return self.chat(
+            SYSTEM_PROMPT,
+            prompt,
+        )
+
+    def hypothesis_revision_proposals(
+        self,
+        symbol,
+        journal,
+        hypotheses,
+        lifecycle_recommendations,
+    ):
+        """Request hypothesis revision proposals for one symbol."""
+
+        prompt_sections = [
+            f"Symbol: {symbol}",
+        ]
+
+        if journal:
+
+            prompt_sections.append(
+                f"Journal Context:\n{journal}"
+            )
+
+        prompt = HYPOTHESIS_REVISION_PROPOSAL_PROMPT.format(
+            hypotheses=hypotheses,
+            lifecycle_recommendations=lifecycle_recommendations,
             journal="\n\n".join(prompt_sections),
         )
 

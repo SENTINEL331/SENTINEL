@@ -204,6 +204,64 @@ Journal Context:
 """
 
 
+HYPOTHESIS_REVISION_PROPOSAL_PROMPT = """
+Review the supplied hypotheses and deterministic lifecycle recommendation context.
+
+Your task:
+
+- Propose append-only hypothesis revision records.
+- Never mutate existing hypotheses.
+- Never claim that a hypothesis was edited, retired, superseded, or promoted.
+- Focus proposals on hypotheses whose lifecycle action indicates refinement or more testing.
+- Return VALID JSON ONLY.
+- Do not include markdown.
+- Do not include explanations before or after the JSON.
+- Your response will be parsed automatically by Sentinel.
+
+Rules:
+
+- proposal_type must be one of: create_child_hypothesis, request_more_tests, no_revision.
+- lifecycle_action must match the supplied recommendation for that hypothesis.
+- confidence must be numeric between 0.0 and 1.0.
+- rationale must be concise and evidence-based.
+- For create_child_hypothesis, proposed_title and proposed_description are required.
+- For request_more_tests and no_revision, proposed_title/proposed_description may be empty strings.
+- If no proposals are appropriate, return an empty hypothesis_revision_proposals list.
+
+Return this exact structure:
+
+{{
+    "hypothesis_revision_proposals": [
+        {{
+            "proposal_id": "optional-stable-id-or-empty-string",
+            "symbol": "...",
+            "parent_hypothesis_id": "...",
+            "source_review_id": "optional-review-id-or-null",
+            "lifecycle_action": "refine_candidate",
+            "proposal_type": "create_child_hypothesis",
+            "proposed_title": "...",
+            "proposed_description": "...",
+            "rationale": "...",
+            "confidence": 0.0,
+            "created_at": "optional-iso-8601-timestamp"
+        }}
+    ]
+}}
+
+Hypotheses Context:
+
+{hypotheses}
+
+Lifecycle Recommendation Context:
+
+{lifecycle_recommendations}
+
+Journal Context:
+
+{journal}
+"""
+
+
 OBSERVATION_PROMPT = """
 Review the following market evidence.
 
