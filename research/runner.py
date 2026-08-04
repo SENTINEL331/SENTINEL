@@ -9,6 +9,7 @@ from ai.storage import Storage
 from research.executor import ExperimentExecutor
 from research.experiment import ExperimentRequestExecutionState
 from research.experiment_result import ExperimentResultStatus
+from research.hypothesis_evaluation import evaluate_hypothesis_evidence
 
 
 DEFAULT_SYMBOL = "NVDA"
@@ -252,6 +253,74 @@ def run_manual_experiment_execution(
 	return experiment_results
 
 
+def run_manual_hypothesis_evaluation(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Run deterministic hypothesis evidence summarization for one symbol."""
+
+	def _format_percent(value):
+		if value is None:
+			return "n/a"
+
+		return f"{value * 100:.2f}%"
+
+	storage = storage or Storage()
+	hypotheses = storage.load_hypotheses(symbol)
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = storage.load_experiment_results(symbol)
+
+	evaluations = evaluate_hypothesis_evidence(
+		hypotheses=hypotheses,
+		experiment_results=experiment_results,
+		experiment_requests=experiment_requests,
+	)
+
+	completed_results_count = sum(
+		1
+		for result in experiment_results
+		if result.status == ExperimentResultStatus.COMPLETED
+	)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Hypothesis Evaluation: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Hypotheses Loaded : {len(hypotheses)}")
+	print(f"Completed Results Loaded : {completed_results_count}")
+	print(f"Hypotheses Evaluated : {len(evaluations)}")
+
+	if evaluations:
+		print()
+		print("Hypothesis Evidence")
+		print("-------------------")
+
+		for evaluation in evaluations:
+			print(
+				f"- {evaluation.hypothesis_title} "
+				f"[{evaluation.evidence_status.value}] "
+				f"id={evaluation.hypothesis_id}"
+			)
+			print(
+				"  completed_experiments="
+				f"{evaluation.completed_experiment_count}, "
+				f"trade_count={evaluation.total_trade_count}"
+			)
+			print(
+				"  average_return="
+				f"{_format_percent(evaluation.average_return)}, "
+				f"win_rate={_format_percent(evaluation.win_rate)}, "
+				f"best_return={_format_percent(evaluation.best_return)}, "
+				f"worst_return={_format_percent(evaluation.worst_return)}"
+			)
+	else:
+		print()
+		print("No hypotheses to evaluate.")
+
+	return evaluations
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -294,6 +363,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	hypothesis_evaluation_parser = subparsers.add_parser(
+		"hypothesis-evaluation",
+		help="Summarize completed experiment evidence for hypotheses.",
+	)
+	hypothesis_evaluation_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	return parser
 
 
@@ -319,6 +399,10 @@ def main(argv=None):
 
 	if args.mode == "experiment-execution":
 		run_manual_experiment_execution(symbol=args.symbol)
+		return 0
+
+	if args.mode == "hypothesis-evaluation":
+		run_manual_hypothesis_evaluation(symbol=args.symbol)
 		return 0
 
 	parser.print_help()
