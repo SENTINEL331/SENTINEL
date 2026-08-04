@@ -1,4 +1,6 @@
+import io
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from research.runner import DEFAULT_SYMBOL, main
@@ -6,6 +8,8 @@ from research.runner import DEFAULT_SYMBOL, main
 
 class RunnerCliTests(unittest.TestCase):
     def test_help_does_not_dispatch_generation(self):
+        buffer = io.StringIO()
+
         with patch("research.runner.run_manual_hypothesis_generation") as mock_hypotheses, patch(
             "research.runner.run_manual_experiment_request_generation"
         ) as mock_experiment_requests, patch(
@@ -19,12 +23,15 @@ class RunnerCliTests(unittest.TestCase):
         ) as mock_hypothesis_lifecycle, patch(
             "research.runner.run_manual_hypothesis_revisions"
         ) as mock_hypothesis_revisions, patch(
+            "research.runner.run_manual_research_cycle"
+        ) as mock_research_cycle, patch(
             "research.runner.run_manual_research_plan"
-        ) as mock_research_plan:
+        ) as mock_research_plan, redirect_stdout(buffer):
             with self.assertRaises(SystemExit) as context:
                 main(["--help"])
 
         self.assertEqual(0, context.exception.code)
+        self.assertIn("research-cycle", buffer.getvalue())
         mock_hypotheses.assert_not_called()
         mock_experiment_requests.assert_not_called()
         mock_experiment_execution.assert_not_called()
@@ -32,6 +39,7 @@ class RunnerCliTests(unittest.TestCase):
         mock_hypothesis_reviews.assert_not_called()
         mock_hypothesis_lifecycle.assert_not_called()
         mock_hypothesis_revisions.assert_not_called()
+        mock_research_cycle.assert_not_called()
         mock_research_plan.assert_not_called()
 
     def test_hypotheses_command_dispatches_to_hypothesis_runner(self):
@@ -88,6 +96,8 @@ class RunnerCliTests(unittest.TestCase):
         ) as mock_hypothesis_lifecycle, patch(
             "research.runner.run_manual_hypothesis_revisions"
         ) as mock_hypothesis_revisions, patch(
+            "research.runner.run_manual_research_cycle"
+        ) as mock_research_cycle, patch(
             "research.runner.run_manual_research_plan"
         ) as mock_research_plan, patch("argparse.ArgumentParser.print_help") as mock_help:
             exit_code = main([])
@@ -101,6 +111,7 @@ class RunnerCliTests(unittest.TestCase):
         mock_hypothesis_reviews.assert_not_called()
         mock_hypothesis_lifecycle.assert_not_called()
         mock_hypothesis_revisions.assert_not_called()
+        mock_research_cycle.assert_not_called()
         mock_research_plan.assert_not_called()
 
     def test_hypotheses_command_uses_default_symbol(self):
@@ -253,6 +264,20 @@ class RunnerCliTests(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         mock_research_plan.assert_called_once_with(symbol=DEFAULT_SYMBOL)
+
+    def test_research_cycle_command_dispatches_to_runner(self):
+        with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:
+            exit_code = main(["research-cycle", "NVDA"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_cycle.assert_called_once_with(symbol="NVDA", dry_run=True)
+
+    def test_research_cycle_command_with_dry_run_flag_dispatches_to_runner(self):
+        with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:
+            exit_code = main(["research-cycle", "NVDA", "--dry-run"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_cycle.assert_called_once_with(symbol="NVDA", dry_run=True)
 
     def test_hypothesis_revision_apply_command_dispatches_to_runner_in_dry_run_mode(self):
         with patch(

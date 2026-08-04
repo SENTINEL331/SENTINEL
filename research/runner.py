@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 import json
 import sys
 
@@ -301,6 +301,88 @@ def run_manual_research_plan(
 	else:
 		print()
 		print("No research plan items.")
+
+	return research_plan
+
+
+def run_manual_research_cycle(
+	symbol=DEFAULT_SYMBOL,
+	dry_run=True,
+	storage=None,
+):
+	"""Run a dry-run research cycle preview for one symbol."""
+
+	storage = storage or Storage()
+	hypotheses = storage.load_hypotheses(symbol)
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = storage.load_experiment_results(symbol)
+	load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
+	hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
+	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+	revision_applications = storage.load_hypothesis_revision_applications(symbol)
+	evidence_summaries = evaluate_hypothesis_evidence(
+		hypotheses=hypotheses,
+		experiment_results=experiment_results,
+		experiment_requests=experiment_requests,
+	)
+	latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+	lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	research_plan = build_research_plan(
+		symbol=symbol,
+		hypotheses=hypotheses,
+		experiment_requests=experiment_requests,
+		experiment_results=experiment_results,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+		lifecycle_recommendations=lifecycle_recommendations,
+		revision_proposals=revision_proposals,
+		revision_applications=revision_applications,
+	)
+	planned_action_counts = {}
+	for item in research_plan.items:
+		planned_action_counts[item.recommended_action.value] = planned_action_counts.get(item.recommended_action.value, 0) + 1
+
+	print()
+	print("=" * 50)
+	print(f"Manual Research Cycle: {symbol}")
+	print("=" * 50)
+	print()
+	print("Mode : dry-run")
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print(f"Hypotheses Loaded : {len(hypotheses)}")
+	print(f"Experiment Requests Loaded : {len(experiment_requests)}")
+	print(f"Completed Results Loaded : {sum(1 for result in experiment_results if result.status == ExperimentResultStatus.COMPLETED)}")
+	print(f"Research Plan Items : {len(research_plan.items)}")
+
+	print()
+	print("Planned Actions")
+	print("---------------")
+	for action in ResearchPlanAction:
+		print(f"- {action.value} : {planned_action_counts.get(action.value, 0)}")
+
+	print()
+	print("Research Plan")
+	print("-------------")
+	if research_plan.items:
+		for item in research_plan.items:
+			print(
+				f"- {item.hypothesis_id} action={item.recommended_action.value} priority={item.priority.value}"
+			)
+			print(f"  reason: {item.reason}")
+			if item.related_child_hypothesis_id:
+				print(f"  child_hypothesis_id={item.related_child_hypothesis_id}")
+			if item.related_proposal_id:
+				print(f"  proposal_id={item.related_proposal_id}")
+	else:
+		print("No research plan items.")
+
+	print()
+	print("Dry run complete. No records were modified.")
 
 	return research_plan
 
@@ -770,6 +852,22 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	research_cycle_parser = subparsers.add_parser(
+		"research-cycle",
+		help="Preview the next safe research steps for one symbol.",
+	)
+	research_cycle_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+	research_cycle_parser.add_argument(
+		"--dry-run",
+		action="store_true",
+		help="Preview the research cycle without modifying records (default).",
+	)
+
 	hypothesis_revision_apply_parser = subparsers.add_parser(
 		"hypothesis-revision-apply",
 		help="Apply one hypothesis revision proposal in dry-run or apply mode.",
@@ -842,6 +940,10 @@ def main(argv=None):
 
 	if args.mode == "research-plan":
 		run_manual_research_plan(symbol=args.symbol)
+		return 0
+
+	if args.mode == "research-cycle":
+		run_manual_research_cycle(symbol=args.symbol, dry_run=True)
 		return 0
 
 	if args.mode == "hypothesis-revision-apply":
