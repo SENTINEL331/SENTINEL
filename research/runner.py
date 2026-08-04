@@ -15,6 +15,9 @@ DEFAULT_SYMBOL = "NVDA"
 
 
 def _print_completed_result_metrics(result) -> None:
+	def _format_percent(value: float) -> str:
+		return f"{value * 100:.2f}%"
+
 	metrics = result.metrics
 	metric_lines = []
 
@@ -22,21 +25,21 @@ def _print_completed_result_metrics(result) -> None:
 		metric_lines.append(f"trade_count={metrics.trade_count}")
 
 	if metrics.average_return is not None:
-		metric_lines.append(f"average_return={metrics.average_return}")
+		metric_lines.append(f"average_return={_format_percent(metrics.average_return)}")
 
 	if metrics.win_rate is not None:
-		metric_lines.append(f"win_rate={metrics.win_rate}")
+		metric_lines.append(f"win_rate={_format_percent(metrics.win_rate)}")
 
 	best_return = metrics.extra_metrics.get("best_return")
 	if best_return is not None:
-		metric_lines.append(f"best_return={best_return}")
+		metric_lines.append(f"best_return={_format_percent(best_return)}")
 
 	worst_return = metrics.extra_metrics.get("worst_return")
 	if worst_return is not None:
-		metric_lines.append(f"worst_return={worst_return}")
+		metric_lines.append(f"worst_return={_format_percent(worst_return)}")
 
 	if metrics.total_return is not None:
-		metric_lines.append(f"total_return={metrics.total_return}")
+		metric_lines.append(f"total_return={_format_percent(metrics.total_return)}")
 
 	if metric_lines:
 		print(f"  metrics: {', '.join(metric_lines)}")

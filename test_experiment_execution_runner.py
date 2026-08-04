@@ -259,7 +259,7 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
             "  summary: Basic backtest completed with deterministic metrics."
         )
         mock_print.assert_any_call(
-            "  metrics: trade_count=7, average_return=0.0125, win_rate=0.57, best_return=0.08, worst_return=-0.03, total_return=0.0875"
+            "  metrics: trade_count=7, average_return=1.25%, win_rate=57.00%, best_return=8.00%, worst_return=-3.00%, total_return=8.75%"
         )
 
 
