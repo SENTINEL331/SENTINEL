@@ -146,6 +146,76 @@ class ResearchJournalOutputTests(unittest.TestCase):
         self.assertIn("Hypothesis Evidence", result)
         self.assertIn("No hypothesis evidence.", result)
 
+    def test_build_formats_hypothesis_evidence_percentages_when_available(self):
+        journal = ResearchJournal()
+        journal.storage = Mock()
+
+        journal.storage.load_observations.return_value = []
+        journal.storage.load_hypotheses.return_value = [
+            Hypothesis(
+                hypothesis_id="hyp-002",
+                symbol="NVDA",
+                title="Trend continuation",
+                description="Trend may persist for several sessions.",
+                status=HypothesisStatus.ACTIVE,
+                confidence=0.65,
+            )
+        ]
+        journal.storage.load_experiment_requests.return_value = []
+        journal.storage.load_experiment_results.return_value = [
+            ExperimentResult(
+                experiment_result_id="expr-101",
+                experiment_request_id="expreq-101",
+                hypothesis_id="hyp-002",
+                symbol="NVDA",
+                test_type=ExperimentTestType.INITIAL_BACKTEST,
+                status=ExperimentResultStatus.COMPLETED,
+                started_at=datetime(2026, 8, 3, 0, 0, tzinfo=timezone.utc),
+                completed_at=datetime(2026, 8, 3, 0, 20, tzinfo=timezone.utc),
+                metrics=ExperimentMetrics(
+                    trade_count=15,
+                    average_return=0.01,
+                    win_rate=0.60,
+                    extra_metrics={
+                        "best_return": 0.05,
+                        "worst_return": -0.02,
+                    },
+                ),
+                summary="Completed result one.",
+            ),
+            ExperimentResult(
+                experiment_result_id="expr-102",
+                experiment_request_id="expreq-102",
+                hypothesis_id="hyp-002",
+                symbol="NVDA",
+                test_type=ExperimentTestType.INITIAL_BACKTEST,
+                status=ExperimentResultStatus.COMPLETED,
+                started_at=datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc),
+                completed_at=datetime(2026, 8, 4, 0, 20, tzinfo=timezone.utc),
+                metrics=ExperimentMetrics(
+                    trade_count=10,
+                    average_return=0.02,
+                    win_rate=0.70,
+                    extra_metrics={
+                        "best_return": 0.08,
+                        "worst_return": -0.03,
+                    },
+                ),
+                summary="Completed result two.",
+            ),
+        ]
+
+        result = journal.build("NVDA")
+
+        self.assertIn(
+            "- Trend continuation [promising] id=hyp-002",
+            result,
+        )
+        self.assertIn(
+            "  completed_experiments=2, trade_count=25, average_return=1.50%, win_rate=65.00%, best_return=8.00%, worst_return=-3.00%",
+            result,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
