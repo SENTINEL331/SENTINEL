@@ -1,8 +1,12 @@
 import unittest
 from datetime import datetime, timezone
+import tempfile
+from pathlib import Path
 from unittest.mock import Mock, patch
 
+from ai.storage import Storage
 from research.experiment import ExperimentRequest, ExperimentTestType
+from research.experiment import ExperimentRequestStatus
 from research.experiment_result import ExperimentResult, ExperimentResultStatus
 from research.runner import DEFAULT_SYMBOL, run_manual_experiment_execution
 
@@ -12,7 +16,7 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
         storage = Mock()
         executor = Mock()
 
-        matching_request = ExperimentRequest(
+        executable_request = ExperimentRequest(
             experiment_request_id="expreq-001",
             hypothesis_id="hyp-001",
             hypothesis_version_id="hyp-001:v1",
@@ -21,8 +25,41 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
             objective="Test whether breakout continuation persists over five sessions.",
             test_type=ExperimentTestType.INITIAL_BACKTEST,
             entry_conditions="Enter after breakout confirmation.",
+            machine_readable_entry_conditions=(
+                {"field": "Close", "operator": ">", "value": 100.0},
+            ),
             exit_conditions="Exit on invalidation.",
             time_horizon="5D",
+            forward_horizon=5,
+        )
+        legacy_non_executable_request = ExperimentRequest(
+            experiment_request_id="expreq-legacy-001",
+            hypothesis_id="hyp-legacy-001",
+            hypothesis_version_id="hyp-legacy-001:v1",
+            symbol="NVDA",
+            title="Legacy request without structured fields",
+            objective="Legacy objective",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Legacy entry",
+            exit_conditions="Legacy exit",
+            time_horizon="5D",
+        )
+        obsolete_request = ExperimentRequest(
+            experiment_request_id="expreq-obsolete-001",
+            hypothesis_id="hyp-obsolete-001",
+            hypothesis_version_id="hyp-obsolete-001:v1",
+            symbol="NVDA",
+            title="Obsolete request",
+            objective="Obsolete objective",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Entry",
+            machine_readable_entry_conditions=(
+                {"field": "Close", "operator": ">", "value": 100.0},
+            ),
+            exit_conditions="Exit",
+            time_horizon="5D",
+            forward_horizon=5,
+            status=ExperimentRequestStatus.REJECTED,
         )
         mismatched_request = ExperimentRequest(
             experiment_request_id="expreq-002",
@@ -37,7 +74,9 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
             time_horizon="5D",
         )
         storage.load_experiment_requests.return_value = [
-            matching_request,
+            executable_request,
+            legacy_non_executable_request,
+            obsolete_request,
             mismatched_request,
         ]
 
@@ -67,13 +106,16 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
 
         self.assertEqual([execution_result], results)
         storage.load_experiment_requests.assert_called_once_with("NVDA")
-        executor.execute.assert_called_once_with(matching_request)
+        executor.execute.assert_called_once_with(executable_request)
         storage.save_experiment_results.assert_called_once_with("NVDA", [execution_result])
 
         mock_print.assert_any_call("Manual Experiment Execution: NVDA")
-        mock_print.assert_any_call("Requests Loaded : 2")
+        mock_print.assert_any_call("Requests Loaded : 4")
         mock_print.assert_any_call("Requests Executed : 1")
-        mock_print.assert_any_call("Requests Skipped : 1")
+        mock_print.assert_any_call("Requests Skipped : 3")
+        mock_print.assert_any_call("Skipped Non-Executable : 1")
+        mock_print.assert_any_call("Skipped Obsolete : 1")
+        mock_print.assert_any_call("Skipped Symbol Mismatch : 1")
         mock_print.assert_any_call("Results Saved : 1")
         mock_print.assert_any_call("Not Implemented : 1")
         mock_print.assert_any_call(
@@ -102,9 +144,58 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
         mock_print.assert_any_call("Requests Loaded : 0")
         mock_print.assert_any_call("Requests Executed : 0")
         mock_print.assert_any_call("Requests Skipped : 0")
+        mock_print.assert_any_call("Skipped Non-Executable : 0")
+        mock_print.assert_any_call("Skipped Obsolete : 0")
+        mock_print.assert_any_call("Skipped Symbol Mismatch : 0")
         mock_print.assert_any_call("Results Saved : 0")
         mock_print.assert_any_call("Not Implemented : 0")
         mock_print.assert_any_call("No experiment requests to execute.")
+
+    def test_runner_skips_legacy_stored_requests_without_crashing(self):
+        storage = Storage()
+        executor = Mock()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            storage.base = Path(tmp_dir)
+
+            requests_dir = Path(tmp_dir) / "experiments" / "requests"
+            requests_dir.mkdir(parents=True, exist_ok=True)
+            requests_path = requests_dir / "NVDA.json"
+            requests_path.write_text(
+                """[
+    {
+        "experiment_request_id": "expreq-legacy-file-001",
+        "hypothesis_id": "hyp-legacy-file-001",
+        "hypothesis_version": "v1",
+        "symbol": "NVDA",
+        "title": "Legacy request from old schema",
+        "objective": "Legacy objective",
+        "test_type": "initial_backtest",
+        "entry_conditions": "Legacy natural language only",
+        "exit_conditions": "Legacy exit",
+        "time_horizon": "5D"
+    }
+]""",
+                encoding="utf-8",
+            )
+
+            with patch("builtins.print") as mock_print:
+                results = run_manual_experiment_execution(
+                    symbol="NVDA",
+                    storage=storage,
+                    executor=executor,
+                )
+
+            self.assertEqual([], results)
+            executor.execute.assert_not_called()
+            mock_print.assert_any_call("Requests Loaded : 1")
+            mock_print.assert_any_call("Requests Executed : 0")
+            mock_print.assert_any_call("Requests Skipped : 1")
+            mock_print.assert_any_call("Skipped Non-Executable : 1")
+            mock_print.assert_any_call("Skipped Obsolete : 0")
+            mock_print.assert_any_call("Skipped Symbol Mismatch : 0")
+            storage_path = Path(tmp_dir) / "experiments" / "results" / "NVDA.json"
+            self.assertFalse(storage_path.exists())
 
 
 if __name__ == "__main__":

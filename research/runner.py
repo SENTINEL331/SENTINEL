@@ -7,6 +7,7 @@ from ai.hypothesis_service import HypothesisService
 from ai.journal import ResearchJournal
 from ai.storage import Storage
 from research.executor import ExperimentExecutor
+from research.experiment import ExperimentRequestExecutionState
 from research.experiment_result import ExperimentResultStatus
 
 
@@ -145,11 +146,21 @@ def run_manual_experiment_execution(
 
 	experiment_requests = storage.load_experiment_requests(symbol)
 	experiment_results = []
-	skipped_count = 0
+	skipped_symbol_mismatch_count = 0
+	skipped_non_executable_count = 0
+	skipped_obsolete_count = 0
 
 	for request in experiment_requests:
 		if request.symbol and request.symbol != symbol:
-			skipped_count += 1
+			skipped_symbol_mismatch_count += 1
+			continue
+
+		if request.execution_state == ExperimentRequestExecutionState.OBSOLETE:
+			skipped_obsolete_count += 1
+			continue
+
+		if request.execution_state == ExperimentRequestExecutionState.NON_EXECUTABLE:
+			skipped_non_executable_count += 1
 			continue
 
 		experiment_results.append(executor.execute(request))
@@ -168,9 +179,17 @@ def run_manual_experiment_execution(
 	print(f"Manual Experiment Execution: {symbol}")
 	print("=" * 50)
 	print()
+	total_skipped_count = (
+		skipped_symbol_mismatch_count
+		+ skipped_non_executable_count
+		+ skipped_obsolete_count
+	)
 	print(f"Requests Loaded : {len(experiment_requests)}")
 	print(f"Requests Executed : {len(experiment_results)}")
-	print(f"Requests Skipped : {skipped_count}")
+	print(f"Requests Skipped : {total_skipped_count}")
+	print(f"Skipped Non-Executable : {skipped_non_executable_count}")
+	print(f"Skipped Obsolete : {skipped_obsolete_count}")
+	print(f"Skipped Symbol Mismatch : {skipped_symbol_mismatch_count}")
 	print(f"Results Saved : {len(experiment_results)}")
 	print(f"Not Implemented : {not_implemented_count}")
 
