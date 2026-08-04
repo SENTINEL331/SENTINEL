@@ -14,6 +14,34 @@ from research.experiment_result import ExperimentResultStatus
 DEFAULT_SYMBOL = "NVDA"
 
 
+def _print_completed_result_metrics(result) -> None:
+	metrics = result.metrics
+	metric_lines = []
+
+	if metrics.trade_count is not None:
+		metric_lines.append(f"trade_count={metrics.trade_count}")
+
+	if metrics.average_return is not None:
+		metric_lines.append(f"average_return={metrics.average_return}")
+
+	if metrics.win_rate is not None:
+		metric_lines.append(f"win_rate={metrics.win_rate}")
+
+	best_return = metrics.extra_metrics.get("best_return")
+	if best_return is not None:
+		metric_lines.append(f"best_return={best_return}")
+
+	worst_return = metrics.extra_metrics.get("worst_return")
+	if worst_return is not None:
+		metric_lines.append(f"worst_return={worst_return}")
+
+	if metrics.total_return is not None:
+		metric_lines.append(f"total_return={metrics.total_return}")
+
+	if metric_lines:
+		print(f"  metrics: {', '.join(metric_lines)}")
+
+
 def run_manual_hypothesis_generation(
 	symbol=DEFAULT_SYMBOL,
 	sentinel=None,
@@ -210,6 +238,9 @@ def run_manual_experiment_execution(
 				print(f"  reason: {result.failure_reason}")
 			elif result.summary:
 				print(f"  summary: {result.summary}")
+
+			if result.status == ExperimentResultStatus.COMPLETED:
+				_print_completed_result_metrics(result)
 
 	else:
 		print()

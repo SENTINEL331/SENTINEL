@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from ai.storage import Storage
 from research.experiment import ExperimentRequest, ExperimentTestType
 from research.experiment import ExperimentRequestStatus
+from research.experiment_result import ExperimentMetrics
 from research.experiment_result import ExperimentResult, ExperimentResultStatus
 from research.runner import DEFAULT_SYMBOL, run_manual_experiment_execution
 
@@ -196,6 +197,70 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
             mock_print.assert_any_call("Skipped Symbol Mismatch : 0")
             storage_path = Path(tmp_dir) / "experiments" / "results" / "NVDA.json"
             self.assertFalse(storage_path.exists())
+
+    def test_runner_prints_completed_result_summary_and_key_metrics(self):
+        storage = Mock()
+        executor = Mock()
+
+        executable_request = ExperimentRequest(
+            experiment_request_id="expreq-200",
+            hypothesis_id="hyp-200",
+            hypothesis_version_id="hyp-200:v1",
+            symbol="NVDA",
+            title="Completed result display request",
+            objective="Validate runner output formatting for completed result metrics.",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Entry",
+            machine_readable_entry_conditions=(
+                {"field": "Close", "operator": ">", "value": 100.0},
+            ),
+            exit_conditions="Exit",
+            time_horizon="5D",
+            forward_horizon=5,
+        )
+
+        storage.load_experiment_requests.return_value = [executable_request]
+
+        now = datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc)
+        completed_result = ExperimentResult(
+            experiment_result_id="expr-200",
+            experiment_request_id="expreq-200",
+            hypothesis_id="hyp-200",
+            symbol="NVDA",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            status=ExperimentResultStatus.COMPLETED,
+            started_at=now,
+            completed_at=now,
+            metrics=ExperimentMetrics(
+                trade_count=7,
+                average_return=0.0125,
+                win_rate=0.57,
+                total_return=0.0875,
+                extra_metrics={
+                    "best_return": 0.08,
+                    "worst_return": -0.03,
+                },
+            ),
+            summary="Basic backtest completed with deterministic metrics.",
+            created_at=now,
+            updated_at=now,
+        )
+        executor.execute.return_value = completed_result
+
+        with patch("builtins.print") as mock_print:
+            results = run_manual_experiment_execution(
+                symbol="NVDA",
+                storage=storage,
+                executor=executor,
+            )
+
+        self.assertEqual([completed_result], results)
+        mock_print.assert_any_call(
+            "  summary: Basic backtest completed with deterministic metrics."
+        )
+        mock_print.assert_any_call(
+            "  metrics: trade_count=7, average_return=0.0125, win_rate=0.57, best_return=0.08, worst_return=-0.03, total_return=0.0875"
+        )
 
 
 if __name__ == "__main__":
