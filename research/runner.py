@@ -15,6 +15,8 @@ from research.experiment_result import ExperimentResultStatus
 from research.hypothesis_evaluation import evaluate_hypothesis_evidence
 from research.hypothesis_lifecycle import recommend_hypothesis_lifecycle_actions
 from research.hypothesis_lifecycle import select_latest_hypothesis_reviews
+from research.research_plan import ResearchPlanAction
+from research.research_plan import build_research_plan
 
 
 DEFAULT_SYMBOL = "NVDA"
@@ -113,6 +115,7 @@ def run_manual_experiment_request_generation(
 	journal=None,
 	storage=None,
 	experiment_request_service=None,
+	planned_only=False,
 ):
 	"""Run one-symbol experiment request generation on demand."""
 
@@ -126,11 +129,69 @@ def run_manual_experiment_request_generation(
 	journal_text = journal.build(symbol)
 	hypotheses = storage.load_hypotheses(symbol)
 	observations = storage.load_observations(symbol)
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = storage.load_experiment_results(symbol)
+	load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
+	hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
+	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+	revision_applications = storage.load_hypothesis_revision_applications(symbol)
+	evidence_summaries = evaluate_hypothesis_evidence(
+		hypotheses=hypotheses,
+		experiment_results=experiment_results,
+		experiment_requests=experiment_requests,
+	)
+	latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+	lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	research_plan = build_research_plan(
+		symbol=symbol,
+		hypotheses=hypotheses,
+		experiment_requests=experiment_requests,
+		experiment_results=experiment_results,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+		lifecycle_recommendations=lifecycle_recommendations,
+		revision_proposals=revision_proposals,
+		revision_applications=revision_applications,
+	)
+
+	if planned_only:
+		planned_hypothesis_ids = {
+			item.hypothesis_id
+			for item in research_plan.items
+			if item.recommended_action == ResearchPlanAction.GENERATE_EXPERIMENT_REQUEST
+		}
+		selected_hypotheses = [
+			hypothesis
+			for hypothesis in hypotheses
+			if hypothesis.hypothesis_id in planned_hypothesis_ids
+		]
+		skipped_count = len(hypotheses) - len(selected_hypotheses)
+	else:
+		selected_hypotheses = hypotheses
+		skipped_count = 0
+
+	if planned_only and not selected_hypotheses:
+		print()
+		print("=" * 50)
+		print(f"Manual Experiment Request Generation: {symbol}")
+		print("=" * 50)
+		print()
+		print(f"Hypotheses Loaded : {len(hypotheses)}")
+		print("Hypotheses Selected By Plan : 0")
+		print(f"Hypotheses Skipped By Plan : {skipped_count}")
+		print("Experiment Requests Generated : 0")
+		print()
+		print("No planned hypotheses selected.")
+		return []
 
 	experiment_requests = experiment_request_service.generate_for_symbol(
 		symbol=symbol,
 		journal=journal_text,
-		hypotheses=hypotheses,
+		hypotheses=selected_hypotheses,
 		observations=json.dumps(
 			[
 				{
@@ -149,6 +210,9 @@ def run_manual_experiment_request_generation(
 	print("=" * 50)
 	print()
 	print(f"Hypotheses Loaded : {len(hypotheses)}")
+	if planned_only:
+		print(f"Hypotheses Selected By Plan : {len(selected_hypotheses)}")
+		print(f"Hypotheses Skipped By Plan : {skipped_count}")
 	print(f"Experiment Requests Generated : {len(experiment_requests)}")
 
 	if experiment_requests:
@@ -169,6 +233,76 @@ def run_manual_experiment_request_generation(
 		print("No experiment requests generated.")
 
 	return experiment_requests
+
+
+def run_manual_research_plan(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Run deterministic research planning for one symbol."""
+
+	storage = storage or Storage()
+	hypotheses = storage.load_hypotheses(symbol)
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = storage.load_experiment_results(symbol)
+	load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
+	hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
+	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+	revision_applications = storage.load_hypothesis_revision_applications(symbol)
+	evidence_summaries = evaluate_hypothesis_evidence(
+		hypotheses=hypotheses,
+		experiment_results=experiment_results,
+		experiment_requests=experiment_requests,
+	)
+	latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+	lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	research_plan = build_research_plan(
+		symbol=symbol,
+		hypotheses=hypotheses,
+		experiment_requests=experiment_requests,
+		experiment_results=experiment_results,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+		lifecycle_recommendations=lifecycle_recommendations,
+		revision_proposals=revision_proposals,
+		revision_applications=revision_applications,
+	)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Research Plan: {symbol}")
+	print("=" * 50)
+	print()
+	print("Research plan only; no records were modified.")
+	print(f"Hypotheses Loaded : {len(hypotheses)}")
+	print(f"Plan Items : {len(research_plan.items)}")
+
+	if research_plan.items:
+		print()
+		print("Research Plan")
+		print("-------------")
+
+		for item in research_plan.items:
+			print(
+				f"- {item.hypothesis_id} action={item.recommended_action.value} priority={item.priority.value}"
+			)
+			print(f"  reason: {item.reason}")
+
+			if item.related_child_hypothesis_id:
+				print(f"  child_hypothesis_id={item.related_child_hypothesis_id}")
+
+			if item.related_proposal_id:
+				print(f"  proposal_id={item.related_proposal_id}")
+
+	else:
+		print()
+		print("No research plan items.")
+
+	return research_plan
 
 
 def run_manual_experiment_execution(
@@ -564,6 +698,11 @@ def _build_arg_parser():
 		default=DEFAULT_SYMBOL,
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
+	experiment_requests_parser.add_argument(
+		"--planned-only",
+		action="store_true",
+		help="Limit experiment request generation to hypotheses selected by the research plan.",
+	)
 
 	experiment_execution_parser = subparsers.add_parser(
 		"experiment-execution",
@@ -620,6 +759,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	research_plan_parser = subparsers.add_parser(
+		"research-plan",
+		help="Build a deterministic research plan for one symbol.",
+	)
+	research_plan_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	hypothesis_revision_apply_parser = subparsers.add_parser(
 		"hypothesis-revision-apply",
 		help="Apply one hypothesis revision proposal in dry-run or apply mode.",
@@ -664,7 +814,10 @@ def main(argv=None):
 		return 0
 
 	if args.mode == "experiment-requests":
-		run_manual_experiment_request_generation(symbol=args.symbol)
+		run_manual_experiment_request_generation(
+			symbol=args.symbol,
+			planned_only=args.planned_only,
+		)
 		return 0
 
 	if args.mode == "experiment-execution":
@@ -685,6 +838,10 @@ def main(argv=None):
 
 	if args.mode == "hypothesis-revisions":
 		run_manual_hypothesis_revisions(symbol=args.symbol)
+		return 0
+
+	if args.mode == "research-plan":
+		run_manual_research_plan(symbol=args.symbol)
 		return 0
 
 	if args.mode == "hypothesis-revision-apply":

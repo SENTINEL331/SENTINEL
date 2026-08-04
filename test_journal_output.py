@@ -138,13 +138,16 @@ class ResearchJournalOutputTests(unittest.TestCase):
         self.assertIn("Hypothesis Lifecycle Recommendations", result)
         self.assertIn("Recommendations only; no hypothesis state is changed.", result)
         self.assertIn(
-            "- Momentum continuation [active] id=hyp-001 action=needs_more_tests",
+            "- hyp-001 action=generate_hypothesis_review priority=medium",
             result,
         )
         self.assertIn(
-            "  evidence=insufficient_data, completed_experiments=1, trade_count=25",
+            "  reason: completed experiment results exist without a review",
             result,
         )
+        self.assertIn("Research Plan", result)
+        self.assertIn("Research plan only; no records were modified.", result)
+        self.assertNotIn("No research plan items.", result)
         self.assertIn("Hypothesis Revision Proposals", result)
         self.assertIn("Proposals are records only and are never auto-applied.", result)
         self.assertIn("No hypothesis revision proposals.", result)
@@ -180,6 +183,9 @@ class ResearchJournalOutputTests(unittest.TestCase):
         self.assertIn("Hypothesis Lifecycle Recommendations", result)
         self.assertIn("Recommendations only; no hypothesis state is changed.", result)
         self.assertIn("No lifecycle recommendations.", result)
+        self.assertIn("Research Plan", result)
+        self.assertIn("Research plan only; no records were modified.", result)
+        self.assertIn("No research plan items.", result)
         self.assertIn("Hypothesis Revision Proposals", result)
         self.assertIn("No hypothesis revision proposals.", result)
         self.assertIn("Hypothesis Lineage", result)
@@ -346,6 +352,9 @@ class ResearchJournalOutputTests(unittest.TestCase):
             result,
         )
 
+        self.assertIn("Research Plan", result)
+        self.assertIn("Research plan only; no records were modified.", result)
+
     def test_build_includes_revision_proposal_and_lineage_sections(self):
         journal = ResearchJournal()
         journal.storage = Mock()
@@ -420,6 +429,8 @@ class ResearchJournalOutputTests(unittest.TestCase):
             "- Child hypothesis id=hyp-002 parent_id=hyp-001 source_revision_proposal_id=hyprevp-001 lineage=hyp-001",
             result,
         )
+        self.assertIn("Research Plan", result)
+        self.assertIn("Research plan only; no records were modified.", result)
 
 
 if __name__ == "__main__":

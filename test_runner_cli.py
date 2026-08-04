@@ -18,7 +18,9 @@ class RunnerCliTests(unittest.TestCase):
             "research.runner.run_manual_hypothesis_lifecycle"
         ) as mock_hypothesis_lifecycle, patch(
             "research.runner.run_manual_hypothesis_revisions"
-        ) as mock_hypothesis_revisions:
+        ) as mock_hypothesis_revisions, patch(
+            "research.runner.run_manual_research_plan"
+        ) as mock_research_plan:
             with self.assertRaises(SystemExit) as context:
                 main(["--help"])
 
@@ -30,6 +32,7 @@ class RunnerCliTests(unittest.TestCase):
         mock_hypothesis_reviews.assert_not_called()
         mock_hypothesis_lifecycle.assert_not_called()
         mock_hypothesis_revisions.assert_not_called()
+        mock_research_plan.assert_not_called()
 
     def test_hypotheses_command_dispatches_to_hypothesis_runner(self):
         with patch("research.runner.run_manual_hypothesis_generation") as mock_hypotheses, patch(
@@ -48,8 +51,15 @@ class RunnerCliTests(unittest.TestCase):
             exit_code = main(["experiment-requests", "NVDA"])
 
         self.assertEqual(0, exit_code)
-        mock_experiment_requests.assert_called_once_with(symbol="NVDA")
+        mock_experiment_requests.assert_called_once_with(symbol="NVDA", planned_only=False)
         mock_hypotheses.assert_not_called()
+
+    def test_experiment_requests_command_with_planned_only_sets_flag(self):
+        with patch("research.runner.run_manual_experiment_request_generation") as mock_experiment_requests:
+            exit_code = main(["experiment-requests", "NVDA", "--planned-only"])
+
+        self.assertEqual(0, exit_code)
+        mock_experiment_requests.assert_called_once_with(symbol="NVDA", planned_only=True)
 
     def test_experiment_execution_command_dispatches_to_execution_runner(self):
         with patch("research.runner.run_manual_hypothesis_generation") as mock_hypotheses, patch(
@@ -77,7 +87,9 @@ class RunnerCliTests(unittest.TestCase):
             "research.runner.run_manual_hypothesis_lifecycle"
         ) as mock_hypothesis_lifecycle, patch(
             "research.runner.run_manual_hypothesis_revisions"
-        ) as mock_hypothesis_revisions, patch("argparse.ArgumentParser.print_help") as mock_help:
+        ) as mock_hypothesis_revisions, patch(
+            "research.runner.run_manual_research_plan"
+        ) as mock_research_plan, patch("argparse.ArgumentParser.print_help") as mock_help:
             exit_code = main([])
 
         self.assertEqual(0, exit_code)
@@ -89,6 +101,7 @@ class RunnerCliTests(unittest.TestCase):
         mock_hypothesis_reviews.assert_not_called()
         mock_hypothesis_lifecycle.assert_not_called()
         mock_hypothesis_revisions.assert_not_called()
+        mock_research_plan.assert_not_called()
 
     def test_hypotheses_command_uses_default_symbol(self):
         with patch("research.runner.run_manual_hypothesis_generation") as mock_hypotheses:
@@ -102,7 +115,7 @@ class RunnerCliTests(unittest.TestCase):
             exit_code = main(["experiment-requests"])
 
         self.assertEqual(0, exit_code)
-        mock_experiment_requests.assert_called_once_with(symbol=DEFAULT_SYMBOL)
+        mock_experiment_requests.assert_called_once_with(symbol=DEFAULT_SYMBOL, planned_only=False)
 
     def test_experiment_execution_command_uses_default_symbol(self):
         with patch("research.runner.run_manual_experiment_execution") as mock_experiment_execution:
@@ -226,6 +239,20 @@ class RunnerCliTests(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         mock_hypothesis_revisions.assert_called_once_with(symbol=DEFAULT_SYMBOL)
+
+    def test_research_plan_command_dispatches_to_research_plan_runner(self):
+        with patch("research.runner.run_manual_research_plan") as mock_research_plan:
+            exit_code = main(["research-plan", "NVDA"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_plan.assert_called_once_with(symbol="NVDA")
+
+    def test_research_plan_command_uses_default_symbol(self):
+        with patch("research.runner.run_manual_research_plan") as mock_research_plan:
+            exit_code = main(["research-plan"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_plan.assert_called_once_with(symbol=DEFAULT_SYMBOL)
 
     def test_hypothesis_revision_apply_command_dispatches_to_runner_in_dry_run_mode(self):
         with patch(

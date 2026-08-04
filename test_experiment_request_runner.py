@@ -48,6 +48,11 @@ class ManualExperimentRequestRunnerTests(unittest.TestCase):
                 schema_version="1.0",
             )
         ]
+        storage.load_experiment_requests.return_value = []
+        storage.load_experiment_results.return_value = []
+        storage.load_hypothesis_reviews.return_value = []
+        storage.load_hypothesis_revision_proposals.return_value = []
+        storage.load_hypothesis_revision_applications.return_value = []
 
         experiment_requests = [
             ExperimentRequest(
@@ -105,6 +110,11 @@ class ManualExperimentRequestRunnerTests(unittest.TestCase):
         journal.build.return_value = f"Research Journal: {DEFAULT_SYMBOL}"
         storage.load_hypotheses.return_value = []
         storage.load_observations.return_value = []
+        storage.load_experiment_requests.return_value = []
+        storage.load_experiment_results.return_value = []
+        storage.load_hypothesis_reviews.return_value = []
+        storage.load_hypothesis_revision_proposals.return_value = []
+        storage.load_hypothesis_revision_applications.return_value = []
         experiment_request_service.generate_for_symbol.return_value = []
 
         with patch("builtins.print") as mock_print:
@@ -124,6 +134,97 @@ class ManualExperimentRequestRunnerTests(unittest.TestCase):
         mock_print.assert_any_call("Hypotheses Loaded : 0")
         mock_print.assert_any_call("Experiment Requests Generated : 0")
         mock_print.assert_any_call("No experiment requests generated.")
+
+    def test_runner_with_planned_only_filters_to_generate_experiment_request_hypotheses(self):
+        journal = Mock()
+        storage = Mock()
+        experiment_request_service = Mock()
+
+        journal.build.return_value = "Research Journal: NVDA"
+
+        test_hypotheses = [
+            Hypothesis(
+                hypothesis_id="hyp-001",
+                symbol="NVDA",
+                title="Untested hypothesis",
+                description="Needs initial evidence.",
+                status=HypothesisStatus.ACTIVE,
+                confidence=0.3,
+            ),
+            Hypothesis(
+                hypothesis_id="hyp-002",
+                symbol="NVDA",
+                title="Existing request hypothesis",
+                description="Already has a request.",
+                status=HypothesisStatus.ACTIVE,
+                confidence=0.4,
+            ),
+        ]
+        storage.load_hypotheses.return_value = test_hypotheses
+        storage.load_observations.return_value = []
+        storage.load_experiment_requests.return_value = [
+            ExperimentRequest(
+                experiment_request_id="expreq-002",
+                hypothesis_id="hyp-002",
+                hypothesis_version_id="hyp-002:v1",
+                symbol="NVDA",
+                title="Existing request",
+                objective="Objective",
+                test_type=ExperimentTestType.INITIAL_BACKTEST,
+                entry_conditions="Entry",
+                machine_readable_entry_conditions=(
+                    {"field": "Close", "operator": ">", "value": 100.0},
+                ),
+                exit_conditions="Exit",
+                time_horizon="5D",
+                forward_horizon=5,
+                status=ExperimentRequestStatus.PROPOSED,
+            )
+        ]
+        storage.load_experiment_results.return_value = []
+        storage.load_hypothesis_reviews.return_value = []
+        storage.load_hypothesis_revision_proposals.return_value = []
+        storage.load_hypothesis_revision_applications.return_value = []
+
+        planned_requests = [
+            ExperimentRequest(
+                experiment_request_id="expreq-001",
+                hypothesis_id="hyp-001",
+                hypothesis_version_id="hyp-001:v1",
+                symbol="NVDA",
+                title="Validate untested hypothesis",
+                objective="Test initial evidence.",
+                test_type=ExperimentTestType.INITIAL_BACKTEST,
+                entry_conditions="Entry",
+                machine_readable_entry_conditions=(
+                    {"field": "Close", "operator": ">", "value": 100.0},
+                ),
+                exit_conditions="Exit",
+                time_horizon="5D",
+                forward_horizon=5,
+                status=ExperimentRequestStatus.PROPOSED,
+            )
+        ]
+        experiment_request_service.generate_for_symbol.return_value = planned_requests
+
+        with patch("builtins.print") as mock_print:
+            result = run_manual_experiment_request_generation(
+                symbol="NVDA",
+                journal=journal,
+                storage=storage,
+                experiment_request_service=experiment_request_service,
+                planned_only=True,
+            )
+
+        self.assertEqual(planned_requests, result)
+        experiment_request_service.generate_for_symbol.assert_called_once()
+
+        call_kwargs = experiment_request_service.generate_for_symbol.call_args.kwargs
+        self.assertEqual([test_hypotheses[0]], call_kwargs["hypotheses"])
+        mock_print.assert_any_call("Hypotheses Loaded : 2")
+        mock_print.assert_any_call("Hypotheses Selected By Plan : 1")
+        mock_print.assert_any_call("Hypotheses Skipped By Plan : 1")
+        mock_print.assert_any_call("Experiment Requests Generated : 1")
 
 
 if __name__ == "__main__":

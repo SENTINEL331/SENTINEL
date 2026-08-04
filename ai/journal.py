@@ -4,6 +4,7 @@ from research.hypothesis_evaluation import evaluate_hypothesis_evidence
 from research.hypothesis_lifecycle import recommend_hypothesis_lifecycle_actions
 from research.hypothesis_lifecycle import select_latest_hypothesis_reviews
 from research.hypothesis_revision_application import HypothesisRevisionApplicationStatus
+from research.research_plan import build_research_plan
 
 
 class ResearchJournal:
@@ -179,6 +180,28 @@ class ResearchJournal:
             f"lineage={lineage_text}"
         )
 
+    def _format_research_plan_item(self, item):
+        lines = [
+            (
+                f"- {item.hypothesis_id} "
+                f"action={item.recommended_action.value} "
+                f"priority={item.priority.value}"
+            )
+        ]
+
+        if item.hypothesis_title:
+            lines.append(f"  hypothesis_title: {item.hypothesis_title}")
+
+        lines.append(f"  reason: {item.reason}")
+
+        if item.related_child_hypothesis_id:
+            lines.append(f"  child_hypothesis_id={item.related_child_hypothesis_id}")
+
+        if item.related_proposal_id:
+            lines.append(f"  proposal_id={item.related_proposal_id}")
+
+        return "\n".join(lines)
+
     def _select_latest_application_by_proposal_id(self, applications):
         latest_by_proposal_id = {}
 
@@ -244,6 +267,17 @@ class ResearchJournal:
             for hypothesis in hypotheses
             if hypothesis.source_revision_proposal_id is not None
         }
+        research_plan = build_research_plan(
+            symbol=symbol,
+            hypotheses=hypotheses,
+            experiment_requests=experiment_requests,
+            experiment_results=experiment_results,
+            evidence_summaries=hypothesis_evidence,
+            latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+            lifecycle_recommendations=lifecycle_recommendations,
+            revision_proposals=revision_proposals,
+            revision_applications=revision_applications,
+        )
         active_hypotheses = [
             hypothesis
             for hypothesis in hypotheses
@@ -378,6 +412,17 @@ class ResearchJournal:
                 )
         else:
             lines.append("No lifecycle recommendations.")
+
+        lines.append("")
+        lines.append("Research Plan")
+        lines.append("-------------")
+        lines.append("Research plan only; no records were modified.")
+
+        if research_plan.items:
+            for item in research_plan.items:
+                lines.append(self._format_research_plan_item(item))
+        else:
+            lines.append("No research plan items.")
 
         lines.append("")
         lines.append("Hypothesis Revision Proposals")
