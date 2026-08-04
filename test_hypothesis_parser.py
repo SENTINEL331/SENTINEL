@@ -24,6 +24,7 @@ class HypothesisParserTests(unittest.TestCase):
                         "source_observation_ids": ["obs-1", "obs-2"],
                         "parent_hypothesis_id": "hyp-root",
                         "lineage_hypothesis_ids": ["hyp-root", "hyp-parent"],
+                        "source_revision_proposal_id": "hyprevp-001",
                         "experiment_refs": ["exp-1", "exp-2"],
                         "created_at": created_at,
                         "updated_at": updated_at,
@@ -48,6 +49,7 @@ class HypothesisParserTests(unittest.TestCase):
         self.assertEqual(("obs-1", "obs-2"), hypotheses[0].source_observation_ids)
         self.assertEqual("hyp-root", hypotheses[0].parent_hypothesis_id)
         self.assertEqual(("hyp-root", "hyp-parent"), hypotheses[0].lineage_hypothesis_ids)
+        self.assertEqual("hyprevp-001", hypotheses[0].source_revision_proposal_id)
         self.assertEqual(("exp-1", "exp-2"), hypotheses[0].experiment_refs)
         self.assertEqual(created_at, hypotheses[0].created)
         self.assertEqual(updated_at, hypotheses[0].updated)

@@ -3,6 +3,7 @@ from research.hypothesis import HypothesisStatus
 from research.hypothesis_evaluation import evaluate_hypothesis_evidence
 from research.hypothesis_lifecycle import recommend_hypothesis_lifecycle_actions
 from research.hypothesis_lifecycle import select_latest_hypothesis_reviews
+from research.hypothesis_revision_application import HypothesisRevisionApplicationStatus
 
 
 class ResearchJournal:
@@ -134,6 +135,60 @@ class ResearchJournal:
 
         return "\n".join(lines)
 
+    def _format_revision_proposal(
+        self,
+        proposal,
+        applied_status,
+        child_hypothesis_id,
+    ):
+        lines = [
+            (
+                f"- parent_id={proposal.parent_hypothesis_id} "
+                f"proposal_type={proposal.proposal_type.value} "
+                f"lifecycle_action={proposal.lifecycle_action.value} "
+                f"confidence={proposal.confidence:.2f} "
+                f"id={proposal.proposal_id}"
+            )
+        ]
+
+        if proposal.proposed_title:
+            lines.append(f"  proposed_title: {proposal.proposed_title}")
+
+        if proposal.proposed_description:
+            lines.append(f"  proposed_description: {proposal.proposed_description}")
+
+        lines.append(f"  applied_status={applied_status}")
+        lines.append(f"  child_hypothesis_id={child_hypothesis_id or 'none'}")
+        lines.append(f"  rationale: {proposal.rationale}")
+
+        return "\n".join(lines)
+
+    def _format_hypothesis_lineage(self, hypothesis):
+        lineage_text = (
+            ",".join(hypothesis.lineage_hypothesis_ids)
+            if hypothesis.lineage_hypothesis_ids
+            else "none"
+        )
+        source_proposal_id = hypothesis.source_revision_proposal_id or "none"
+        parent_id = hypothesis.parent_hypothesis_id or "none"
+
+        return (
+            f"- {hypothesis.title} id={hypothesis.hypothesis_id} "
+            f"parent_id={parent_id} "
+            f"source_revision_proposal_id={source_proposal_id} "
+            f"lineage={lineage_text}"
+        )
+
+    def _select_latest_application_by_proposal_id(self, applications):
+        latest_by_proposal_id = {}
+
+        for application in applications:
+            existing = latest_by_proposal_id.get(application.proposal_id)
+
+            if existing is None or application.created_at >= existing.created_at:
+                latest_by_proposal_id[application.proposal_id] = application
+
+        return latest_by_proposal_id
     def build(
         self,
         symbol,
@@ -148,6 +203,26 @@ class ResearchJournal:
         experiment_results = self.storage.load_experiment_results(symbol)
         load_hypothesis_reviews = getattr(self.storage, "load_hypothesis_reviews", None)
         hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
+        load_hypothesis_revision_proposals = getattr(
+            self.storage,
+            "load_hypothesis_revision_proposals",
+            None,
+        )
+        revision_proposals = (
+            load_hypothesis_revision_proposals(symbol)
+            if callable(load_hypothesis_revision_proposals)
+            else []
+        )
+        load_hypothesis_revision_applications = getattr(
+            self.storage,
+            "load_hypothesis_revision_applications",
+            None,
+        )
+        revision_applications = (
+            load_hypothesis_revision_applications(symbol)
+            if callable(load_hypothesis_revision_applications)
+            else []
+        )
         hypothesis_evidence = evaluate_hypothesis_evidence(
             hypotheses=hypotheses,
             experiment_results=experiment_results,
@@ -161,6 +236,14 @@ class ResearchJournal:
             evidence_summaries=hypothesis_evidence,
             latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
         )
+        latest_applications_by_proposal_id = self._select_latest_application_by_proposal_id(
+            revision_applications
+        )
+        child_by_proposal_id = {
+            hypothesis.source_revision_proposal_id: hypothesis
+            for hypothesis in hypotheses
+            if hypothesis.source_revision_proposal_id is not None
+        }
         active_hypotheses = [
             hypothesis
             for hypothesis in hypotheses
@@ -295,5 +378,57 @@ class ResearchJournal:
                 )
         else:
             lines.append("No lifecycle recommendations.")
+
+        lines.append("")
+        lines.append("Hypothesis Revision Proposals")
+        lines.append("-----------------------------")
+        lines.append("Proposals are records only and are never auto-applied.")
+
+        if revision_proposals:
+            for proposal in revision_proposals:
+                latest_application = latest_applications_by_proposal_id.get(
+                    proposal.proposal_id
+                )
+                child_hypothesis = child_by_proposal_id.get(proposal.proposal_id)
+
+                if child_hypothesis is not None:
+                    applied_status = HypothesisRevisionApplicationStatus.APPLIED.value
+                    child_hypothesis_id = child_hypothesis.hypothesis_id
+                elif latest_application is not None:
+                    applied_status = latest_application.status.value
+                    child_hypothesis_id = latest_application.child_hypothesis_id
+                else:
+                    applied_status = "not_applied"
+                    child_hypothesis_id = None
+
+                lines.append(
+                    self._format_revision_proposal(
+                        proposal,
+                        applied_status,
+                        child_hypothesis_id,
+                    )
+                )
+        else:
+            lines.append("No hypothesis revision proposals.")
+
+        lines.append("")
+        lines.append("Hypothesis Lineage")
+        lines.append("------------------")
+
+        lineage_hypotheses = [
+            hypothesis
+            for hypothesis in hypotheses
+            if (
+                hypothesis.parent_hypothesis_id is not None
+                or hypothesis.source_revision_proposal_id is not None
+                or bool(hypothesis.lineage_hypothesis_ids)
+            )
+        ]
+
+        if lineage_hypotheses:
+            for hypothesis in lineage_hypotheses:
+                lines.append(self._format_hypothesis_lineage(hypothesis))
+        else:
+            lines.append("No hypothesis lineage records.")
 
         return "\n".join(lines)

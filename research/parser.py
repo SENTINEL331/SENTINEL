@@ -238,6 +238,7 @@ def parse_hypotheses(
                 source_observation_ids=tuple(source_observation_ids),
                 parent_hypothesis_id=item.get("parent_hypothesis_id"),
                 lineage_hypothesis_ids=tuple(lineage_hypothesis_ids),
+                source_revision_proposal_id=item.get("source_revision_proposal_id"),
                 experiment_refs=tuple(experiment_refs),
                 created_at=created_at,
                 updated_at=updated_at,

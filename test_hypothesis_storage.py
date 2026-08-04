@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +28,7 @@ class HypothesisStorageTests(unittest.TestCase):
                 source_observation_ids=("obs-1", "obs-2"),
                 parent_hypothesis_id="hyp-root",
                 lineage_hypothesis_ids=("hyp-root", "hyp-parent"),
+                source_revision_proposal_id="hyprevp-001",
                 experiment_refs=("exp-1", "exp-2"),
                 created_at=created_at,
                 updated_at=updated_at,
@@ -50,6 +52,7 @@ class HypothesisStorageTests(unittest.TestCase):
             self.assertEqual(("obs-1", "obs-2"), loaded[0].source_observation_ids)
             self.assertEqual("hyp-root", loaded[0].parent_hypothesis_id)
             self.assertEqual(("hyp-root", "hyp-parent"), loaded[0].lineage_hypothesis_ids)
+            self.assertEqual("hyprevp-001", loaded[0].source_revision_proposal_id)
             self.assertEqual(("exp-1", "exp-2"), loaded[0].experiment_refs)
             self.assertEqual(created_at, loaded[0].created_at)
             self.assertEqual(updated_at, loaded[0].updated_at)
@@ -90,6 +93,44 @@ class HypothesisStorageTests(unittest.TestCase):
 
             self.assertEqual(1, len(loaded))
             self.assertEqual("Momentum continuation", loaded[0].title)
+
+    def test_load_hypotheses_supports_legacy_records_without_lineage_fields(self):
+        storage = Storage()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            storage.base = Path(tmp_dir)
+
+            hypotheses_dir = Path(tmp_dir) / "hypotheses"
+            hypotheses_dir.mkdir(parents=True, exist_ok=True)
+            hypotheses_path = hypotheses_dir / "NVDA.json"
+
+            with open(hypotheses_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    [
+                        {
+                            "hypothesis_id": "hyp-legacy-001",
+                            "symbol": "NVDA",
+                            "title": "Legacy hypothesis",
+                            "description": "Legacy record without lineage fields.",
+                            "status": "active",
+                            "confidence": 0.45,
+                            "source_observation_ids": [],
+                            "experiment_refs": [],
+                            "created_at": "2026-08-03T00:00:00+00:00",
+                            "updated_at": "2026-08-03T00:00:00+00:00",
+                        }
+                    ],
+                    handle,
+                    indent=4,
+                )
+
+            loaded = storage.load_hypotheses("NVDA")
+
+            self.assertEqual(1, len(loaded))
+            self.assertEqual("hyp-legacy-001", loaded[0].hypothesis_id)
+            self.assertEqual(None, loaded[0].parent_hypothesis_id)
+            self.assertEqual((), loaded[0].lineage_hypothesis_ids)
+            self.assertEqual(None, loaded[0].source_revision_proposal_id)
 
 
 if __name__ == "__main__":

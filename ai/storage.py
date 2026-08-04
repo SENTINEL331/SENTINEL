@@ -15,6 +15,8 @@ from research.experiment_result import (
 )
 from research.hypothesis import Hypothesis, HypothesisStatus
 from research.hypothesis_lifecycle import HypothesisLifecycleAction
+from research.hypothesis_revision_application import HypothesisRevisionApplication
+from research.hypothesis_revision_application import HypothesisRevisionApplicationStatus
 from research.hypothesis_revision_proposal import HypothesisRevisionProposal
 from research.hypothesis_revision_proposal import HypothesisRevisionProposalType
 from research.hypothesis_review import HypothesisReview
@@ -181,6 +183,7 @@ class Storage:
                     "lineage_hypothesis_ids": list(
                         hypothesis.lineage_hypothesis_ids
                     ),
+                    "source_revision_proposal_id": hypothesis.source_revision_proposal_id,
                     "experiment_refs": list(hypothesis.experiment_refs),
                     "created_at": hypothesis.created_at.isoformat(),
                     "updated_at": hypothesis.updated_at.isoformat(),
@@ -517,6 +520,78 @@ class Storage:
                 indent=4,
             )
 
+    def save_hypothesis_revision_applications(
+        self,
+        symbol,
+        applications,
+    ):
+        """
+        Save hypothesis revision application events for one symbol.
+        """
+
+        path = (
+            self.base
+            / "hypotheses"
+            / "revision_applications"
+            / f"{symbol}.json"
+        )
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        data = []
+
+        if path.exists():
+
+            with open(
+                path,
+                "r",
+                encoding="utf-8",
+            ) as f:
+
+                data = json.load(f)
+
+        existing_ids = {
+            item["application_id"]
+            for item in data
+            if "application_id" in item
+        }
+
+        for application in applications:
+
+            if application.application_id in existing_ids:
+                continue
+
+            existing_ids.add(application.application_id)
+
+            data.append(
+                {
+                    "application_id": application.application_id,
+                    "proposal_id": application.proposal_id,
+                    "symbol": application.symbol,
+                    "parent_hypothesis_id": application.parent_hypothesis_id,
+                    "status": application.status.value,
+                    "apply_mode": application.apply_mode,
+                    "child_hypothesis_id": application.child_hypothesis_id,
+                    "message": application.message,
+                    "created_at": application.created_at.isoformat(),
+                }
+            )
+
+        with open(
+            path,
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                data,
+                f,
+                indent=4,
+            )
+
     def load_observations(
         self,
         symbol,
@@ -628,6 +703,7 @@ class Storage:
                     lineage_hypothesis_ids=tuple(
                         item.get("lineage_hypothesis_ids", [])
                     ),
+                    source_revision_proposal_id=item.get("source_revision_proposal_id"),
                     experiment_refs=tuple(
                         item.get("experiment_refs", item.get("experiments", []))
                     ),
@@ -877,3 +953,49 @@ class Storage:
             )
 
         return proposals
+
+    def load_hypothesis_revision_applications(
+        self,
+        symbol,
+    ):
+        """
+        Load hypothesis revision application events for one symbol.
+        """
+
+        path = (
+            self.base
+            / "hypotheses"
+            / "revision_applications"
+            / f"{symbol}.json"
+        )
+
+        if not path.exists():
+
+            return []
+
+        with open(
+            path,
+            "r",
+            encoding="utf-8",
+        ) as f:
+
+            data = json.load(f)
+
+        applications = []
+
+        for item in data:
+            applications.append(
+                HypothesisRevisionApplication(
+                    application_id=item["application_id"],
+                    proposal_id=item["proposal_id"],
+                    symbol=item.get("symbol", symbol),
+                    parent_hypothesis_id=item["parent_hypothesis_id"],
+                    status=HypothesisRevisionApplicationStatus(item["status"]),
+                    apply_mode=bool(item.get("apply_mode", False)),
+                    child_hypothesis_id=item.get("child_hypothesis_id"),
+                    message=item.get("message", ""),
+                    created_at=self._parse_timestamp(item.get("created_at", item.get("created"))),
+                )
+            )
+
+        return applications

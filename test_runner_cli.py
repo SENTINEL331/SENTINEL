@@ -227,6 +227,45 @@ class RunnerCliTests(unittest.TestCase):
         self.assertEqual(0, exit_code)
         mock_hypothesis_revisions.assert_called_once_with(symbol=DEFAULT_SYMBOL)
 
+    def test_hypothesis_revision_apply_command_dispatches_to_runner_in_dry_run_mode(self):
+        with patch(
+            "research.runner.run_manual_hypothesis_revision_apply"
+        ) as mock_hypothesis_revision_apply:
+            exit_code = main(["hypothesis-revision-apply", "NVDA", "hyprevp-001", "--dry-run"])
+
+        self.assertEqual(0, exit_code)
+        mock_hypothesis_revision_apply.assert_called_once_with(
+            symbol="NVDA",
+            proposal_id="hyprevp-001",
+            apply_changes=False,
+        )
+
+    def test_hypothesis_revision_apply_command_dispatches_to_runner_in_apply_mode(self):
+        with patch(
+            "research.runner.run_manual_hypothesis_revision_apply"
+        ) as mock_hypothesis_revision_apply:
+            exit_code = main(["hypothesis-revision-apply", "NVDA", "hyprevp-001", "--apply"])
+
+        self.assertEqual(0, exit_code)
+        mock_hypothesis_revision_apply.assert_called_once_with(
+            symbol="NVDA",
+            proposal_id="hyprevp-001",
+            apply_changes=True,
+        )
+
+    def test_hypothesis_revision_apply_command_defaults_to_dry_run_when_mode_is_omitted(self):
+        with patch(
+            "research.runner.run_manual_hypothesis_revision_apply"
+        ) as mock_hypothesis_revision_apply:
+            exit_code = main(["hypothesis-revision-apply", "NVDA", "hyprevp-001"])
+
+        self.assertEqual(0, exit_code)
+        mock_hypothesis_revision_apply.assert_called_once_with(
+            symbol="NVDA",
+            proposal_id="hyprevp-001",
+            apply_changes=False,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

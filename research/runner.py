@@ -3,6 +3,7 @@ import json
 import sys
 
 from ai.experiment_request_service import ExperimentRequestService
+from ai.hypothesis_revision_application_service import HypothesisRevisionApplicationService
 from ai.hypothesis_revision_service import HypothesisRevisionService
 from ai.hypothesis_service import HypothesisService
 from ai.hypothesis_review_service import HypothesisReviewService
@@ -489,6 +490,50 @@ def run_manual_hypothesis_revisions(
 	return proposals
 
 
+def run_manual_hypothesis_revision_apply(
+	symbol,
+	proposal_id,
+	apply_changes=False,
+	storage=None,
+	hypothesis_revision_application_service=None,
+):
+	"""Apply one revision proposal manually in dry-run or apply mode."""
+
+	storage = storage or Storage()
+	hypothesis_revision_application_service = (
+		hypothesis_revision_application_service
+		or HypothesisRevisionApplicationService(storage=storage)
+	)
+
+	application = hypothesis_revision_application_service.apply_proposal(
+		symbol=symbol,
+		proposal_id=proposal_id,
+		apply_mode=apply_changes,
+	)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Hypothesis Revision Apply: {symbol}")
+	print("=" * 50)
+	print()
+	mode_text = "apply" if apply_changes else "dry-run"
+	print(f"Mode : {mode_text}")
+	print(f"Proposal ID : {proposal_id}")
+	print(f"Application Status : {application.status.value}")
+	print(f"Application ID : {application.application_id}")
+	print(f"Parent Hypothesis ID : {application.parent_hypothesis_id}")
+
+	if application.child_hypothesis_id:
+		print(f"Child Hypothesis ID : {application.child_hypothesis_id}")
+
+	if application.message:
+		print(f"Message : {application.message}")
+
+	print("Hypotheses are append-only; no historical records were mutated.")
+
+	return application
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -575,6 +620,30 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	hypothesis_revision_apply_parser = subparsers.add_parser(
+		"hypothesis-revision-apply",
+		help="Apply one hypothesis revision proposal in dry-run or apply mode.",
+	)
+	hypothesis_revision_apply_parser.add_argument(
+		"symbol",
+		help="Symbol to process.",
+	)
+	hypothesis_revision_apply_parser.add_argument(
+		"proposal_id",
+		help="Revision proposal identifier.",
+	)
+	mode_group = hypothesis_revision_apply_parser.add_mutually_exclusive_group()
+	mode_group.add_argument(
+		"--dry-run",
+		action="store_true",
+		help="Preview application without creating a child hypothesis (default).",
+	)
+	mode_group.add_argument(
+		"--apply",
+		action="store_true",
+		help="Apply proposal and append a child hypothesis if eligible.",
+	)
+
 	return parser
 
 
@@ -616,6 +685,14 @@ def main(argv=None):
 
 	if args.mode == "hypothesis-revisions":
 		run_manual_hypothesis_revisions(symbol=args.symbol)
+		return 0
+
+	if args.mode == "hypothesis-revision-apply":
+		run_manual_hypothesis_revision_apply(
+			symbol=args.symbol,
+			proposal_id=args.proposal_id,
+			apply_changes=bool(args.apply),
+		)
 		return 0
 
 	parser.print_help()

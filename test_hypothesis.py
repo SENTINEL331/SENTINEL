@@ -20,6 +20,7 @@ class HypothesisTests(unittest.TestCase):
             lineage_hypothesis_ids=("hyp-root",),
             experiment_refs=("exp-1",),
             created_at=created_at,
+            source_revision_proposal_id="hyprevp-001",
             updated_at=created_at,
         )
 
@@ -29,6 +30,7 @@ class HypothesisTests(unittest.TestCase):
         self.assertEqual(HypothesisStatus.ACTIVE, hypothesis.status)
         self.assertEqual(("obs-1", "obs-2"), hypothesis.source_observation_ids)
         self.assertEqual(("obs-1", "obs-2"), hypothesis.observations)
+        self.assertEqual("hyprevp-001", hypothesis.source_revision_proposal_id)
         self.assertEqual(("exp-1",), hypothesis.experiment_refs)
         self.assertEqual(("exp-1",), hypothesis.experiments)
         self.assertEqual("2026-08-03T00:00:00+00:00", hypothesis.created)
@@ -51,7 +53,12 @@ class HypothesisTests(unittest.TestCase):
         refined = refined.with_confidence(0.8, updated_at)
         refined = refined.add_source_observation("obs-3", updated_at)
         refined = refined.add_experiment_reference("exp-2", updated_at)
-        refined = refined.with_parent("hyp-root", ancestor_ids=("hyp-anc-1",), updated_at=updated_at)
+        refined = refined.with_parent(
+            "hyp-root",
+            ancestor_ids=("hyp-anc-1",),
+            source_revision_proposal_id="hyprevp-002",
+            updated_at=updated_at,
+        )
 
         self.assertIsNot(hypothesis, refined)
         self.assertEqual(HypothesisStatus.SUPPORTED, refined.status)
@@ -60,6 +67,7 @@ class HypothesisTests(unittest.TestCase):
         self.assertEqual(("exp-2",), refined.experiment_refs)
         self.assertEqual("hyp-root", refined.parent_hypothesis_id)
         self.assertEqual(("hyp-anc-1", "hyp-root"), refined.lineage_hypothesis_ids)
+        self.assertEqual("hyprevp-002", refined.source_revision_proposal_id)
         self.assertEqual(updated_at, refined.updated_at)
 
         self.assertEqual(HypothesisStatus.PROPOSED, hypothesis.status)

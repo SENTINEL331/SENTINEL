@@ -16,6 +16,11 @@ from research.experiment_result import (
 from research.hypothesis import Hypothesis, HypothesisStatus
 from research.hypothesis_review import HypothesisReview
 from research.hypothesis_review import HypothesisReviewRecommendation
+from research.hypothesis_revision_application import HypothesisRevisionApplication
+from research.hypothesis_revision_application import HypothesisRevisionApplicationStatus
+from research.hypothesis_lifecycle import HypothesisLifecycleAction
+from research.hypothesis_revision_proposal import HypothesisRevisionProposal
+from research.hypothesis_revision_proposal import HypothesisRevisionProposalType
 from research.observation import Observation
 
 
@@ -85,6 +90,8 @@ class ResearchJournalOutputTests(unittest.TestCase):
             )
         ]
         journal.storage.load_hypothesis_reviews.return_value = []
+        journal.storage.load_hypothesis_revision_proposals.return_value = []
+        journal.storage.load_hypothesis_revision_applications.return_value = []
 
         result = journal.build("NVDA")
 
@@ -138,6 +145,11 @@ class ResearchJournalOutputTests(unittest.TestCase):
             "  evidence=insufficient_data, completed_experiments=1, trade_count=25",
             result,
         )
+        self.assertIn("Hypothesis Revision Proposals", result)
+        self.assertIn("Proposals are records only and are never auto-applied.", result)
+        self.assertIn("No hypothesis revision proposals.", result)
+        self.assertIn("Hypothesis Lineage", result)
+        self.assertIn("No hypothesis lineage records.", result)
 
     def test_build_shows_empty_experiment_requests_state(self):
         journal = ResearchJournal()
@@ -148,6 +160,8 @@ class ResearchJournalOutputTests(unittest.TestCase):
         journal.storage.load_experiment_requests.return_value = []
         journal.storage.load_experiment_results.return_value = []
         journal.storage.load_hypothesis_reviews.return_value = []
+        journal.storage.load_hypothesis_revision_proposals.return_value = []
+        journal.storage.load_hypothesis_revision_applications.return_value = []
 
         result = journal.build("NVDA")
 
@@ -166,6 +180,10 @@ class ResearchJournalOutputTests(unittest.TestCase):
         self.assertIn("Hypothesis Lifecycle Recommendations", result)
         self.assertIn("Recommendations only; no hypothesis state is changed.", result)
         self.assertIn("No lifecycle recommendations.", result)
+        self.assertIn("Hypothesis Revision Proposals", result)
+        self.assertIn("No hypothesis revision proposals.", result)
+        self.assertIn("Hypothesis Lineage", result)
+        self.assertIn("No hypothesis lineage records.", result)
 
     def test_build_formats_hypothesis_evidence_percentages_when_available(self):
         journal = ResearchJournal()
@@ -226,6 +244,8 @@ class ResearchJournalOutputTests(unittest.TestCase):
             ),
         ]
         journal.storage.load_hypothesis_reviews.return_value = []
+        journal.storage.load_hypothesis_revision_proposals.return_value = []
+        journal.storage.load_hypothesis_revision_applications.return_value = []
 
         result = journal.build("NVDA")
 
@@ -292,6 +312,8 @@ class ResearchJournalOutputTests(unittest.TestCase):
                 created_at=datetime(2026, 8, 2, 8, 30, tzinfo=timezone.utc),
             ),
         ]
+        journal.storage.load_hypothesis_revision_proposals.return_value = []
+        journal.storage.load_hypothesis_revision_applications.return_value = []
 
         result = journal.build("NVDA")
 
@@ -321,6 +343,81 @@ class ResearchJournalOutputTests(unittest.TestCase):
         )
         self.assertIn(
             "  latest_review=refine",
+            result,
+        )
+
+    def test_build_includes_revision_proposal_and_lineage_sections(self):
+        journal = ResearchJournal()
+        journal.storage = Mock()
+
+        now = datetime(2026, 8, 4, 12, 0, tzinfo=timezone.utc)
+
+        journal.storage.load_observations.return_value = []
+        journal.storage.load_hypotheses.return_value = [
+            Hypothesis(
+                hypothesis_id="hyp-001",
+                symbol="NVDA",
+                title="Parent hypothesis",
+                description="Parent description.",
+                status=HypothesisStatus.ACTIVE,
+                confidence=0.7,
+            ),
+            Hypothesis(
+                hypothesis_id="hyp-002",
+                symbol="NVDA",
+                title="Child hypothesis",
+                description="Child description.",
+                status=HypothesisStatus.PROPOSED,
+                confidence=0.65,
+                parent_hypothesis_id="hyp-001",
+                lineage_hypothesis_ids=("hyp-001",),
+                source_revision_proposal_id="hyprevp-001",
+            ),
+        ]
+        journal.storage.load_experiment_requests.return_value = []
+        journal.storage.load_experiment_results.return_value = []
+        journal.storage.load_hypothesis_reviews.return_value = []
+        journal.storage.load_hypothesis_revision_proposals.return_value = [
+            HypothesisRevisionProposal(
+                proposal_id="hyprevp-001",
+                symbol="NVDA",
+                parent_hypothesis_id="hyp-001",
+                source_review_id="hyprev-001",
+                lifecycle_action=HypothesisLifecycleAction.REFINE_CANDIDATE,
+                proposal_type=HypothesisRevisionProposalType.CREATE_CHILD_HYPOTHESIS,
+                proposed_title="Child hypothesis",
+                proposed_description="Child description.",
+                rationale="Refine to a narrower setup.",
+                confidence=0.68,
+                created_at=now,
+            )
+        ]
+        journal.storage.load_hypothesis_revision_applications.return_value = [
+            HypothesisRevisionApplication(
+                application_id="hypreva-001",
+                proposal_id="hyprevp-001",
+                symbol="NVDA",
+                parent_hypothesis_id="hyp-001",
+                status=HypothesisRevisionApplicationStatus.APPLIED,
+                apply_mode=True,
+                child_hypothesis_id="hyp-002",
+                message="proposal applied",
+                created_at=now,
+            )
+        ]
+
+        result = journal.build("NVDA")
+
+        self.assertIn("Hypothesis Revision Proposals", result)
+        self.assertIn(
+            "- parent_id=hyp-001 proposal_type=create_child_hypothesis lifecycle_action=refine_candidate confidence=0.68 id=hyprevp-001",
+            result,
+        )
+        self.assertIn("  applied_status=applied", result)
+        self.assertIn("  child_hypothesis_id=hyp-002", result)
+        self.assertIn("Hypothesis Lineage", result)
+        self.assertIn(
+            "- Child hypothesis id=hyp-002 parent_id=hyp-001 source_revision_proposal_id=hyprevp-001 lineage=hyp-001",
             result,
         )
 

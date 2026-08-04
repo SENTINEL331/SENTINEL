@@ -46,6 +46,7 @@ class Hypothesis:
     source_observation_ids: tuple[str, ...] = field(default_factory=tuple)
     parent_hypothesis_id: str | None = None
     lineage_hypothesis_ids: tuple[str, ...] = field(default_factory=tuple)
+    source_revision_proposal_id: str | None = None
     experiment_refs: tuple[str, ...] = field(default_factory=tuple)
     created_at: datetime = field(default_factory=_utc_now)
     updated_at: datetime = field(default_factory=_utc_now)
@@ -74,6 +75,9 @@ class Hypothesis:
 
         if self.updated_at < self.created_at:
             raise ValueError("updated_at must not be earlier than created_at")
+
+        if self.source_revision_proposal_id is not None and not self.source_revision_proposal_id:
+            raise ValueError("source_revision_proposal_id must be non-empty when provided")
 
     @property
     def id(self) -> str:
@@ -145,10 +149,14 @@ class Hypothesis:
         self,
         parent_hypothesis_id: str,
         ancestor_ids: tuple[str, ...] = (),
+        source_revision_proposal_id: str | None = None,
         updated_at: datetime | None = None,
     ) -> Hypothesis:
         if not parent_hypothesis_id:
             raise ValueError("parent_hypothesis_id is required")
+
+        if source_revision_proposal_id is not None and not source_revision_proposal_id:
+            raise ValueError("source_revision_proposal_id must be non-empty when provided")
 
         lineage = ancestor_ids + (parent_hypothesis_id,)
 
@@ -156,5 +164,6 @@ class Hypothesis:
             self,
             parent_hypothesis_id=parent_hypothesis_id,
             lineage_hypothesis_ids=lineage,
+            source_revision_proposal_id=source_revision_proposal_id,
             updated_at=_touch_timestamp(updated_at),
         )
