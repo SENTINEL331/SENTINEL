@@ -128,6 +128,16 @@ class ResearchJournalOutputTests(unittest.TestCase):
         )
         self.assertIn("Latest Hypothesis Reviews", result)
         self.assertIn("No hypothesis reviews.", result)
+        self.assertIn("Hypothesis Lifecycle Recommendations", result)
+        self.assertIn("Recommendations only; no hypothesis state is changed.", result)
+        self.assertIn(
+            "- Momentum continuation [active] id=hyp-001 action=needs_more_tests",
+            result,
+        )
+        self.assertIn(
+            "  evidence=insufficient_data, completed_experiments=1, trade_count=25",
+            result,
+        )
 
     def test_build_shows_empty_experiment_requests_state(self):
         journal = ResearchJournal()
@@ -153,6 +163,9 @@ class ResearchJournalOutputTests(unittest.TestCase):
         self.assertIn("No hypothesis evidence.", result)
         self.assertIn("Latest Hypothesis Reviews", result)
         self.assertIn("No hypothesis reviews.", result)
+        self.assertIn("Hypothesis Lifecycle Recommendations", result)
+        self.assertIn("Recommendations only; no hypothesis state is changed.", result)
+        self.assertIn("No lifecycle recommendations.", result)
 
     def test_build_formats_hypothesis_evidence_percentages_when_available(self):
         journal = ResearchJournal()
@@ -299,6 +312,15 @@ class ResearchJournalOutputTests(unittest.TestCase):
         self.assertIn("- Mean reversion id=hyp-002", result)
         self.assertIn(
             "  recommendation=needs_more_tests, confidence=0.58, created_at=2026-08-02T08:30:00+00:00",
+            result,
+        )
+        self.assertIn("Hypothesis Lifecycle Recommendations", result)
+        self.assertIn(
+            "- Momentum continuation [active] id=hyp-001 action=needs_more_tests",
+            result,
+        )
+        self.assertIn(
+            "  latest_review=refine",
             result,
         )
 

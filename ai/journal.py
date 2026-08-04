@@ -1,6 +1,8 @@
 from ai.storage import Storage
 from research.hypothesis import HypothesisStatus
 from research.hypothesis_evaluation import evaluate_hypothesis_evidence
+from research.hypothesis_lifecycle import recommend_hypothesis_lifecycle_actions
+from research.hypothesis_lifecycle import select_latest_hypothesis_reviews
 
 
 class ResearchJournal:
@@ -94,26 +96,6 @@ class ResearchJournal:
             f"worst_return={self._format_percent(evidence_summary.worst_return)}"
         )
 
-    def _select_latest_hypothesis_reviews(self, hypothesis_reviews):
-        latest_reviews = {}
-
-        for review in hypothesis_reviews:
-            previous = latest_reviews.get(review.hypothesis_id)
-
-            if previous is None:
-                latest_reviews[review.hypothesis_id] = review
-                continue
-
-            if review.created_at > previous.created_at:
-                latest_reviews[review.hypothesis_id] = review
-                continue
-
-            # Preserve deterministic selection when timestamps are equal.
-            if review.created_at == previous.created_at and review.review_id > previous.review_id:
-                latest_reviews[review.hypothesis_id] = review
-
-        return latest_reviews
-
     def _format_latest_hypothesis_review(self, review, hypothesis_title):
         confidence = f"{review.confidence:.2f}"
         created_at = f", created_at={review.created_at.isoformat()}" if review.created_at else ""
@@ -125,6 +107,32 @@ class ResearchJournal:
             "\n"
             f"  rationale: {review.rationale}"
         )
+
+    def _format_lifecycle_recommendation(self, recommendation):
+        lines = [
+            (
+                f"- {recommendation.hypothesis_title} "
+                f"[{recommendation.current_status.value}] "
+                f"id={recommendation.hypothesis_id} "
+                f"action={recommendation.action.value}"
+            ),
+            (
+                "  evidence="
+                f"{recommendation.evidence_status.value}, "
+                f"completed_experiments={recommendation.completed_experiment_count}, "
+                f"trade_count={recommendation.total_trade_count}"
+            ),
+        ]
+
+        if recommendation.review_recommendation is not None:
+            lines.append(
+                "  latest_review="
+                f"{recommendation.review_recommendation.value}"
+            )
+
+        lines.append(f"  rationale: {recommendation.rationale}")
+
+        return "\n".join(lines)
 
     def build(
         self,
@@ -145,8 +153,13 @@ class ResearchJournal:
             experiment_results=experiment_results,
             experiment_requests=experiment_requests,
         )
-        latest_reviews_by_hypothesis_id = self._select_latest_hypothesis_reviews(
+        latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(
             hypothesis_reviews
+        )
+        lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+            hypotheses=hypotheses,
+            evidence_summaries=hypothesis_evidence,
+            latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
         )
         active_hypotheses = [
             hypothesis
@@ -269,5 +282,18 @@ class ResearchJournal:
             lines.extend(hypothesis_review_lines)
         else:
             lines.append("No hypothesis reviews.")
+
+        lines.append("")
+        lines.append("Hypothesis Lifecycle Recommendations")
+        lines.append("------------------------------------")
+        lines.append("Recommendations only; no hypothesis state is changed.")
+
+        if lifecycle_recommendations:
+            for recommendation in lifecycle_recommendations:
+                lines.append(
+                    self._format_lifecycle_recommendation(recommendation)
+                )
+        else:
+            lines.append("No lifecycle recommendations.")
 
         return "\n".join(lines)
