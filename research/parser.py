@@ -59,6 +59,15 @@ def _parse_optional_datetime(value):
     return parsed
 
 
+def _is_date_only_timestamp(value):
+    if not isinstance(value, str):
+        return False
+
+    # Date-only payloads (no time component) should not be coerced to UTC midnight
+    # when Sentinel owns created_at defaults.
+    return "T" not in value and " " not in value
+
+
 def _normalize_hypothesis_payload(response):
     if isinstance(response, str):
         try:
@@ -543,7 +552,11 @@ def parse_hypothesis_reviews(symbol, response):
 
         seen_review_ids.add(review_id)
 
-        created_at = _parse_optional_datetime(item.get("created_at", item.get("created")))
+        created_at_value = item.get("created_at", item.get("created"))
+        if _is_date_only_timestamp(created_at_value):
+            created_at_value = None
+
+        created_at = _parse_optional_datetime(created_at_value)
         if created_at is None:
             created_at = datetime.now(timezone.utc)
 

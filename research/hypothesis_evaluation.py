@@ -29,6 +29,7 @@ class HypothesisEvidenceSummary:
     hypothesis_id: str
     hypothesis_title: str
     completed_experiment_count: int
+    zero_trade_completed_experiment_count: int
     total_trade_count: int
     average_return: float | None
     win_rate: float | None
@@ -112,6 +113,11 @@ def evaluate_hypothesis_evidence(
             for result in completed_results
             if result.metrics.trade_count is not None
         ]
+        zero_trade_completed_experiment_count = sum(
+            1
+            for result in completed_results
+            if result.metrics.trade_count == 0
+        )
         average_returns = [
             result.metrics.average_return
             for result in completed_results
@@ -151,6 +157,7 @@ def evaluate_hypothesis_evidence(
                 hypothesis_id=hypothesis.hypothesis_id,
                 hypothesis_title=hypothesis.title,
                 completed_experiment_count=len(completed_results),
+                zero_trade_completed_experiment_count=zero_trade_completed_experiment_count,
                 total_trade_count=total_trade_count,
                 average_return=average_return,
                 win_rate=win_rate,

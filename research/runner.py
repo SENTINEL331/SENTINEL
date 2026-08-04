@@ -11,6 +11,8 @@ from research.executor import ExperimentExecutor
 from research.experiment import ExperimentRequestExecutionState
 from research.experiment_result import ExperimentResultStatus
 from research.hypothesis_evaluation import evaluate_hypothesis_evidence
+from research.hypothesis_lifecycle import recommend_hypothesis_lifecycle_actions
+from research.hypothesis_lifecycle import select_latest_hypothesis_reviews
 
 
 DEFAULT_SYMBOL = "NVDA"
@@ -363,6 +365,76 @@ def run_manual_hypothesis_reviews(
 	return reviews
 
 
+def run_manual_hypothesis_lifecycle(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Run deterministic hypothesis lifecycle recommendation policy for one symbol."""
+
+	storage = storage or Storage()
+	hypotheses = storage.load_hypotheses(symbol)
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = storage.load_experiment_results(symbol)
+	load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
+	hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
+
+	evidence_summaries = evaluate_hypothesis_evidence(
+		hypotheses=hypotheses,
+		experiment_results=experiment_results,
+		experiment_requests=experiment_requests,
+	)
+	latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+	recommendations = recommend_hypothesis_lifecycle_actions(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Hypothesis Lifecycle: {symbol}")
+	print("=" * 50)
+	print()
+	print("Recommendations only; no hypothesis state is changed.")
+	print(f"Hypotheses Loaded : {len(hypotheses)}")
+	print(f"Lifecycle Recommendations : {len(recommendations)}")
+
+	if recommendations:
+		print()
+		print("Hypothesis Lifecycle Recommendations")
+		print("----------------------------------")
+
+		for recommendation in recommendations:
+			print(
+				f"- {recommendation.hypothesis_title} "
+				f"[{recommendation.current_status.value}] "
+				f"id={recommendation.hypothesis_id} "
+				f"action={recommendation.action.value}"
+			)
+			print(
+				"  evidence="
+				f"{recommendation.evidence_status.value}, "
+				f"completed_experiments={recommendation.completed_experiment_count}, "
+				f"trade_count={recommendation.total_trade_count}, "
+				f"zero_trade_completed={recommendation.zero_trade_completed_experiment_count}"
+			)
+
+			if recommendation.review_recommendation is not None:
+				print(
+					"  latest_review="
+					f"{recommendation.review_recommendation.value}, "
+					f"confidence={recommendation.review_confidence:.2f}, "
+					f"id={recommendation.review_id}"
+				)
+
+			print(f"  rationale: {recommendation.rationale}")
+	else:
+		print()
+		print("No hypotheses to evaluate.")
+
+	return recommendations
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -427,6 +499,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	hypothesis_lifecycle_parser = subparsers.add_parser(
+		"hypothesis-lifecycle",
+		help="Recommend deterministic lifecycle actions for one symbol.",
+	)
+	hypothesis_lifecycle_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	return parser
 
 
@@ -460,6 +543,10 @@ def main(argv=None):
 
 	if args.mode == "hypothesis-reviews":
 		run_manual_hypothesis_reviews(symbol=args.symbol)
+		return 0
+
+	if args.mode == "hypothesis-lifecycle":
+		run_manual_hypothesis_lifecycle(symbol=args.symbol)
 		return 0
 
 	parser.print_help()
