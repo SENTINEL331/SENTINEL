@@ -318,6 +318,34 @@ def parse_experiment_requests(
                 f"experiment_requests[{index}].entry_conditions is required"
             )
 
+        machine_readable_entry_conditions = item.get(
+            "machine_readable_entry_conditions",
+            (),
+        )
+        forward_horizon = item.get("forward_horizon")
+
+        if "machine_readable_entry_conditions" in item:
+            if not isinstance(machine_readable_entry_conditions, list):
+                raise ValueError(
+                    f"experiment_requests[{index}].machine_readable_entry_conditions must be a list"
+                )
+
+            if not machine_readable_entry_conditions:
+                raise ValueError(
+                    f"experiment_requests[{index}].machine_readable_entry_conditions must not be empty"
+                )
+
+        if "forward_horizon" in item:
+            if isinstance(forward_horizon, bool) or not isinstance(forward_horizon, int):
+                raise ValueError(
+                    f"experiment_requests[{index}].forward_horizon must be an integer"
+                )
+
+            if forward_horizon <= 0:
+                raise ValueError(
+                    f"experiment_requests[{index}].forward_horizon must be positive"
+                )
+
         exit_conditions = item.get("exit_conditions")
         if not exit_conditions:
             raise ValueError(
@@ -339,8 +367,10 @@ def parse_experiment_requests(
                         objective,
                         test_type_value,
                         entry_conditions,
+                        json.dumps(machine_readable_entry_conditions, sort_keys=True),
                         exit_conditions,
                         time_horizon,
+                        str(forward_horizon),
                     ]
                 ).encode("utf-8")
             ).hexdigest()[:12]
@@ -389,23 +419,35 @@ def parse_experiment_requests(
                 f"experiment_requests[{index}].updated_at must not be earlier than created_at"
             )
 
-        experiment_requests.append(
-            ExperimentRequest(
-                experiment_request_id=experiment_request_id,
-                hypothesis_id=hypothesis_id,
-                hypothesis_version_id=hypothesis_version_id,
-                symbol=item_symbol,
-                title=title,
-                objective=objective,
-                test_type=test_type,
-                entry_conditions=entry_conditions,
-                exit_conditions=exit_conditions,
-                time_horizon=time_horizon,
-                status=status,
-                source_observation_ids=tuple(source_observation_ids),
-                created_at=created_at,
-                updated_at=updated_at,
+        try:
+            experiment_requests.append(
+                ExperimentRequest(
+                    experiment_request_id=experiment_request_id,
+                    hypothesis_id=hypothesis_id,
+                    hypothesis_version_id=hypothesis_version_id,
+                    symbol=item_symbol,
+                    title=title,
+                    objective=objective,
+                    test_type=test_type,
+                    entry_conditions=entry_conditions,
+                    machine_readable_entry_conditions=tuple(
+                        machine_readable_entry_conditions
+                    ),
+                    exit_conditions=exit_conditions,
+                    time_horizon=time_horizon,
+                    forward_horizon=forward_horizon,
+                    status=status,
+                    source_observation_ids=tuple(source_observation_ids),
+                    created_at=created_at,
+                    updated_at=updated_at,
+                )
             )
-        )
+        except ValueError as exc:
+            if str(exc).startswith("machine_readable_entry_conditions") or str(exc).startswith(
+                "forward_horizon"
+            ):
+                raise ValueError(f"experiment_requests[{index}].{exc}") from exc
+
+            raise
 
     return experiment_requests

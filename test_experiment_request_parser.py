@@ -27,8 +27,21 @@ class ExperimentRequestParserTests(unittest.TestCase):
                         "objective": "Test whether breakout continuation persists over the next five sessions.",
                         "test_type": "initial_backtest",
                         "entry_conditions": "Enter after breakout close above prior 20-day high.",
+                        "machine_readable_entry_conditions": [
+                            {
+                                "field": "Close",
+                                "operator": ">",
+                                "other_field": "EMA_20",
+                            },
+                            {
+                                "field": "RSI_14",
+                                "operator": "<",
+                                "value": 50,
+                            },
+                        ],
                         "exit_conditions": "Exit on stop breach or five-session horizon.",
                         "time_horizon": "5D",
+                        "forward_horizon": 5,
                         "status": "accepted",
                         "source_observation_ids": ["obs-1", "obs-2"],
                         "created_at": created_at,
@@ -56,6 +69,8 @@ class ExperimentRequestParserTests(unittest.TestCase):
             "Enter after breakout close above prior 20-day high.",
             requests[0].entry_conditions,
         )
+        self.assertEqual(2, len(requests[0].machine_readable_entry_conditions))
+        self.assertEqual(5, requests[0].forward_horizon)
         self.assertEqual(
             "Exit on stop breach or five-session horizon.",
             requests[0].exit_conditions,
@@ -98,6 +113,68 @@ class ExperimentRequestParserTests(unittest.TestCase):
         ):
             parse_experiment_requests("NVDA", "not-json")
 
+        with self.assertRaisesRegex(
+            ValueError,
+            r"experiment_requests\[0\]\.machine_readable_entry_conditions\[0\]\.operator is required",
+        ):
+            parse_experiment_requests(
+                "NVDA",
+                {
+                    "experiment_requests": [
+                        {
+                            "experiment_request_id": "expreq-001",
+                            "hypothesis_id": "hyp-001",
+                            "hypothesis_version_id": "hyp-001:v1",
+                            "symbol": "NVDA",
+                            "title": "Validate momentum continuation",
+                            "objective": "Objective",
+                            "test_type": "initial_backtest",
+                            "entry_conditions": "Entry",
+                            "machine_readable_entry_conditions": [
+                                {
+                                    "field": "Close",
+                                    "value": 100,
+                                }
+                            ],
+                            "exit_conditions": "Exit",
+                            "time_horizon": "5D",
+                            "forward_horizon": 5,
+                        }
+                    ]
+                },
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"experiment_requests\[0\]\.forward_horizon is required when machine_readable_entry_conditions are provided",
+        ):
+            parse_experiment_requests(
+                "NVDA",
+                {
+                    "experiment_requests": [
+                        {
+                            "experiment_request_id": "expreq-001",
+                            "hypothesis_id": "hyp-001",
+                            "hypothesis_version_id": "hyp-001:v1",
+                            "symbol": "NVDA",
+                            "title": "Validate momentum continuation",
+                            "objective": "Objective",
+                            "test_type": "initial_backtest",
+                            "entry_conditions": "Entry",
+                            "machine_readable_entry_conditions": [
+                                {
+                                    "field": "Close",
+                                    "operator": ">",
+                                    "value": 100,
+                                }
+                            ],
+                            "exit_conditions": "Exit",
+                            "time_horizon": "5D",
+                        }
+                    ]
+                },
+            )
+
     def test_parser_populates_missing_timestamps(self):
         response = json.dumps(
             {
@@ -125,6 +202,8 @@ class ExperimentRequestParserTests(unittest.TestCase):
         self.assertEqual(1, len(requests))
         self.assertIsNotNone(requests[0].created_at)
         self.assertIsNotNone(requests[0].updated_at)
+        self.assertIsNone(requests[0].forward_horizon)
+        self.assertEqual((), requests[0].machine_readable_entry_conditions)
         self.assertEqual(timezone.utc, requests[0].created_at.tzinfo)
         self.assertEqual(timezone.utc, requests[0].updated_at.tzinfo)
         self.assertGreaterEqual(requests[0].updated_at, requests[0].created_at)

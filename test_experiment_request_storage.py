@@ -30,8 +30,16 @@ class ExperimentRequestStorageTests(unittest.TestCase):
                 objective="Test whether breakout continuation persists over the next five sessions.",
                 test_type=ExperimentTestType.INITIAL_BACKTEST,
                 entry_conditions="Enter after breakout close above prior 20-day high.",
+                machine_readable_entry_conditions=(
+                    {
+                        "field": "Close",
+                        "operator": ">",
+                        "other_field": "EMA_20",
+                    },
+                ),
                 exit_conditions="Exit on stop breach or five-session horizon.",
                 time_horizon="5D",
+                forward_horizon=5,
                 status=ExperimentRequestStatus.ACCEPTED,
                 source_observation_ids=("obs-1", "obs-2"),
                 created_at=created_at,
@@ -58,6 +66,11 @@ class ExperimentRequestStorageTests(unittest.TestCase):
                 "Enter after breakout close above prior 20-day high.",
                 loaded[0].entry_conditions,
             )
+            self.assertEqual(
+                "EMA_20",
+                loaded[0].machine_readable_entry_conditions[0]["other_field"],
+            )
+            self.assertEqual(5, loaded[0].forward_horizon)
             self.assertEqual(
                 "Exit on stop breach or five-session horizon.",
                 loaded[0].exit_conditions,

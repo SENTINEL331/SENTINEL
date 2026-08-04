@@ -21,12 +21,25 @@ class ExperimentRequestPromptTests(unittest.TestCase):
         self.assertIn('"objective"', EXPERIMENT_REQUEST_PROMPT)
         self.assertIn('"test_type"', EXPERIMENT_REQUEST_PROMPT)
         self.assertIn('"entry_conditions"', EXPERIMENT_REQUEST_PROMPT)
+        self.assertIn('"machine_readable_entry_conditions"', EXPERIMENT_REQUEST_PROMPT)
         self.assertIn('"exit_conditions"', EXPERIMENT_REQUEST_PROMPT)
         self.assertIn('"time_horizon"', EXPERIMENT_REQUEST_PROMPT)
+        self.assertIn('"forward_horizon"', EXPERIMENT_REQUEST_PROMPT)
         self.assertIn('"status"', EXPERIMENT_REQUEST_PROMPT)
         self.assertIn('"source_observation_ids"', EXPERIMENT_REQUEST_PROMPT)
         self.assertIn('"created_at"', EXPERIMENT_REQUEST_PROMPT)
         self.assertIn('"updated_at"', EXPERIMENT_REQUEST_PROMPT)
+        self.assertIn("condition evaluator", EXPERIMENT_REQUEST_PROMPT)
+
+    def test_prompt_formats_without_treating_json_examples_as_placeholders(self):
+        formatted = EXPERIMENT_REQUEST_PROMPT.format(
+            hypotheses="[]",
+            journal="journal",
+            observations="[]",
+        )
+
+        self.assertIn('{"field": "Close", "operator": ">", "value": 100.0}', formatted)
+        self.assertIn('{"field": "Close", "operator": ">", "other_field": "EMA_20"}', formatted)
 
 
 if __name__ == "__main__":

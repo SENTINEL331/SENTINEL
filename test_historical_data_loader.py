@@ -7,20 +7,26 @@ from market.historical_data_loader import HistoricalDataLoader
 
 
 class HistoricalDataLoaderTests(unittest.TestCase):
-    def test_load_returns_raw_history_with_date_index(self):
+    def _build_raw_history(self, periods: int = 25) -> pd.DataFrame:
+        dates = pd.date_range("2024-01-02", periods=periods, freq="D")
+        closes = [100.0 + float(index) for index in range(periods)]
+
+        return pd.DataFrame(
+            {
+                "Date": dates.strftime("%Y-%m-%d"),
+                "Open": [close - 0.5 for close in closes],
+                "High": [close + 1.0 for close in closes],
+                "Low": [close - 1.0 for close in closes],
+                "Close": closes,
+                "Volume": [1000 + index for index in range(periods)],
+            }
+        )
+
+    def test_load_prepares_required_features_and_drops_unusable_rows(self):
         history_manager = Mock()
         feature_store = Mock()
 
-        history_manager.load_history.return_value = pd.DataFrame(
-            {
-                "Date": ["2024-01-02", "2024-01-03"],
-                "Open": [100.0, 101.0],
-                "High": [102.0, 103.0],
-                "Low": [99.0, 100.0],
-                "Close": [101.0, 102.0],
-                "Volume": [1000, 1100],
-            }
-        )
+        history_manager.load_history.return_value = self._build_raw_history()
         feature_store.features_exist.return_value = False
 
         data = HistoricalDataLoader(
@@ -28,33 +34,44 @@ class HistoricalDataLoaderTests(unittest.TestCase):
             feature_store=feature_store,
         ).load("NVDA")
 
-        self.assertEqual(["Open", "High", "Low", "Close", "Volume"], list(data.columns))
+        self.assertEqual(
+            [
+                "Open",
+                "High",
+                "Low",
+                "Close",
+                "Volume",
+                "SMA_20",
+                "EMA_20",
+                "RSI_14",
+                "ATR_14",
+                "BB_MIDDLE",
+                "BB_UPPER",
+                "BB_LOWER",
+            ],
+            list(data.columns),
+        )
         self.assertEqual("Date", data.index.name)
-        self.assertEqual(pd.Timestamp("2024-01-02"), data.index[0])
-        self.assertEqual(101.0, data.loc[pd.Timestamp("2024-01-02"), "Close"])
+        self.assertEqual(pd.Timestamp("2024-01-21"), data.index[0])
+        self.assertEqual(6, len(data.index))
+        self.assertFalse(
+            data[["SMA_20", "EMA_20", "RSI_14", "ATR_14", "BB_MIDDLE", "BB_UPPER", "BB_LOWER"]]
+            .isna()
+            .any()
+            .any()
+        )
         feature_store.load_features.assert_not_called()
 
-    def test_load_joins_available_feature_columns(self):
+    def test_load_joins_available_feature_columns_and_computes_missing_ones(self):
         history_manager = Mock()
         feature_store = Mock()
 
-        history_manager.load_history.return_value = pd.DataFrame(
-            {
-                "Date": ["2024-01-02", "2024-01-03"],
-                "Open": [100.0, 101.0],
-                "High": [102.0, 103.0],
-                "Low": [99.0, 100.0],
-                "Close": [101.0, 102.0],
-                "Volume": [1000, 1100],
-            }
-        )
+        history_manager.load_history.return_value = self._build_raw_history()
         feature_store.features_exist.return_value = True
         feature_store.load_features.return_value = pd.DataFrame(
             {
-                "Date": ["2024-01-02", "2024-01-03"],
-                "Close": [101.0, 102.0],
-                "RSI_14": [45.0, 52.0],
-                "EMA_20": [100.5, 101.25],
+                "Date": pd.date_range("2024-01-02", periods=25, freq="D").strftime("%Y-%m-%d"),
+                "EMA_20": [999.0 for _ in range(25)],
             }
         )
 
@@ -63,10 +80,37 @@ class HistoricalDataLoaderTests(unittest.TestCase):
             feature_store=feature_store,
         ).load("NVDA")
 
-        self.assertIn("RSI_14", data.columns)
+        self.assertIn("SMA_20", data.columns)
         self.assertIn("EMA_20", data.columns)
-        self.assertEqual(45.0, data.loc[pd.Timestamp("2024-01-02"), "RSI_14"])
-        self.assertEqual(101.25, data.loc[pd.Timestamp("2024-01-03"), "EMA_20"])
+        self.assertIn("RSI_14", data.columns)
+        self.assertIn("BB_UPPER", data.columns)
+        self.assertEqual(999.0, data.loc[pd.Timestamp("2024-01-21"), "EMA_20"])
+
+    def test_load_drops_rows_with_unavailable_existing_feature_values(self):
+        history_manager = Mock()
+        feature_store = Mock()
+
+        history_manager.load_history.return_value = self._build_raw_history()
+        feature_store.features_exist.return_value = True
+
+        dates = pd.date_range("2024-01-02", periods=25, freq="D")
+        rsi_values = [55.0 for _ in range(25)]
+        rsi_values[23] = None
+
+        feature_store.load_features.return_value = pd.DataFrame(
+            {
+                "Date": dates.strftime("%Y-%m-%d"),
+                "RSI_14": rsi_values,
+            }
+        )
+
+        data = HistoricalDataLoader(
+            history_manager=history_manager,
+            feature_store=feature_store,
+        ).load("NVDA")
+
+        self.assertNotIn(pd.Timestamp("2024-01-25"), data.index)
+        self.assertFalse(data["RSI_14"].isna().any())
 
     def test_load_raises_clear_error_when_raw_history_missing_required_columns(self):
         history_manager = Mock()

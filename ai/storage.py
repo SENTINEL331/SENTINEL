@@ -250,8 +250,12 @@ class Storage:
                     "objective": request.objective,
                     "test_type": request.test_type.value,
                     "entry_conditions": request.entry_conditions,
+                    "machine_readable_entry_conditions": list(
+                        request.machine_readable_entry_conditions
+                    ),
                     "exit_conditions": request.exit_conditions,
                     "time_horizon": request.time_horizon,
+                    "forward_horizon": request.forward_horizon,
                     "status": request.status.value,
                     "source_observation_ids": list(request.source_observation_ids),
                     "created_at": request.created_at.isoformat(),
@@ -533,8 +537,12 @@ class Storage:
                     objective=item["objective"],
                     test_type=ExperimentTestType(item["test_type"]),
                     entry_conditions=item["entry_conditions"],
+                    machine_readable_entry_conditions=tuple(
+                        item.get("machine_readable_entry_conditions", [])
+                    ),
                     exit_conditions=item["exit_conditions"],
                     time_horizon=item["time_horizon"],
+                    forward_horizon=item.get("forward_horizon"),
                     status=ExperimentRequestStatus(
                         item.get("status", ExperimentRequestStatus.PROPOSED.value)
                     ),

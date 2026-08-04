@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -10,7 +11,6 @@ import pandas as pd
 from market.historical_data_loader import HistoricalDataLoader
 from research.basic_backtest_runner import (
     BasicBacktestRunner,
-    _parse_entry_conditions,
     _parse_time_horizon,
 )
 from research.experiment import ExperimentRequest
@@ -18,6 +18,7 @@ from research.experiment_result import (
     ExperimentResult,
     ExperimentResultStatus,
 )
+from dataclasses import replace
 
 
 class ExperimentExecutor:
@@ -94,16 +95,36 @@ class ExperimentExecutor:
             updated_at=now,
         )
 
+    def _format_backtest_execution_error(self, exc: Exception) -> tuple[str, str]:
+        error_detail = f"basic_backtest_runner failed: {exc.__class__.__name__}: {exc}"
+        return (
+            f"Basic backtest execution failed in basic_backtest_runner: {exc.__class__.__name__}: {exc}",
+            error_detail,
+        )
+
     def _request_support_error(self, request: ExperimentRequest) -> str | None:
-        try:
-            _parse_entry_conditions(request.entry_conditions)
-        except ValueError as exc:
-            return str(exc)
+        if request.machine_readable_entry_conditions:
+            if request.forward_horizon is None:
+                return "forward_horizon is required when machine_readable_entry_conditions are provided"
+
+            return None
 
         try:
             _parse_time_horizon(request.time_horizon)
         except ValueError as exc:
             return str(exc)
+
+        return "machine_readable_entry_conditions are required for deterministic execution"
+
+    def _to_runner_compatible_request(self, request: ExperimentRequest) -> ExperimentRequest:
+        if not request.machine_readable_entry_conditions or request.forward_horizon is None:
+            return request
+
+        return replace(
+            request,
+            entry_conditions=json.dumps(list(request.machine_readable_entry_conditions)),
+            time_horizon=f"{request.forward_horizon}D",
+        )
 
         return None
 
@@ -155,10 +176,14 @@ class ExperimentExecutor:
             )
 
         try:
-            return self._basic_backtest_runner.run(request, historical_data)
+            return self._basic_backtest_runner.run(
+                self._to_runner_compatible_request(request),
+                historical_data,
+            )
         except Exception as exc:
+            summary, reason = self._format_backtest_execution_error(exc)
             return self._build_failed_result(
                 request,
-                summary=f"Basic backtest execution failed: {exc}",
-                reason="basic_backtest_execution_failed",
+                summary=summary,
+                reason=reason,
             )

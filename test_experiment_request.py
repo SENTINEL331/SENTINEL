@@ -34,9 +34,123 @@ class ExperimentRequestTests(unittest.TestCase):
         self.assertEqual("NVDA", request.symbol)
         self.assertEqual(ExperimentTestType.INITIAL_BACKTEST, request.test_type)
         self.assertEqual(ExperimentRequestStatus.PROPOSED, request.status)
+        self.assertIsNone(request.forward_horizon)
+        self.assertEqual((), request.machine_readable_entry_conditions)
         self.assertEqual((), request.source_observation_ids)
         self.assertEqual(created_at, request.created_at)
         self.assertEqual(created_at, request.updated_at)
+
+    def test_accepts_valid_machine_readable_entry_conditions(self):
+        created_at = datetime(2026, 8, 3, 0, 0, tzinfo=timezone.utc)
+
+        request = ExperimentRequest(
+            experiment_request_id="expreq-structured-001",
+            hypothesis_id="hyp-001",
+            hypothesis_version_id="hyp-001:v1",
+            symbol="NVDA",
+            title="Validate momentum continuation",
+            objective="Objective",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Enter on close above EMA with RSI confirmation.",
+            machine_readable_entry_conditions=(
+                {
+                    "field": "Close",
+                    "operator": ">",
+                    "other_field": "EMA_20",
+                },
+                {
+                    "field": "RSI_14",
+                    "operator": "<",
+                    "value": 50,
+                },
+            ),
+            exit_conditions="Exit",
+            time_horizon="5D",
+            forward_horizon=5,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+
+        self.assertEqual(5, request.forward_horizon)
+        self.assertEqual(2, len(request.machine_readable_entry_conditions))
+        self.assertEqual(
+            "EMA_20",
+            request.machine_readable_entry_conditions[0]["other_field"],
+        )
+
+    def test_rejects_malformed_machine_readable_entry_conditions(self):
+        created_at = datetime(2026, 8, 3, 0, 0, tzinfo=timezone.utc)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"machine_readable_entry_conditions\[0\]\.operator is required",
+        ):
+            ExperimentRequest(
+                experiment_request_id="expreq-bad-001",
+                hypothesis_id="hyp-001",
+                hypothesis_version_id="hyp-001:v1",
+                symbol="NVDA",
+                title="Validate momentum continuation",
+                objective="Objective",
+                test_type=ExperimentTestType.INITIAL_BACKTEST,
+                entry_conditions="Entry",
+                machine_readable_entry_conditions=(
+                    {
+                        "field": "Close",
+                        "value": 100,
+                    },
+                ),
+                exit_conditions="Exit",
+                time_horizon="5D",
+                created_at=created_at,
+                updated_at=created_at,
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "forward_horizon is required when machine_readable_entry_conditions are provided",
+        ):
+            ExperimentRequest(
+                experiment_request_id="expreq-bad-002",
+                hypothesis_id="hyp-001",
+                hypothesis_version_id="hyp-001:v1",
+                symbol="NVDA",
+                title="Validate momentum continuation",
+                objective="Objective",
+                test_type=ExperimentTestType.INITIAL_BACKTEST,
+                entry_conditions="Entry",
+                machine_readable_entry_conditions=(
+                    {
+                        "field": "Close",
+                        "operator": ">",
+                        "value": 100,
+                    },
+                ),
+                exit_conditions="Exit",
+                time_horizon="5D",
+                created_at=created_at,
+                updated_at=created_at,
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "machine_readable_entry_conditions are required when forward_horizon is provided",
+        ):
+            ExperimentRequest(
+                experiment_request_id="expreq-bad-003",
+                hypothesis_id="hyp-001",
+                hypothesis_version_id="hyp-001:v1",
+                symbol="NVDA",
+                title="Validate momentum continuation",
+                objective="Objective",
+                test_type=ExperimentTestType.INITIAL_BACKTEST,
+                entry_conditions="Entry",
+                exit_conditions="Exit",
+                time_horizon="5D",
+                forward_horizon=5,
+                created_at=created_at,
+                updated_at=created_at,
+            )
 
     def test_rejects_missing_required_fields_and_invalid_timestamps(self):
         created_at = datetime(2026, 8, 3, 0, 0, tzinfo=timezone.utc)

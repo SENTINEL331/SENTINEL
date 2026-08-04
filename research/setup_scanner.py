@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from research.condition_evaluator import evaluate_condition
+from research.feature_name_contract import resolve_feature_name
 
 
 def _validate_entry_conditions(
@@ -47,6 +48,31 @@ def _validate_row_data(
             )
 
 
+def _normalize_condition_fields(
+    entry_conditions: Sequence[Mapping[str, Any]],
+    available_columns: Sequence[object],
+) -> list[dict[str, Any]]:
+    normalized_conditions: list[dict[str, Any]] = []
+
+    for condition in entry_conditions:
+        normalized_condition = dict(condition)
+
+        field = normalized_condition.get("field")
+        if isinstance(field, str):
+            normalized_condition["field"] = resolve_feature_name(field, available_columns)
+
+        other_field = normalized_condition.get("other_field")
+        if isinstance(other_field, str):
+            normalized_condition["other_field"] = resolve_feature_name(
+                other_field,
+                available_columns,
+            )
+
+        normalized_conditions.append(normalized_condition)
+
+    return normalized_conditions
+
+
 def scan_entry_setups(
     feature_data: pd.DataFrame,
     entry_conditions: Sequence[Mapping[str, Any]],
@@ -65,6 +91,11 @@ def scan_entry_setups(
     if feature_data.empty:
         return feature_data.copy()
 
+    normalized_conditions = _normalize_condition_fields(
+        entry_conditions,
+        list(feature_data.columns),
+    )
+
     matching_indexes: list[Any] = []
 
     for row_index, row in feature_data.iterrows():
@@ -75,7 +106,7 @@ def scan_entry_setups(
                 evaluate_condition(condition, row_data)
                 if not _validate_row_data(row_data, condition, row_index)
                 else False
-                for condition in entry_conditions
+                for condition in normalized_conditions
             ):
                 matching_indexes.append(row_index)
         except ValueError as exc:

@@ -79,6 +79,10 @@ def _build_result_id(request: ExperimentRequest, horizon: int, row_count: int) -
     return f"expr-{request.symbol}-{digest}"
 
 
+def _raise_component_error(component_name: str, exc: Exception) -> None:
+    raise ValueError(f"{component_name} failed: {exc}") from exc
+
+
 class BasicBacktestRunner:
     """Execute a minimal deterministic backtest over historical feature data."""
 
@@ -90,8 +94,15 @@ class BasicBacktestRunner:
         if not isinstance(feature_data, pd.DataFrame):
             raise ValueError("feature_data must be a pandas DataFrame")
 
-        entry_conditions = _parse_entry_conditions(request.entry_conditions)
-        horizon = _parse_time_horizon(request.time_horizon)
+        try:
+            entry_conditions = _parse_entry_conditions(request.entry_conditions)
+        except ValueError as exc:
+            _raise_component_error("entry_condition_parser", exc)
+
+        try:
+            horizon = _parse_time_horizon(request.time_horizon)
+        except ValueError as exc:
+            _raise_component_error("time_horizon_parser", exc)
 
         started_at = datetime.now(timezone.utc)
         base_result = ExperimentResult(
@@ -105,7 +116,10 @@ class BasicBacktestRunner:
             updated_at=started_at,
         )
 
-        matching_rows = scan_entry_setups(feature_data, entry_conditions)
+        try:
+            matching_rows = scan_entry_setups(feature_data, entry_conditions)
+        except ValueError as exc:
+            _raise_component_error("setup_scanner", exc)
 
         if matching_rows.empty:
             return base_result.mark_completed(
@@ -118,11 +132,15 @@ class BasicBacktestRunner:
                 updated_at=started_at,
             )
 
-        forward_return_results = calculate_forward_returns(
-            feature_data,
-            list(matching_rows.index),
-            horizon,
-        )
+        try:
+            forward_return_results = calculate_forward_returns(
+                feature_data,
+                list(matching_rows.index),
+                horizon,
+            )
+        except ValueError as exc:
+            _raise_component_error("forward_return_calculator", exc)
+
         available_results = [item for item in forward_return_results if item.is_available]
 
         if not available_results:
@@ -139,7 +157,10 @@ class BasicBacktestRunner:
                 updated_at=started_at,
             )
 
-        metrics_data = calculate_backtest_metrics(available_results)
+        try:
+            metrics_data = calculate_backtest_metrics(available_results)
+        except ValueError as exc:
+            _raise_component_error("backtest_metrics_calculator", exc)
 
         return base_result.mark_completed(
             summary=(

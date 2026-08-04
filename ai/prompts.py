@@ -96,6 +96,12 @@ Rules:
 - Each request must target one hypothesis version.
 - Each request must declare a supported test type.
 - Entry and exit conditions must be explicit and testable.
+- entry_conditions must remain a concise human-readable description.
+- machine_readable_entry_conditions must be a non-empty JSON array compatible with Sentinel's condition evaluator.
+- forward_horizon must be a positive integer trading-period count matching the executable entry conditions.
+- Each machine-readable condition must use exactly one of:
+    - {{"field": "Close", "operator": ">", "value": 100.0}}
+    - {{"field": "Close", "operator": ">", "other_field": "EMA_20"}}
 - Requests must not include trade execution instructions.
 - If no hypothesis is ready for testing, return an empty experiment_requests list.
 
@@ -111,9 +117,22 @@ Return this exact structure:
             "title": "...",
             "objective": "...",
             "test_type": "initial_backtest",
-            "entry_conditions": "...",
+            "entry_conditions": "Human-readable execution summary.",
+            "machine_readable_entry_conditions": [
+                {{
+                    "field": "Close",
+                    "operator": ">",
+                    "other_field": "EMA_20"
+                }},
+                {{
+                    "field": "RSI_14",
+                    "operator": "<",
+                    "value": 50
+                }}
+            ],
             "exit_conditions": "...",
             "time_horizon": "...",
+            "forward_horizon": 5,
             "status": "proposed",
             "source_observation_ids": ["obs-1"],
             "created_at": "optional-iso-8601-timestamp",

@@ -28,8 +28,16 @@ class ExperimentRequestServiceTests(unittest.TestCase):
                     "objective": "Test whether breakout continuation persists over the next five sessions.",
                     "test_type": "initial_backtest",
                     "entry_conditions": "Enter after breakout close above prior 20-day high.",
+                    "machine_readable_entry_conditions": [
+                        {
+                            "field": "Close",
+                            "operator": ">",
+                            "other_field": "EMA_20"
+                        }
+                    ],
                     "exit_conditions": "Exit on stop breach or five-session horizon.",
                     "time_horizon": "5D",
+                    "forward_horizon": 5,
                     "status": "proposed",
                     "source_observation_ids": ["obs-1"],
                     "created_at": "2026-08-03T00:00:00+00:00",
@@ -67,6 +75,11 @@ class ExperimentRequestServiceTests(unittest.TestCase):
         self.assertEqual(ExperimentTestType.INITIAL_BACKTEST, requests[0].test_type)
         self.assertEqual(ExperimentRequestStatus.PROPOSED, requests[0].status)
         self.assertEqual(("obs-1",), requests[0].source_observation_ids)
+        self.assertEqual(
+            "EMA_20",
+            requests[0].machine_readable_entry_conditions[0]["other_field"],
+        )
+        self.assertEqual(5, requests[0].forward_horizon)
         self.assertEqual(
             datetime(2026, 8, 3, 0, 0, tzinfo=timezone.utc),
             requests[0].created_at,
