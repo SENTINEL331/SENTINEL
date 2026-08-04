@@ -94,6 +94,38 @@ class ResearchJournal:
             f"worst_return={self._format_percent(evidence_summary.worst_return)}"
         )
 
+    def _select_latest_hypothesis_reviews(self, hypothesis_reviews):
+        latest_reviews = {}
+
+        for review in hypothesis_reviews:
+            previous = latest_reviews.get(review.hypothesis_id)
+
+            if previous is None:
+                latest_reviews[review.hypothesis_id] = review
+                continue
+
+            if review.created_at > previous.created_at:
+                latest_reviews[review.hypothesis_id] = review
+                continue
+
+            # Preserve deterministic selection when timestamps are equal.
+            if review.created_at == previous.created_at and review.review_id > previous.review_id:
+                latest_reviews[review.hypothesis_id] = review
+
+        return latest_reviews
+
+    def _format_latest_hypothesis_review(self, review, hypothesis_title):
+        confidence = f"{review.confidence:.2f}"
+        created_at = f", created_at={review.created_at.isoformat()}" if review.created_at else ""
+
+        return (
+            f"- {hypothesis_title} id={review.hypothesis_id}"
+            "\n"
+            f"  recommendation={review.recommendation.value}, confidence={confidence}{created_at}"
+            "\n"
+            f"  rationale: {review.rationale}"
+        )
+
     def build(
         self,
         symbol,
@@ -106,10 +138,15 @@ class ResearchJournal:
         hypotheses = self.storage.load_hypotheses(symbol)
         experiment_requests = self.storage.load_experiment_requests(symbol)
         experiment_results = self.storage.load_experiment_results(symbol)
+        load_hypothesis_reviews = getattr(self.storage, "load_hypothesis_reviews", None)
+        hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
         hypothesis_evidence = evaluate_hypothesis_evidence(
             hypotheses=hypotheses,
             experiment_results=experiment_results,
             experiment_requests=experiment_requests,
+        )
+        latest_reviews_by_hypothesis_id = self._select_latest_hypothesis_reviews(
+            hypothesis_reviews
         )
         active_hypotheses = [
             hypothesis
@@ -209,5 +246,28 @@ class ResearchJournal:
             lines.append(
                 "No hypothesis evidence."
             )
+
+        lines.append("")
+        lines.append("Latest Hypothesis Reviews")
+        lines.append("-------------------------")
+
+        hypothesis_review_lines = []
+        for hypothesis in hypotheses:
+            review = latest_reviews_by_hypothesis_id.get(hypothesis.hypothesis_id)
+
+            if review is None:
+                continue
+
+            hypothesis_review_lines.append(
+                self._format_latest_hypothesis_review(
+                    review,
+                    hypothesis.title,
+                )
+            )
+
+        if hypothesis_review_lines:
+            lines.extend(hypothesis_review_lines)
+        else:
+            lines.append("No hypothesis reviews.")
 
         return "\n".join(lines)

@@ -139,6 +139,7 @@ class ObservationPipelineTests(unittest.TestCase):
                 ),
                 "load_experiment_requests": staticmethod(lambda _symbol: []),
                 "load_experiment_results": staticmethod(lambda _symbol: []),
+                "load_hypothesis_reviews": staticmethod(lambda _symbol: []),
             },
         )()
 
@@ -161,6 +162,7 @@ class ObservationPipelineTests(unittest.TestCase):
                 "load_hypotheses": staticmethod(lambda _symbol: []),
                 "load_experiment_requests": staticmethod(lambda _symbol: []),
                 "load_experiment_results": staticmethod(lambda _symbol: []),
+                "load_hypothesis_reviews": staticmethod(lambda _symbol: []),
             },
         )()
 
@@ -213,6 +215,9 @@ class ObservationPipelineTests(unittest.TestCase):
                 return []
 
             def load_experiment_results(self, _symbol):
+                return []
+
+            def load_hypothesis_reviews(self, _symbol):
                 return []
 
         class FakeHypothesisService:
@@ -284,6 +289,9 @@ class ObservationPipelineTests(unittest.TestCase):
                 return []
 
             def load_experiment_results(self, _symbol):
+                return []
+
+            def load_hypothesis_reviews(self, _symbol):
                 return []
 
         class FakeJournal:

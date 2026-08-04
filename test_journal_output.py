@@ -14,6 +14,8 @@ from research.experiment_result import (
     ExperimentResultStatus,
 )
 from research.hypothesis import Hypothesis, HypothesisStatus
+from research.hypothesis_review import HypothesisReview
+from research.hypothesis_review import HypothesisReviewRecommendation
 from research.observation import Observation
 
 
@@ -82,6 +84,7 @@ class ResearchJournalOutputTests(unittest.TestCase):
                 summary="Completed with positive expectancy and manageable drawdown.",
             )
         ]
+        journal.storage.load_hypothesis_reviews.return_value = []
 
         result = journal.build("NVDA")
 
@@ -123,6 +126,8 @@ class ResearchJournalOutputTests(unittest.TestCase):
             "  completed_experiments=1, trade_count=25, average_return=n/a, win_rate=60.00%, best_return=n/a, worst_return=n/a",
             result,
         )
+        self.assertIn("Latest Hypothesis Reviews", result)
+        self.assertIn("No hypothesis reviews.", result)
 
     def test_build_shows_empty_experiment_requests_state(self):
         journal = ResearchJournal()
@@ -132,6 +137,7 @@ class ResearchJournalOutputTests(unittest.TestCase):
         journal.storage.load_hypotheses.return_value = []
         journal.storage.load_experiment_requests.return_value = []
         journal.storage.load_experiment_results.return_value = []
+        journal.storage.load_hypothesis_reviews.return_value = []
 
         result = journal.build("NVDA")
 
@@ -145,6 +151,8 @@ class ResearchJournalOutputTests(unittest.TestCase):
         self.assertIn("No experiment results.", result)
         self.assertIn("Hypothesis Evidence", result)
         self.assertIn("No hypothesis evidence.", result)
+        self.assertIn("Latest Hypothesis Reviews", result)
+        self.assertIn("No hypothesis reviews.", result)
 
     def test_build_formats_hypothesis_evidence_percentages_when_available(self):
         journal = ResearchJournal()
@@ -204,6 +212,7 @@ class ResearchJournalOutputTests(unittest.TestCase):
                 summary="Completed result two.",
             ),
         ]
+        journal.storage.load_hypothesis_reviews.return_value = []
 
         result = journal.build("NVDA")
 
@@ -213,6 +222,83 @@ class ResearchJournalOutputTests(unittest.TestCase):
         )
         self.assertIn(
             "  completed_experiments=2, trade_count=25, average_return=1.50%, win_rate=65.00%, best_return=8.00%, worst_return=-3.00%",
+            result,
+        )
+
+    def test_build_includes_latest_hypothesis_review_per_hypothesis(self):
+        journal = ResearchJournal()
+        journal.storage = Mock()
+
+        journal.storage.load_observations.return_value = []
+        journal.storage.load_hypotheses.return_value = [
+            Hypothesis(
+                hypothesis_id="hyp-001",
+                symbol="NVDA",
+                title="Momentum continuation",
+                description="Price strength may continue after a breakout.",
+                status=HypothesisStatus.ACTIVE,
+                confidence=0.7,
+            ),
+            Hypothesis(
+                hypothesis_id="hyp-002",
+                symbol="NVDA",
+                title="Mean reversion",
+                description="Short-term spikes may revert quickly.",
+                status=HypothesisStatus.PROPOSED,
+                confidence=0.55,
+            ),
+        ]
+        journal.storage.load_experiment_requests.return_value = []
+        journal.storage.load_experiment_results.return_value = []
+        journal.storage.load_hypothesis_reviews.return_value = [
+            HypothesisReview(
+                review_id="hyprev-001",
+                hypothesis_id="hyp-001",
+                symbol="NVDA",
+                recommendation=HypothesisReviewRecommendation.KEEP,
+                rationale="Completed evidence supports keeping current framing.",
+                confidence=0.62,
+                created_at=datetime(2026, 8, 3, 12, 0, tzinfo=timezone.utc),
+            ),
+            HypothesisReview(
+                review_id="hyprev-002",
+                hypothesis_id="hyp-001",
+                symbol="NVDA",
+                recommendation=HypothesisReviewRecommendation.REFINE,
+                rationale="Refine entry criteria to reduce noisy triggers.",
+                confidence=0.71,
+                created_at=datetime(2026, 8, 4, 12, 0, tzinfo=timezone.utc),
+            ),
+            HypothesisReview(
+                review_id="hyprev-003",
+                hypothesis_id="hyp-002",
+                symbol="NVDA",
+                recommendation=HypothesisReviewRecommendation.NEEDS_MORE_TESTS,
+                rationale="Insufficient coverage across volatility regimes.",
+                confidence=0.58,
+                created_at=datetime(2026, 8, 2, 8, 30, tzinfo=timezone.utc),
+            ),
+        ]
+
+        result = journal.build("NVDA")
+
+        self.assertIn("Latest Hypothesis Reviews", result)
+        self.assertIn("- Momentum continuation id=hyp-001", result)
+        self.assertIn(
+            "  recommendation=refine, confidence=0.71, created_at=2026-08-04T12:00:00+00:00",
+            result,
+        )
+        self.assertIn(
+            "  rationale: Refine entry criteria to reduce noisy triggers.",
+            result,
+        )
+        self.assertNotIn(
+            "recommendation=keep, confidence=0.62, created_at=2026-08-03T12:00:00+00:00",
+            result,
+        )
+        self.assertIn("- Mean reversion id=hyp-002", result)
+        self.assertIn(
+            "  recommendation=needs_more_tests, confidence=0.58, created_at=2026-08-02T08:30:00+00:00",
             result,
         )
 
