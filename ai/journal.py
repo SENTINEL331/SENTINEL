@@ -1,5 +1,6 @@
 from ai.storage import Storage
 from research.hypothesis import HypothesisStatus
+from research.hypothesis_evaluation import evaluate_hypothesis_evidence
 
 
 class ResearchJournal:
@@ -73,6 +74,26 @@ class ResearchJournal:
             f"  detail: {detail}"
         )
 
+    def _format_percent(self, value):
+        if value is None:
+            return "n/a"
+
+        return f"{value * 100:.2f}%"
+
+    def _format_hypothesis_evidence(self, evidence_summary):
+        return (
+            f"- {evidence_summary.hypothesis_title} "
+            f"[{evidence_summary.evidence_status.value}] "
+            f"id={evidence_summary.hypothesis_id}"
+            "\n"
+            f"  completed_experiments={evidence_summary.completed_experiment_count}, "
+            f"trade_count={evidence_summary.total_trade_count}, "
+            f"average_return={self._format_percent(evidence_summary.average_return)}, "
+            f"win_rate={self._format_percent(evidence_summary.win_rate)}, "
+            f"best_return={self._format_percent(evidence_summary.best_return)}, "
+            f"worst_return={self._format_percent(evidence_summary.worst_return)}"
+        )
+
     def build(
         self,
         symbol,
@@ -85,6 +106,11 @@ class ResearchJournal:
         hypotheses = self.storage.load_hypotheses(symbol)
         experiment_requests = self.storage.load_experiment_requests(symbol)
         experiment_results = self.storage.load_experiment_results(symbol)
+        hypothesis_evidence = evaluate_hypothesis_evidence(
+            hypotheses=hypotheses,
+            experiment_results=experiment_results,
+            experiment_requests=experiment_requests,
+        )
         active_hypotheses = [
             hypothesis
             for hypothesis in hypotheses
@@ -164,6 +190,24 @@ class ResearchJournal:
 
             lines.append(
                 "No experiment results."
+            )
+
+        lines.append("")
+        lines.append("Hypothesis Evidence")
+        lines.append("-------------------")
+
+        if hypothesis_evidence:
+
+            for evidence_summary in hypothesis_evidence:
+
+                lines.append(
+                    self._format_hypothesis_evidence(evidence_summary)
+                )
+
+        else:
+
+            lines.append(
+                "No hypothesis evidence."
             )
 
         return "\n".join(lines)

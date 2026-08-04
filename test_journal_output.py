@@ -114,6 +114,15 @@ class ResearchJournalOutputTests(unittest.TestCase):
             "  detail: Completed with positive expectancy and manageable drawdown.",
             result,
         )
+        self.assertIn("Hypothesis Evidence", result)
+        self.assertIn(
+            "- Momentum continuation [insufficient_data] id=hyp-001",
+            result,
+        )
+        self.assertIn(
+            "  completed_experiments=1, trade_count=25, average_return=n/a, win_rate=60.00%, best_return=n/a, worst_return=n/a",
+            result,
+        )
 
     def test_build_shows_empty_experiment_requests_state(self):
         journal = ResearchJournal()
@@ -134,6 +143,8 @@ class ResearchJournalOutputTests(unittest.TestCase):
         self.assertIn("No experiment requests.", result)
         self.assertIn("Experiment Results", result)
         self.assertIn("No experiment results.", result)
+        self.assertIn("Hypothesis Evidence", result)
+        self.assertIn("No hypothesis evidence.", result)
 
 
 if __name__ == "__main__":
