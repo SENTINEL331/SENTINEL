@@ -310,17 +310,19 @@ def run_manual_research_cycle(
 	dry_run=True,
 	reviews=False,
 	planned_experiments=False,
+	run_experiments=False,
 	storage=None,
 	hypothesis_review_service=None,
 	experiment_request_service=None,
+	executor=None,
 	journal=None,
 ):
-	"""Run a manual research cycle in dry-run, reviews, or planned-experiments mode."""
+	"""Run a manual research cycle in one explicit orchestration mode."""
 
-	selected_modes = [dry_run, reviews, planned_experiments]
+	selected_modes = [dry_run, reviews, planned_experiments, run_experiments]
 	if sum(1 for enabled in selected_modes if enabled) != 1:
 		raise ValueError(
-			"research-cycle mode is mutually exclusive: choose exactly one of dry-run, reviews, or planned-experiments"
+			"research-cycle mode is mutually exclusive: choose exactly one of dry-run, reviews, planned-experiments, or run-experiments"
 		)
 
 	storage = storage or Storage()
@@ -509,6 +511,62 @@ def run_manual_research_cycle(
 
 		return final_plan
 
+	if run_experiments:
+		executor = executor or ExperimentExecutor()
+		execution_summary = _execute_experiment_requests_for_symbol(
+			symbol=symbol,
+			storage=storage,
+			executor=executor,
+		)
+
+		updated_experiment_requests = storage.load_experiment_requests(symbol)
+		updated_experiment_results = storage.load_experiment_results(symbol)
+		updated_evidence_summaries = evaluate_hypothesis_evidence(
+			hypotheses=hypotheses,
+			experiment_results=updated_experiment_results,
+			experiment_requests=updated_experiment_requests,
+		)
+		updated_lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+			hypotheses=hypotheses,
+			evidence_summaries=updated_evidence_summaries,
+			latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+		)
+		final_plan = build_research_plan(
+			symbol=symbol,
+			hypotheses=hypotheses,
+			experiment_requests=updated_experiment_requests,
+			experiment_results=updated_experiment_results,
+			evidence_summaries=updated_evidence_summaries,
+			latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+			lifecycle_recommendations=updated_lifecycle_recommendations,
+			revision_proposals=revision_proposals,
+			revision_applications=revision_applications,
+		)
+
+		print()
+		print("=" * 50)
+		print(f"Manual Research Cycle: {symbol}")
+		print("=" * 50)
+		print()
+		print("Mode : run-experiments")
+		print("Records Modified : yes")
+		print("AI Calls Allowed : no")
+		print(f"Requests Loaded : {execution_summary['requests_loaded']}")
+		print(f"Requests Executed : {execution_summary['requests_executed']}")
+		print(f"Requests Skipped : {execution_summary['requests_skipped']}")
+		print(f"Results Saved : {execution_summary['results_saved']}")
+		print(f"Not Implemented : {execution_summary['not_implemented']}")
+		print(f"Research Plan Items : {len(final_plan.items)}")
+
+		if execution_summary["requests_executed"] == 0:
+			print("Final Status : no-op")
+			print()
+			print("No-op: no executable experiment requests currently available for this symbol.")
+		else:
+			print("Final Status : completed")
+
+		return final_plan
+
 	print()
 	print("=" * 50)
 	print(f"Manual Research Cycle: {symbol}")
@@ -559,6 +617,61 @@ def run_manual_experiment_execution(
 
 	storage = storage or Storage()
 	executor = executor or ExperimentExecutor()
+	execution_summary = _execute_experiment_requests_for_symbol(
+		symbol=symbol,
+		storage=storage,
+		executor=executor,
+	)
+	experiment_results = execution_summary["experiment_results"]
+
+	print()
+	print("=" * 50)
+	print(f"Manual Experiment Execution: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Requests Loaded : {execution_summary['requests_loaded']}")
+	print(f"Requests Executed : {execution_summary['requests_executed']}")
+	print(f"Requests Skipped : {execution_summary['requests_skipped']}")
+	print(f"Skipped Non-Executable : {execution_summary['skipped_non_executable']}")
+	print(f"Skipped Obsolete : {execution_summary['skipped_obsolete']}")
+	print(f"Skipped Symbol Mismatch : {execution_summary['skipped_symbol_mismatch']}")
+	print(f"Results Saved : {execution_summary['results_saved']}")
+	print(f"Not Implemented : {execution_summary['not_implemented']}")
+
+	if experiment_results:
+		print()
+		print("Experiment Results")
+		print("------------------")
+
+		for result in experiment_results:
+			print(
+				f"- {result.test_type.value} "
+				f"[{result.status.value}] "
+				f"request_id={result.experiment_request_id} "
+				f"result_id={result.experiment_result_id}"
+			)
+
+			if result.failure_reason:
+				print(f"  reason: {result.failure_reason}")
+			elif result.summary:
+				print(f"  summary: {result.summary}")
+
+			if result.status == ExperimentResultStatus.COMPLETED:
+				_print_completed_result_metrics(result)
+
+	else:
+		print()
+		print("No experiment requests to execute.")
+
+	return experiment_results
+
+
+def _execute_experiment_requests_for_symbol(
+	symbol,
+	storage,
+	executor,
+):
+	"""Execute currently executable requests and return deterministic execution counts."""
 
 	experiment_requests = storage.load_experiment_requests(symbol)
 	experiment_results = []
@@ -589,52 +702,23 @@ def run_manual_experiment_execution(
 		for result in experiment_results
 		if result.status == ExperimentResultStatus.NOT_IMPLEMENTED
 	)
-
-	print()
-	print("=" * 50)
-	print(f"Manual Experiment Execution: {symbol}")
-	print("=" * 50)
-	print()
 	total_skipped_count = (
 		skipped_symbol_mismatch_count
 		+ skipped_non_executable_count
 		+ skipped_obsolete_count
 	)
-	print(f"Requests Loaded : {len(experiment_requests)}")
-	print(f"Requests Executed : {len(experiment_results)}")
-	print(f"Requests Skipped : {total_skipped_count}")
-	print(f"Skipped Non-Executable : {skipped_non_executable_count}")
-	print(f"Skipped Obsolete : {skipped_obsolete_count}")
-	print(f"Skipped Symbol Mismatch : {skipped_symbol_mismatch_count}")
-	print(f"Results Saved : {len(experiment_results)}")
-	print(f"Not Implemented : {not_implemented_count}")
 
-	if experiment_results:
-		print()
-		print("Experiment Results")
-		print("------------------")
-
-		for result in experiment_results:
-			print(
-				f"- {result.test_type.value} "
-				f"[{result.status.value}] "
-				f"request_id={result.experiment_request_id} "
-				f"result_id={result.experiment_result_id}"
-			)
-
-			if result.failure_reason:
-				print(f"  reason: {result.failure_reason}")
-			elif result.summary:
-				print(f"  summary: {result.summary}")
-
-			if result.status == ExperimentResultStatus.COMPLETED:
-				_print_completed_result_metrics(result)
-
-	else:
-		print()
-		print("No experiment requests to execute.")
-
-	return experiment_results
+	return {
+		"experiment_results": experiment_results,
+		"requests_loaded": len(experiment_requests),
+		"requests_executed": len(experiment_results),
+		"requests_skipped": total_skipped_count,
+		"skipped_non_executable": skipped_non_executable_count,
+		"skipped_obsolete": skipped_obsolete_count,
+		"skipped_symbol_mismatch": skipped_symbol_mismatch_count,
+		"results_saved": len(experiment_results),
+		"not_implemented": not_implemented_count,
+	}
 
 
 def run_manual_hypothesis_evaluation(
@@ -1041,6 +1125,11 @@ def _build_arg_parser():
 		action="store_true",
 		help="Run experiment request generation only for hypotheses selected by the research plan.",
 	)
+	research_cycle_mode_group.add_argument(
+		"--run-experiments",
+		action="store_true",
+		help="Run deterministic execution for currently executable experiment requests.",
+	)
 
 	hypothesis_revision_apply_parser = subparsers.add_parser(
 		"hypothesis-revision-apply",
@@ -1119,9 +1208,10 @@ def main(argv=None):
 	if args.mode == "research-cycle":
 		run_manual_research_cycle(
 			symbol=args.symbol,
-			dry_run=not (args.reviews or args.planned_experiments),
+			dry_run=not (args.reviews or args.planned_experiments or args.run_experiments),
 			reviews=bool(args.reviews),
 			planned_experiments=bool(args.planned_experiments),
+			run_experiments=bool(args.run_experiments),
 		)
 		return 0
 

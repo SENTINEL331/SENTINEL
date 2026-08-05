@@ -334,6 +334,136 @@ class ManualResearchCycleRunnerTests(unittest.TestCase):
                 storage=storage,
             )
 
+    def test_run_experiments_mode_executes_executable_requests_and_prints_counts(self):
+        executable_request = ExperimentRequest(
+            experiment_request_id="expreq-001",
+            hypothesis_id="hyp-001",
+            hypothesis_version_id="hyp-001:v1",
+            symbol="NVDA",
+            title="Executable request",
+            objective="Objective",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Entry",
+            machine_readable_entry_conditions=(
+                {"field": "Close", "operator": ">", "value": 100.0},
+            ),
+            exit_conditions="Exit",
+            time_horizon="5D",
+            forward_horizon=5,
+            status=ExperimentRequestStatus.PROPOSED,
+        )
+        storage = self._build_storage(experiment_requests=[executable_request])
+        execution_result = self._build_completed_result()
+        storage.load_experiment_results.side_effect = [
+            [],
+            [execution_result],
+        ]
+        storage.load_experiment_requests.side_effect = [
+            [executable_request],
+            [executable_request],
+            [executable_request],
+        ]
+        executor = Mock()
+        executor.execute.return_value = execution_result
+
+        with patch("builtins.print") as mock_print, patch(
+            "research.runner.ExperimentRequestService"
+        ) as mock_experiment_request_service, patch(
+            "research.runner.HypothesisReviewService"
+        ) as mock_hypothesis_review_service, patch(
+            "research.runner.HypothesisRevisionService"
+        ) as mock_hypothesis_revision_service, patch(
+            "research.runner.HypothesisRevisionApplicationService"
+        ) as mock_hypothesis_revision_application_service:
+            plan = run_manual_research_cycle(
+                symbol="NVDA",
+                dry_run=False,
+                run_experiments=True,
+                storage=storage,
+                executor=executor,
+            )
+
+        self.assertEqual("NVDA", plan.symbol)
+        executor.execute.assert_called_once_with(executable_request)
+        storage.save_experiment_results.assert_called_once_with("NVDA", [execution_result])
+        mock_experiment_request_service.assert_not_called()
+        mock_hypothesis_review_service.assert_not_called()
+        mock_hypothesis_revision_service.assert_not_called()
+        mock_hypothesis_revision_application_service.assert_not_called()
+        storage.save_experiment_requests.assert_not_called()
+        storage.save_hypothesis_reviews.assert_not_called()
+        storage.save_hypothesis_revision_proposals.assert_not_called()
+        storage.save_hypothesis_revision_applications.assert_not_called()
+        mock_print.assert_any_call("Manual Research Cycle: NVDA")
+        mock_print.assert_any_call("Mode : run-experiments")
+        mock_print.assert_any_call("Records Modified : yes")
+        mock_print.assert_any_call("AI Calls Allowed : no")
+        mock_print.assert_any_call("Requests Loaded : 1")
+        mock_print.assert_any_call("Requests Executed : 1")
+        mock_print.assert_any_call("Requests Skipped : 0")
+        mock_print.assert_any_call("Results Saved : 1")
+        mock_print.assert_any_call("Not Implemented : 0")
+        mock_print.assert_any_call("Research Plan Items : 1")
+        mock_print.assert_any_call("Final Status : completed")
+
+    def test_run_experiments_mode_no_executable_requests_prints_noop(self):
+        non_executable_request = ExperimentRequest(
+            experiment_request_id="expreq-legacy-001",
+            hypothesis_id="hyp-001",
+            hypothesis_version_id="hyp-001:v1",
+            symbol="NVDA",
+            title="Legacy request",
+            objective="Objective",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Legacy entry",
+            exit_conditions="Legacy exit",
+            time_horizon="5D",
+            status=ExperimentRequestStatus.PROPOSED,
+        )
+        storage = self._build_storage(experiment_requests=[non_executable_request])
+        storage.load_experiment_results.side_effect = [
+            [],
+            [],
+        ]
+        storage.load_experiment_requests.side_effect = [
+            [non_executable_request],
+            [non_executable_request],
+            [non_executable_request],
+        ]
+        executor = Mock()
+
+        with patch("builtins.print") as mock_print:
+            plan = run_manual_research_cycle(
+                symbol="NVDA",
+                dry_run=False,
+                run_experiments=True,
+                storage=storage,
+                executor=executor,
+            )
+
+        self.assertEqual("NVDA", plan.symbol)
+        executor.execute.assert_not_called()
+        storage.save_experiment_results.assert_not_called()
+        mock_print.assert_any_call("Mode : run-experiments")
+        mock_print.assert_any_call("Requests Loaded : 1")
+        mock_print.assert_any_call("Requests Executed : 0")
+        mock_print.assert_any_call("Requests Skipped : 1")
+        mock_print.assert_any_call("Results Saved : 0")
+        mock_print.assert_any_call("Final Status : no-op")
+        mock_print.assert_any_call("No-op: no executable experiment requests currently available for this symbol.")
+
+    def test_research_cycle_rejects_reviews_and_run_experiments_together(self):
+        storage = self._build_storage()
+
+        with self.assertRaises(ValueError):
+            run_manual_research_cycle(
+                symbol="NVDA",
+                dry_run=False,
+                reviews=True,
+                run_experiments=True,
+                storage=storage,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
