@@ -309,16 +309,19 @@ def run_manual_research_cycle(
 	symbol=DEFAULT_SYMBOL,
 	dry_run=True,
 	reviews=False,
+	planned_experiments=False,
 	storage=None,
 	hypothesis_review_service=None,
+	experiment_request_service=None,
+	journal=None,
 ):
-	"""Run a manual research cycle in dry-run or explicit reviews mode."""
+	"""Run a manual research cycle in dry-run, reviews, or planned-experiments mode."""
 
-	if dry_run and reviews:
-		raise ValueError("research-cycle mode is mutually exclusive: choose dry-run or reviews")
-
-	if not dry_run and not reviews:
-		raise ValueError("research-cycle requires either dry-run or reviews mode")
+	selected_modes = [dry_run, reviews, planned_experiments]
+	if sum(1 for enabled in selected_modes if enabled) != 1:
+		raise ValueError(
+			"research-cycle mode is mutually exclusive: choose exactly one of dry-run, reviews, or planned-experiments"
+		)
 
 	storage = storage or Storage()
 	hypotheses = storage.load_hypotheses(symbol)
@@ -423,6 +426,86 @@ def run_manual_research_cycle(
 			print("Final Status : no-op")
 			print()
 			print("No-op: no hypotheses currently require review generation.")
+
+		return final_plan
+
+	planned_experiment_hypothesis_ids = {
+		item.hypothesis_id
+		for item in research_plan.items
+		if item.recommended_action == ResearchPlanAction.GENERATE_EXPERIMENT_REQUEST
+	}
+	planned_experiment_candidates = [
+		hypothesis
+		for hypothesis in hypotheses
+		if hypothesis.hypothesis_id in planned_experiment_hypothesis_ids
+	]
+
+	if planned_experiments:
+		final_plan = research_plan
+		hypotheses_skipped_count = len(hypotheses) - len(planned_experiment_candidates)
+
+		print()
+		print("=" * 50)
+		print(f"Manual Research Cycle: {symbol}")
+		print("=" * 50)
+		print()
+		print("Mode : planned-experiments")
+		print("Records Modified : yes")
+		print("AI Calls Allowed : yes")
+		print(f"Hypotheses Loaded : {len(hypotheses)}")
+		print(f"Hypotheses Selected By Plan : {len(planned_experiment_candidates)}")
+		print(f"Hypotheses Skipped By Plan : {hypotheses_skipped_count}")
+
+		if planned_experiment_candidates:
+			journal = journal or ResearchJournal()
+			journal.storage = storage
+			experiment_request_service = experiment_request_service or ExperimentRequestService(
+				storage=storage
+			)
+			observations = storage.load_observations(symbol)
+			generated_requests = experiment_request_service.generate_for_symbol(
+				symbol=symbol,
+				journal=journal.build(symbol),
+				hypotheses=planned_experiment_candidates,
+				observations=json.dumps(
+					[
+						{
+							"observation_id": observation.observation_id,
+							"statement": observation.statement,
+						}
+						for observation in observations
+					],
+					indent=4,
+				),
+			)
+
+			updated_experiment_requests = storage.load_experiment_requests(symbol)
+			updated_lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+				hypotheses=hypotheses,
+				evidence_summaries=evidence_summaries,
+				latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+			)
+			final_plan = build_research_plan(
+				symbol=symbol,
+				hypotheses=hypotheses,
+				experiment_requests=updated_experiment_requests,
+				experiment_results=experiment_results,
+				evidence_summaries=evidence_summaries,
+				latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+				lifecycle_recommendations=updated_lifecycle_recommendations,
+				revision_proposals=revision_proposals,
+				revision_applications=revision_applications,
+			)
+
+			print(f"Experiment Requests Generated : {len(generated_requests)}")
+			print(f"Research Plan Items : {len(final_plan.items)}")
+			print("Final Status : completed")
+		else:
+			print("Experiment Requests Generated : 0")
+			print(f"Research Plan Items : {len(final_plan.items)}")
+			print("Final Status : no-op")
+			print()
+			print("No-op: no hypotheses currently require planned experiment requests.")
 
 		return final_plan
 
@@ -953,6 +1036,11 @@ def _build_arg_parser():
 		action="store_true",
 		help="Run review-only orchestration for planned hypothesis-review actions.",
 	)
+	research_cycle_mode_group.add_argument(
+		"--planned-experiments",
+		action="store_true",
+		help="Run experiment request generation only for hypotheses selected by the research plan.",
+	)
 
 	hypothesis_revision_apply_parser = subparsers.add_parser(
 		"hypothesis-revision-apply",
@@ -1031,8 +1119,9 @@ def main(argv=None):
 	if args.mode == "research-cycle":
 		run_manual_research_cycle(
 			symbol=args.symbol,
-			dry_run=not args.reviews,
+			dry_run=not (args.reviews or args.planned_experiments),
 			reviews=bool(args.reviews),
+			planned_experiments=bool(args.planned_experiments),
 		)
 		return 0
 

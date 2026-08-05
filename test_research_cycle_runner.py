@@ -29,6 +29,7 @@ class ManualResearchCycleRunnerTests(unittest.TestCase):
                 confidence=0.42,
             )
         ]
+        storage.load_observations.return_value = []
         storage.load_experiment_requests.return_value = experiment_requests or []
         storage.load_experiment_results.return_value = experiment_results or []
         storage.load_hypothesis_reviews.return_value = []
@@ -196,6 +197,140 @@ class ManualResearchCycleRunnerTests(unittest.TestCase):
                 symbol="NVDA",
                 dry_run=True,
                 reviews=True,
+                storage=storage,
+            )
+
+    def test_planned_experiments_mode_generates_requests_for_selected_hypotheses_and_prints_flags(self):
+        storage = self._build_storage()
+        generated_requests = [
+            ExperimentRequest(
+                experiment_request_id="expreq-001",
+                hypothesis_id="hyp-001",
+                hypothesis_version_id="hyp-001:v1",
+                symbol="NVDA",
+                title="Validate momentum continuation",
+                objective="Test initial evidence.",
+                test_type=ExperimentTestType.INITIAL_BACKTEST,
+                entry_conditions="Entry",
+                machine_readable_entry_conditions=(
+                    {"field": "Close", "operator": ">", "value": 100.0},
+                ),
+                exit_conditions="Exit",
+                time_horizon="5D",
+                forward_horizon=5,
+                status=ExperimentRequestStatus.PROPOSED,
+            )
+        ]
+        storage.load_experiment_requests.side_effect = [
+            [],
+            generated_requests,
+        ]
+        experiment_request_service = Mock()
+        experiment_request_service.generate_for_symbol.return_value = generated_requests
+        journal = Mock()
+        journal.build.return_value = "Research Journal: NVDA"
+
+        with patch("builtins.print") as mock_print, patch(
+            "research.runner.ExperimentExecutor"
+        ) as mock_experiment_executor, patch(
+            "research.runner.HypothesisReviewService"
+        ) as mock_hypothesis_review_service, patch(
+            "research.runner.HypothesisRevisionService"
+        ) as mock_hypothesis_revision_service, patch(
+            "research.runner.HypothesisRevisionApplicationService"
+        ) as mock_hypothesis_revision_application_service:
+            plan = run_manual_research_cycle(
+                symbol="NVDA",
+                dry_run=False,
+                planned_experiments=True,
+                storage=storage,
+                experiment_request_service=experiment_request_service,
+                journal=journal,
+            )
+
+        self.assertEqual("NVDA", plan.symbol)
+        experiment_request_service.generate_for_symbol.assert_called_once()
+        called_kwargs = experiment_request_service.generate_for_symbol.call_args.kwargs
+        self.assertEqual("NVDA", called_kwargs["symbol"])
+        self.assertEqual(1, len(called_kwargs["hypotheses"]))
+        self.assertEqual("hyp-001", called_kwargs["hypotheses"][0].hypothesis_id)
+        mock_experiment_executor.assert_not_called()
+        mock_hypothesis_review_service.assert_not_called()
+        mock_hypothesis_revision_service.assert_not_called()
+        mock_hypothesis_revision_application_service.assert_not_called()
+        storage.save_hypothesis_reviews.assert_not_called()
+        storage.save_hypothesis_revision_proposals.assert_not_called()
+        storage.save_hypothesis_revision_applications.assert_not_called()
+        mock_print.assert_any_call("Manual Research Cycle: NVDA")
+        mock_print.assert_any_call("Mode : planned-experiments")
+        mock_print.assert_any_call("Records Modified : yes")
+        mock_print.assert_any_call("AI Calls Allowed : yes")
+        mock_print.assert_any_call("Hypotheses Loaded : 1")
+        mock_print.assert_any_call("Hypotheses Selected By Plan : 1")
+        mock_print.assert_any_call("Hypotheses Skipped By Plan : 0")
+        mock_print.assert_any_call("Experiment Requests Generated : 1")
+        mock_print.assert_any_call("Research Plan Items : 1")
+        mock_print.assert_any_call("Final Status : completed")
+
+    def test_planned_experiments_mode_no_candidates_prints_noop_and_skips_ai_calls(self):
+        hypothesis = Hypothesis(
+            hypothesis_id="hyp-001",
+            symbol="NVDA",
+            title="Already has request",
+            description="Not a planned experiment candidate.",
+            status=HypothesisStatus.ACTIVE,
+            confidence=0.4,
+        )
+        existing_request = ExperimentRequest(
+            experiment_request_id="expreq-existing",
+            hypothesis_id="hyp-001",
+            hypothesis_version_id="hyp-001:v1",
+            symbol="NVDA",
+            title="Existing request",
+            objective="Objective",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Entry",
+            machine_readable_entry_conditions=(
+                {"field": "Close", "operator": ">", "value": 100.0},
+            ),
+            exit_conditions="Exit",
+            time_horizon="5D",
+            forward_horizon=5,
+            status=ExperimentRequestStatus.PROPOSED,
+        )
+        storage = self._build_storage(experiment_requests=[existing_request])
+        storage.load_hypotheses.return_value = [hypothesis]
+        experiment_request_service = Mock()
+        journal = Mock()
+
+        with patch("builtins.print") as mock_print:
+            plan = run_manual_research_cycle(
+                symbol="NVDA",
+                dry_run=False,
+                planned_experiments=True,
+                storage=storage,
+                experiment_request_service=experiment_request_service,
+                journal=journal,
+            )
+
+        self.assertEqual("NVDA", plan.symbol)
+        experiment_request_service.generate_for_symbol.assert_not_called()
+        journal.build.assert_not_called()
+        mock_print.assert_any_call("Hypotheses Selected By Plan : 0")
+        mock_print.assert_any_call("Hypotheses Skipped By Plan : 1")
+        mock_print.assert_any_call("Experiment Requests Generated : 0")
+        mock_print.assert_any_call("Final Status : no-op")
+        mock_print.assert_any_call("No-op: no hypotheses currently require planned experiment requests.")
+
+    def test_research_cycle_rejects_reviews_and_planned_experiments_together(self):
+        storage = self._build_storage()
+
+        with self.assertRaises(ValueError):
+            run_manual_research_cycle(
+                symbol="NVDA",
+                dry_run=False,
+                reviews=True,
+                planned_experiments=True,
                 storage=storage,
             )
 

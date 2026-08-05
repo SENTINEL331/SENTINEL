@@ -270,25 +270,64 @@ class RunnerCliTests(unittest.TestCase):
             exit_code = main(["research-cycle", "NVDA"])
 
         self.assertEqual(0, exit_code)
-        mock_research_cycle.assert_called_once_with(symbol="NVDA", dry_run=True, reviews=False)
+        mock_research_cycle.assert_called_once_with(
+            symbol="NVDA",
+            dry_run=True,
+            reviews=False,
+            planned_experiments=False,
+        )
 
     def test_research_cycle_command_with_dry_run_flag_dispatches_to_runner(self):
         with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:
             exit_code = main(["research-cycle", "NVDA", "--dry-run"])
 
         self.assertEqual(0, exit_code)
-        mock_research_cycle.assert_called_once_with(symbol="NVDA", dry_run=True, reviews=False)
+        mock_research_cycle.assert_called_once_with(
+            symbol="NVDA",
+            dry_run=True,
+            reviews=False,
+            planned_experiments=False,
+        )
 
     def test_research_cycle_command_with_reviews_flag_dispatches_to_runner(self):
         with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:
             exit_code = main(["research-cycle", "NVDA", "--reviews"])
 
         self.assertEqual(0, exit_code)
-        mock_research_cycle.assert_called_once_with(symbol="NVDA", dry_run=False, reviews=True)
+        mock_research_cycle.assert_called_once_with(
+            symbol="NVDA",
+            dry_run=False,
+            reviews=True,
+            planned_experiments=False,
+        )
+
+    def test_research_cycle_command_with_planned_experiments_flag_dispatches_to_runner(self):
+        with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:
+            exit_code = main(["research-cycle", "NVDA", "--planned-experiments"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_cycle.assert_called_once_with(
+            symbol="NVDA",
+            dry_run=False,
+            reviews=False,
+            planned_experiments=True,
+        )
 
     def test_research_cycle_command_rejects_dry_run_and_reviews_together(self):
         with self.assertRaises(SystemExit) as context:
             main(["research-cycle", "NVDA", "--dry-run", "--reviews"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_dry_run_and_planned_experiments_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--dry-run", "--planned-experiments"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_reviews_and_planned_experiments_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--reviews", "--planned-experiments"])
 
         self.assertEqual(2, context.exception.code)
 
