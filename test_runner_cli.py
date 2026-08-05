@@ -36,6 +36,7 @@ class RunnerCliTests(unittest.TestCase):
         self.assertIn("research-cycle", buffer.getvalue())
         self.assertIn("research-state", buffer.getvalue())
         self.assertIn("research-dashboard", buffer.getvalue())
+        self.assertIn("research-freshness", buffer.getvalue())
         mock_hypotheses.assert_not_called()
         mock_experiment_requests.assert_not_called()
         mock_experiment_execution.assert_not_called()
@@ -46,6 +47,20 @@ class RunnerCliTests(unittest.TestCase):
         mock_research_cycle.assert_not_called()
         mock_research_plan.assert_not_called()
         mock_research_dashboard.assert_not_called()
+
+    def test_research_freshness_command_dispatches_to_research_freshness_runner(self):
+        with patch("research.runner.run_manual_research_freshness") as mock_research_freshness:
+            exit_code = main(["research-freshness", "NVDA"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_freshness.assert_called_once_with(symbol="NVDA")
+
+    def test_research_freshness_command_uses_default_symbol(self):
+        with patch("research.runner.run_manual_research_freshness") as mock_research_freshness:
+            exit_code = main(["research-freshness"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_freshness.assert_called_once_with(symbol=DEFAULT_SYMBOL)
 
     def test_research_cycle_help_includes_new_mode_flags(self):
         buffer = io.StringIO()

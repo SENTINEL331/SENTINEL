@@ -19,6 +19,9 @@ from research.hypothesis_evaluation import evaluate_hypothesis_evidence
 from research.hypothesis_evaluation import HypothesisEvidenceStatus
 from research.hypothesis_lifecycle import recommend_hypothesis_lifecycle_actions
 from research.hypothesis_lifecycle import select_latest_hypothesis_reviews
+from research.research_freshness import ProposalFreshnessStatus
+from research.research_freshness import ReviewFreshnessStatus
+from research.research_freshness import build_research_freshness
 from research.research_plan import ResearchPlanAction
 from research.research_plan import ResearchPlanPriority
 from research.research_plan import build_research_plan
@@ -483,6 +486,122 @@ def run_manual_research_state(
 	print("Research state read complete. No records were modified.")
 
 	return research_plan
+
+
+def run_manual_research_freshness(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Render a deterministic read-only freshness report for one symbol."""
+
+	def _format_timestamp(value):
+		if value is None:
+			return "None"
+		if isinstance(value, str):
+			return value
+
+		return value.isoformat()
+
+	storage = storage or Storage()
+	hypotheses = storage.load_hypotheses(symbol)
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = storage.load_experiment_results(symbol)
+	observations = storage.load_observations(symbol)
+	load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
+	hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
+	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+
+	evidence_summaries = evaluate_hypothesis_evidence(
+		hypotheses=hypotheses,
+		experiment_results=experiment_results,
+		experiment_requests=experiment_requests,
+	)
+	latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+	lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	freshness_items = build_research_freshness(
+		hypotheses=hypotheses,
+		observations=observations,
+		experiment_requests=experiment_requests,
+		experiment_results=experiment_results,
+		hypothesis_reviews=hypothesis_reviews,
+		revision_proposals=revision_proposals,
+		lifecycle_recommendations=lifecycle_recommendations,
+	)
+
+	review_freshness_counts = {status.value: 0 for status in ReviewFreshnessStatus}
+	for item in freshness_items:
+		review_freshness_counts[item.review_freshness.value] = (
+			review_freshness_counts.get(item.review_freshness.value, 0) + 1
+		)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Research Freshness: {symbol}")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print(f"Hypotheses Loaded : {len(hypotheses)}")
+	print(f"Freshness Items : {len(freshness_items)}")
+
+	print()
+	print("Research Freshness")
+	print("------------------")
+	for item in freshness_items:
+		print(
+			f"- {item.hypothesis_id} "
+			f"review_freshness={item.review_freshness.value} "
+			f"proposal_freshness={item.proposal_freshness.value}"
+		)
+		print(f"  latest_completed_result_at={_format_timestamp(item.latest_completed_result_at)}")
+		print(f"  latest_review_at={_format_timestamp(item.latest_review_at)}")
+		print(f"  latest_observation_at={_format_timestamp(item.latest_observation_at)}")
+		print(f"  latest_revision_proposal_at={_format_timestamp(item.latest_revision_proposal_at)}")
+		print(f"  rationale: {item.rationale}")
+
+	print()
+	print("Freshness Summary")
+	print("-----------------")
+	for status in ReviewFreshnessStatus:
+		print(f"- {status.value} : {review_freshness_counts.get(status.value, 0)}")
+
+	print()
+	print("Suggested Next Commands")
+	print("-----------------------")
+	suggestions = []
+	if any(
+		item.review_freshness in {
+			ReviewFreshnessStatus.MISSING,
+			ReviewFreshnessStatus.STALE_AFTER_NEW_RESULT,
+			ReviewFreshnessStatus.STALE_AFTER_NEW_OBSERVATION,
+		}
+		for item in freshness_items
+	):
+		suggestions.append(f"python -m research.runner research-cycle {symbol} --reviews")
+
+	if any(
+		item.proposal_freshness in {
+			ProposalFreshnessStatus.MISSING_FOR_REFINE_CANDIDATE,
+			ProposalFreshnessStatus.STALE_AFTER_REVIEW,
+		}
+		for item in freshness_items
+	):
+		suggestions.append(f"python -m research.runner research-cycle {symbol} --revisions")
+
+	if suggestions:
+		for suggestion in suggestions:
+			print(f"- {suggestion}")
+	else:
+		print("No suggested follow-up commands from current freshness state.")
+
+	print()
+	print("Research freshness read complete. No records were modified.")
+
+	return freshness_items
 
 
 def run_manual_research_dashboard(
@@ -1784,6 +1903,17 @@ def _build_arg_parser():
 		help="Optional symbols to review; defaults to config.settings.WATCHLIST.",
 	)
 
+	research_freshness_parser = subparsers.add_parser(
+		"research-freshness",
+		help="Show deterministic read-only freshness analysis for one symbol.",
+	)
+	research_freshness_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -1906,6 +2036,10 @@ def main(argv=None):
 
 	if args.mode == "research-dashboard":
 		run_manual_research_dashboard(symbols=args.symbols)
+		return 0
+
+	if args.mode == "research-freshness":
+		run_manual_research_freshness(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
