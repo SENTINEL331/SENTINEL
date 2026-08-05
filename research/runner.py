@@ -308,9 +308,17 @@ def run_manual_research_plan(
 def run_manual_research_cycle(
 	symbol=DEFAULT_SYMBOL,
 	dry_run=True,
+	reviews=False,
 	storage=None,
+	hypothesis_review_service=None,
 ):
-	"""Run a dry-run research cycle preview for one symbol."""
+	"""Run a manual research cycle in dry-run or explicit reviews mode."""
+
+	if dry_run and reviews:
+		raise ValueError("research-cycle mode is mutually exclusive: choose dry-run or reviews")
+
+	if not dry_run and not reviews:
+		raise ValueError("research-cycle requires either dry-run or reviews mode")
 
 	storage = storage or Storage()
 	hypotheses = storage.load_hypotheses(symbol)
@@ -345,6 +353,78 @@ def run_manual_research_cycle(
 	planned_action_counts = {}
 	for item in research_plan.items:
 		planned_action_counts[item.recommended_action.value] = planned_action_counts.get(item.recommended_action.value, 0) + 1
+
+	review_candidate_hypothesis_ids = {
+		item.hypothesis_id
+		for item in research_plan.items
+		if item.recommended_action == ResearchPlanAction.GENERATE_HYPOTHESIS_REVIEW
+	}
+	review_candidates = [
+		hypothesis
+		for hypothesis in hypotheses
+		if hypothesis.hypothesis_id in review_candidate_hypothesis_ids
+	]
+
+	if reviews:
+		reviews_generated = []
+		final_plan = research_plan
+
+		print()
+		print("=" * 50)
+		print(f"Manual Research Cycle: {symbol}")
+		print("=" * 50)
+		print()
+		print("Mode : reviews")
+		print("Records Modified : yes")
+		print("AI Calls Allowed : yes")
+		print(f"Hypotheses Loaded : {len(hypotheses)}")
+		print(f"Review Candidates : {len(review_candidates)}")
+
+		if review_candidates:
+			hypothesis_review_service = (
+				hypothesis_review_service
+				or HypothesisReviewService(storage=storage)
+			)
+
+			try:
+				reviews_generated = hypothesis_review_service.generate_for_symbol(
+					symbol=symbol,
+					hypotheses=review_candidates,
+				)
+			except TypeError:
+				# Backward-compatible fallback if a custom service does not accept scoped hypotheses.
+				reviews_generated = hypothesis_review_service.generate_for_symbol(symbol=symbol)
+
+			updated_hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
+			updated_latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(updated_hypothesis_reviews)
+			updated_lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+				hypotheses=hypotheses,
+				evidence_summaries=evidence_summaries,
+				latest_reviews_by_hypothesis_id=updated_latest_reviews_by_hypothesis_id,
+			)
+			final_plan = build_research_plan(
+				symbol=symbol,
+				hypotheses=hypotheses,
+				experiment_requests=experiment_requests,
+				experiment_results=experiment_results,
+				evidence_summaries=evidence_summaries,
+				latest_reviews_by_hypothesis_id=updated_latest_reviews_by_hypothesis_id,
+				lifecycle_recommendations=updated_lifecycle_recommendations,
+				revision_proposals=revision_proposals,
+				revision_applications=revision_applications,
+			)
+
+			print(f"Reviews Generated : {len(reviews_generated)}")
+			print(f"Research Plan Items : {len(final_plan.items)}")
+			print("Final Status : completed")
+		else:
+			print("Reviews Generated : 0")
+			print(f"Research Plan Items : {len(final_plan.items)}")
+			print("Final Status : no-op")
+			print()
+			print("No-op: no hypotheses currently require review generation.")
+
+		return final_plan
 
 	print()
 	print("=" * 50)
@@ -862,10 +942,16 @@ def _build_arg_parser():
 		default=DEFAULT_SYMBOL,
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
-	research_cycle_parser.add_argument(
+	research_cycle_mode_group = research_cycle_parser.add_mutually_exclusive_group()
+	research_cycle_mode_group.add_argument(
 		"--dry-run",
 		action="store_true",
 		help="Preview the research cycle without modifying records (default).",
+	)
+	research_cycle_mode_group.add_argument(
+		"--reviews",
+		action="store_true",
+		help="Run review-only orchestration for planned hypothesis-review actions.",
 	)
 
 	hypothesis_revision_apply_parser = subparsers.add_parser(
@@ -943,7 +1029,11 @@ def main(argv=None):
 		return 0
 
 	if args.mode == "research-cycle":
-		run_manual_research_cycle(symbol=args.symbol, dry_run=True)
+		run_manual_research_cycle(
+			symbol=args.symbol,
+			dry_run=not args.reviews,
+			reviews=bool(args.reviews),
+		)
 		return 0
 
 	if args.mode == "hypothesis-revision-apply":

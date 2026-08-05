@@ -270,14 +270,27 @@ class RunnerCliTests(unittest.TestCase):
             exit_code = main(["research-cycle", "NVDA"])
 
         self.assertEqual(0, exit_code)
-        mock_research_cycle.assert_called_once_with(symbol="NVDA", dry_run=True)
+        mock_research_cycle.assert_called_once_with(symbol="NVDA", dry_run=True, reviews=False)
 
     def test_research_cycle_command_with_dry_run_flag_dispatches_to_runner(self):
         with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:
             exit_code = main(["research-cycle", "NVDA", "--dry-run"])
 
         self.assertEqual(0, exit_code)
-        mock_research_cycle.assert_called_once_with(symbol="NVDA", dry_run=True)
+        mock_research_cycle.assert_called_once_with(symbol="NVDA", dry_run=True, reviews=False)
+
+    def test_research_cycle_command_with_reviews_flag_dispatches_to_runner(self):
+        with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:
+            exit_code = main(["research-cycle", "NVDA", "--reviews"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_cycle.assert_called_once_with(symbol="NVDA", dry_run=False, reviews=True)
+
+    def test_research_cycle_command_rejects_dry_run_and_reviews_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--dry-run", "--reviews"])
+
+        self.assertEqual(2, context.exception.code)
 
     def test_hypothesis_revision_apply_command_dispatches_to_runner_in_dry_run_mode(self):
         with patch(
