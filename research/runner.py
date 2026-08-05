@@ -12,10 +12,13 @@ from ai.storage import Storage
 from research.executor import ExperimentExecutor
 from research.experiment import ExperimentRequestExecutionState
 from research.experiment_result import ExperimentResultStatus
+from research.hypothesis import HypothesisStatus
 from research.hypothesis_evaluation import evaluate_hypothesis_evidence
+from research.hypothesis_evaluation import HypothesisEvidenceStatus
 from research.hypothesis_lifecycle import recommend_hypothesis_lifecycle_actions
 from research.hypothesis_lifecycle import select_latest_hypothesis_reviews
 from research.research_plan import ResearchPlanAction
+from research.research_plan import ResearchPlanPriority
 from research.research_plan import build_research_plan
 
 
@@ -301,6 +304,181 @@ def run_manual_research_plan(
 	else:
 		print()
 		print("No research plan items.")
+
+	return research_plan
+
+
+def run_manual_research_state(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Render a deterministic read-only research dashboard for one symbol."""
+
+	storage = storage or Storage()
+	hypotheses = storage.load_hypotheses(symbol)
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = storage.load_experiment_results(symbol)
+	load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
+	hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
+	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+	revision_applications = storage.load_hypothesis_revision_applications(symbol)
+
+	evidence_summaries = evaluate_hypothesis_evidence(
+		hypotheses=hypotheses,
+		experiment_results=experiment_results,
+		experiment_requests=experiment_requests,
+	)
+	latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+	lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	research_plan = build_research_plan(
+		symbol=symbol,
+		hypotheses=hypotheses,
+		experiment_requests=experiment_requests,
+		experiment_results=experiment_results,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+		lifecycle_recommendations=lifecycle_recommendations,
+		revision_proposals=revision_proposals,
+		revision_applications=revision_applications,
+	)
+
+	parent_hypothesis_count = sum(
+		1
+		for hypothesis in hypotheses
+		if hypothesis.parent_hypothesis_id is None
+	)
+	child_hypothesis_count = len(hypotheses) - parent_hypothesis_count
+	executable_request_count = sum(
+		1
+		for request in experiment_requests
+		if request.execution_state == ExperimentRequestExecutionState.EXECUTABLE
+	)
+	completed_result_count = sum(
+		1
+		for result in experiment_results
+		if result.status == ExperimentResultStatus.COMPLETED
+	)
+
+	status_counts = {status.value: 0 for status in HypothesisStatus}
+	for hypothesis in hypotheses:
+		status_counts[hypothesis.status.value] = status_counts.get(hypothesis.status.value, 0) + 1
+
+	evidence_counts = {status.value: 0 for status in HypothesisEvidenceStatus}
+	for summary in evidence_summaries:
+		evidence_counts[summary.evidence_status.value] = (
+			evidence_counts.get(summary.evidence_status.value, 0) + 1
+		)
+
+	plan_action_counts = {action.value: 0 for action in ResearchPlanAction}
+	for item in research_plan.items:
+		plan_action_counts[item.recommended_action.value] = (
+			plan_action_counts.get(item.recommended_action.value, 0) + 1
+		)
+
+	lineage_pairs = sorted(
+		[
+			(
+				hypothesis.parent_hypothesis_id,
+				hypothesis.hypothesis_id,
+				hypothesis.source_revision_proposal_id,
+			)
+			for hypothesis in hypotheses
+			if hypothesis.parent_hypothesis_id is not None
+		],
+	)
+
+	priority_rank = {
+		ResearchPlanPriority.HIGH: 0,
+		ResearchPlanPriority.MEDIUM: 1,
+		ResearchPlanPriority.LOW: 2,
+	}
+	attention_items = sorted(
+		enumerate(research_plan.items),
+		key=lambda entry: (priority_rank.get(entry[1].priority, 99), entry[0]),
+	)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Research State: {symbol}")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+
+	print()
+	print("Object Counts")
+	print("-------------")
+	print(f"- hypotheses : {len(hypotheses)}")
+	print(f"- parent hypotheses : {parent_hypothesis_count}")
+	print(f"- child hypotheses : {child_hypothesis_count}")
+	print(f"- experiment requests : {len(experiment_requests)}")
+	print(f"- executable experiment requests : {executable_request_count}")
+	print(f"- completed experiment results : {completed_result_count}")
+	print(f"- hypothesis reviews : {len(hypothesis_reviews)}")
+	print(f"- revision proposals : {len(revision_proposals)}")
+	print(f"- revision applications : {len(revision_applications)}")
+	print(f"- research plan items : {len(research_plan.items)}")
+
+	print()
+	print("Hypothesis Status Summary")
+	print("-------------------------")
+	for status in HypothesisStatus:
+		print(f"- {status.value} : {status_counts.get(status.value, 0)}")
+
+	print()
+	print("Evidence Summary")
+	print("----------------")
+	for status in HypothesisEvidenceStatus:
+		print(f"- {status.value} : {evidence_counts.get(status.value, 0)}")
+
+	print()
+	print("Research Plan Summary")
+	print("---------------------")
+	for action in ResearchPlanAction:
+		print(f"- {action.value} : {plan_action_counts.get(action.value, 0)}")
+
+	print()
+	print("Lineage Summary")
+	print("---------------")
+	if lineage_pairs:
+		for parent_hypothesis_id, child_hypothesis_id, source_revision_proposal_id in lineage_pairs:
+			if source_revision_proposal_id:
+				print(
+					"- "
+					f"parent_hypothesis_id={parent_hypothesis_id} "
+					f"child_hypothesis_id={child_hypothesis_id} "
+					f"source_revision_proposal_id={source_revision_proposal_id}"
+				)
+			else:
+				print(
+					"- "
+					f"parent_hypothesis_id={parent_hypothesis_id} "
+					f"child_hypothesis_id={child_hypothesis_id}"
+				)
+	else:
+		print("No parent-child hypothesis lineage records found.")
+
+	print()
+	print("Top Attention Items")
+	print("-------------------")
+	if attention_items:
+		for _, item in attention_items[:5]:
+			print(
+				"- "
+				f"hypothesis_id={item.hypothesis_id} "
+				f"action={item.recommended_action.value} "
+				f"priority={item.priority.value}"
+			)
+			print(f"  reason: {item.reason}")
+	else:
+		print("No research plan attention items.")
+
+	print()
+	print("Research state read complete. No records were modified.")
 
 	return research_plan
 
@@ -1343,6 +1521,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	research_state_parser = subparsers.add_parser(
+		"research-state",
+		help="Show deterministic read-only research state for one symbol.",
+	)
+	research_state_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -1457,6 +1646,10 @@ def main(argv=None):
 
 	if args.mode == "research-plan":
 		run_manual_research_plan(symbol=args.symbol)
+		return 0
+
+	if args.mode == "research-state":
+		run_manual_research_state(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":

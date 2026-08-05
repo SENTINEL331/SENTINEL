@@ -32,6 +32,7 @@ class RunnerCliTests(unittest.TestCase):
 
         self.assertEqual(0, context.exception.code)
         self.assertIn("research-cycle", buffer.getvalue())
+        self.assertIn("research-state", buffer.getvalue())
         mock_hypotheses.assert_not_called()
         mock_experiment_requests.assert_not_called()
         mock_experiment_execution.assert_not_called()
@@ -276,6 +277,20 @@ class RunnerCliTests(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         mock_research_plan.assert_called_once_with(symbol=DEFAULT_SYMBOL)
+
+    def test_research_state_command_dispatches_to_research_state_runner(self):
+        with patch("research.runner.run_manual_research_state") as mock_research_state:
+            exit_code = main(["research-state", "NVDA"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_state.assert_called_once_with(symbol="NVDA")
+
+    def test_research_state_command_uses_default_symbol(self):
+        with patch("research.runner.run_manual_research_state") as mock_research_state:
+            exit_code = main(["research-state"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_state.assert_called_once_with(symbol=DEFAULT_SYMBOL)
 
     def test_research_cycle_command_dispatches_to_runner(self):
         with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:
