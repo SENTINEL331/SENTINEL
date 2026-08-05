@@ -142,7 +142,10 @@ def run_manual_experiment_request_generation(
 	load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
 	hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
 	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
-	revision_applications = storage.load_hypothesis_revision_applications(symbol)
+	load_revision_applications = getattr(storage, "load_hypothesis_revision_applications", None)
+	revision_applications = (
+		load_revision_applications(symbol) if callable(load_revision_applications) else []
+	)
 	evidence_summaries = evaluate_hypothesis_evidence(
 		hypotheses=hypotheses,
 		experiment_results=experiment_results,
@@ -256,6 +259,7 @@ def run_manual_research_plan(
 	load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
 	hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
 	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+	revision_applications = storage.load_hypothesis_revision_applications(symbol)
 	revision_applications = storage.load_hypothesis_revision_applications(symbol)
 	evidence_summaries = evaluate_hypothesis_evidence(
 		hypotheses=hypotheses,
@@ -510,6 +514,7 @@ def run_manual_research_freshness(
 	load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
 	hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
 	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+	revision_applications = storage.load_hypothesis_revision_applications(symbol)
 
 	evidence_summaries = evaluate_hypothesis_evidence(
 		hypotheses=hypotheses,
@@ -521,6 +526,17 @@ def run_manual_research_freshness(
 		hypotheses=hypotheses,
 		evidence_summaries=evidence_summaries,
 		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	research_plan = build_research_plan(
+		symbol=symbol,
+		hypotheses=hypotheses,
+		experiment_requests=experiment_requests,
+		experiment_results=experiment_results,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+		lifecycle_recommendations=lifecycle_recommendations,
+		revision_proposals=revision_proposals,
+		revision_applications=revision_applications,
 	)
 	freshness_items = build_research_freshness(
 		hypotheses=hypotheses,
@@ -573,30 +589,62 @@ def run_manual_research_freshness(
 	print("Suggested Next Commands")
 	print("-----------------------")
 	suggestions = []
-	if any(
-		item.review_freshness in {
+	review_issue_hypothesis_ids = {
+		item.hypothesis_id
+		for item in freshness_items
+		if item.review_freshness in {
 			ReviewFreshnessStatus.MISSING,
 			ReviewFreshnessStatus.STALE_AFTER_NEW_RESULT,
 			ReviewFreshnessStatus.STALE_AFTER_NEW_OBSERVATION,
 		}
+	}
+	proposal_issue_hypothesis_ids = {
+		item.hypothesis_id
 		for item in freshness_items
-	):
-		suggestions.append(f"python -m research.runner research-cycle {symbol} --reviews")
-
-	if any(
-		item.proposal_freshness in {
+		if item.proposal_freshness in {
 			ProposalFreshnessStatus.MISSING_FOR_REFINE_CANDIDATE,
 			ProposalFreshnessStatus.STALE_AFTER_REVIEW,
 		}
-		for item in freshness_items
-	):
+	}
+	actionable_review_hypothesis_ids = {
+		item.hypothesis_id
+		for item in research_plan.items
+		if item.recommended_action == ResearchPlanAction.GENERATE_HYPOTHESIS_REVIEW
+	}
+	actionable_revision_hypothesis_ids = {
+		item.hypothesis_id
+		for item in research_plan.items
+		if item.recommended_action == ResearchPlanAction.GENERATE_REVISION_PROPOSAL
+	}
+	actionable_review_issue_hypothesis_ids = (
+		review_issue_hypothesis_ids & actionable_review_hypothesis_ids
+	)
+	actionable_proposal_issue_hypothesis_ids = (
+		proposal_issue_hypothesis_ids & actionable_revision_hypothesis_ids
+	)
+
+	if actionable_review_issue_hypothesis_ids:
+		suggestions.append(f"python -m research.runner research-cycle {symbol} --reviews")
+
+	if actionable_proposal_issue_hypothesis_ids:
 		suggestions.append(f"python -m research.runner research-cycle {symbol} --revisions")
+
+	has_freshness_issues = bool(review_issue_hypothesis_ids or proposal_issue_hypothesis_ids)
+	has_actionable_freshness_command = bool(
+		actionable_review_issue_hypothesis_ids or actionable_proposal_issue_hypothesis_ids
+	)
 
 	if suggestions:
 		for suggestion in suggestions:
 			print(f"- {suggestion}")
+
+		if has_freshness_issues and not has_actionable_freshness_command:
+			print("Freshness issues exist, but no automatic research-cycle action is currently eligible.")
 	else:
-		print("No suggested follow-up commands from current freshness state.")
+		if has_freshness_issues and not has_actionable_freshness_command:
+			print("Freshness issues exist, but no automatic research-cycle action is currently eligible.")
+		else:
+			print("No suggested follow-up commands from current freshness state.")
 
 	print()
 	print("Research freshness read complete. No records were modified.")
@@ -629,6 +677,8 @@ def run_manual_research_dashboard(
 	symbol_summaries = []
 	suggested_commands = []
 	suggested_command_set = set()
+	has_any_freshness_issues = False
+	has_any_actionable_freshness_command = False
 
 	def _add_suggested_command(command):
 		if command in suggested_command_set:
@@ -704,6 +754,25 @@ def run_manual_research_dashboard(
 			for item in freshness_items
 			if item.proposal_freshness == ProposalFreshnessStatus.MISSING_FOR_REFINE_CANDIDATE
 		)
+		review_issue_hypothesis_ids = {
+			item.hypothesis_id
+			for item in freshness_items
+			if item.review_freshness in {
+				ReviewFreshnessStatus.MISSING,
+				ReviewFreshnessStatus.STALE_AFTER_NEW_RESULT,
+				ReviewFreshnessStatus.STALE_AFTER_NEW_OBSERVATION,
+			}
+		}
+		proposal_issue_hypothesis_ids = {
+			item.hypothesis_id
+			for item in freshness_items
+			if item.proposal_freshness in {
+				ProposalFreshnessStatus.MISSING_FOR_REFINE_CANDIDATE,
+				ProposalFreshnessStatus.STALE_AFTER_REVIEW,
+			}
+		}
+		if review_issue_hypothesis_ids or proposal_issue_hypothesis_ids:
+			has_any_freshness_issues = True
 
 		child_hypothesis_count = sum(
 			1
@@ -798,27 +867,24 @@ def run_manual_research_dashboard(
 			_add_suggested_command(
 				f"python -m research.runner hypothesis-revision-apply {symbol} <proposal_id> --dry-run"
 			)
+		actionable_review_hypothesis_ids = {
+			item.hypothesis_id
+			for item in research_plan.items
+			if item.recommended_action == ResearchPlanAction.GENERATE_HYPOTHESIS_REVIEW
+		}
+		actionable_revision_hypothesis_ids = {
+			item.hypothesis_id
+			for item in research_plan.items
+			if item.recommended_action == ResearchPlanAction.GENERATE_REVISION_PROPOSAL
+		}
 
-		if any(
-			item.review_freshness
-			in {
-				ReviewFreshnessStatus.MISSING,
-				ReviewFreshnessStatus.STALE_AFTER_NEW_RESULT,
-				ReviewFreshnessStatus.STALE_AFTER_NEW_OBSERVATION,
-			}
-			for item in freshness_items
-		):
+		if review_issue_hypothesis_ids & actionable_review_hypothesis_ids:
 			_add_suggested_command(f"python -m research.runner research-cycle {symbol} --reviews")
+			has_any_actionable_freshness_command = True
 
-		if any(
-			item.proposal_freshness
-			in {
-				ProposalFreshnessStatus.MISSING_FOR_REFINE_CANDIDATE,
-				ProposalFreshnessStatus.STALE_AFTER_REVIEW,
-			}
-			for item in freshness_items
-		):
+		if proposal_issue_hypothesis_ids & actionable_revision_hypothesis_ids:
 			_add_suggested_command(f"python -m research.runner research-cycle {symbol} --revisions")
+			has_any_actionable_freshness_command = True
 
 	sorted_attention_items = sorted(
 		attention_items,
@@ -894,6 +960,9 @@ def run_manual_research_dashboard(
 		for command in suggested_commands:
 			print(f"- {command}")
 
+		if has_any_freshness_issues and not has_any_actionable_freshness_command:
+			print("Freshness issues exist, but no automatic research-cycle action is currently eligible.")
+
 		if any(
 			summary["action_counts"][ResearchPlanAction.APPLY_REVISION_PROPOSAL_CANDIDATE.value] > 0
 			for summary in symbol_summaries
@@ -902,7 +971,10 @@ def run_manual_research_dashboard(
 				"- Note: hypothesis-revision-apply requires a concrete proposal_id and explicit human choice."
 			)
 	else:
-		print("No suggested follow-up commands from current watchlist state.")
+		if has_any_freshness_issues and not has_any_actionable_freshness_command:
+			print("Freshness issues exist, but no automatic research-cycle action is currently eligible.")
+		else:
+			print("No suggested follow-up commands from current watchlist state.")
 
 	print()
 	print("Research dashboard read complete. No records were modified.")

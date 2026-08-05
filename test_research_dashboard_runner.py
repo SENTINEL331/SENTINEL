@@ -769,6 +769,94 @@ class ManualResearchDashboardRunnerTests(unittest.TestCase):
         )
         mock_print.assert_any_call("No suggested follow-up commands from current watchlist state.")
 
+    def test_dashboard_does_not_suggest_non_actionable_stale_parent_review(self):
+        now = datetime.now(timezone.utc)
+        data_by_symbol = {
+            "NVDA": {
+                "hypotheses": [
+                    Hypothesis(
+                        hypothesis_id="hyp-parent-001",
+                        symbol="NVDA",
+                        title="Parent",
+                        description="Parent",
+                        status=HypothesisStatus.ACTIVE,
+                        confidence=0.5,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    Hypothesis(
+                        hypothesis_id="hyp-child-001",
+                        symbol="NVDA",
+                        title="Child",
+                        description="Child",
+                        status=HypothesisStatus.ACTIVE,
+                        confidence=0.5,
+                        parent_hypothesis_id="hyp-parent-001",
+                        source_revision_proposal_id="hyprevp-001",
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                ],
+                "experiment_requests": [],
+                "experiment_results": [],
+                "hypothesis_reviews": [],
+                "revision_proposals": [],
+                "revision_applications": [],
+            }
+        }
+        storage = self._build_storage(data_by_symbol)
+
+        plan = ResearchPlan(
+            symbol="NVDA",
+            items=(
+                ResearchPlanItem(
+                    symbol="NVDA",
+                    hypothesis_id="hyp-parent-001",
+                    hypothesis_title="Parent",
+                    recommended_action=ResearchPlanAction.SKIP_PARENT_REFINED,
+                    priority=ResearchPlanPriority.LOW,
+                    reason="parent refined",
+                    related_child_hypothesis_id="hyp-child-001",
+                ),
+                ResearchPlanItem(
+                    symbol="NVDA",
+                    hypothesis_id="hyp-child-001",
+                    hypothesis_title="Child",
+                    recommended_action=ResearchPlanAction.NO_ACTION,
+                    priority=ResearchPlanPriority.LOW,
+                    reason="child no action",
+                ),
+            ),
+        )
+        freshness_items = [
+            self._freshness_item(
+                hypothesis_id="hyp-parent-001",
+                hypothesis_title="Parent",
+                review_freshness=ReviewFreshnessStatus.STALE_AFTER_NEW_RESULT,
+                proposal_freshness=ProposalFreshnessStatus.NOT_APPLICABLE,
+            ),
+            self._freshness_item(
+                hypothesis_id="hyp-child-001",
+                hypothesis_title="Child",
+                review_freshness=ReviewFreshnessStatus.CURRENT,
+                proposal_freshness=ProposalFreshnessStatus.NOT_APPLICABLE,
+            ),
+        ]
+
+        with patch("research.runner.build_research_plan", return_value=plan), patch(
+            "research.runner.build_research_freshness",
+            return_value=freshness_items,
+        ), patch("builtins.print") as mock_print:
+            run_manual_research_dashboard(symbols=["NVDA"], storage=storage)
+
+        self.assertNotIn(
+            call("- python -m research.runner research-cycle NVDA --reviews"),
+            mock_print.mock_calls,
+        )
+        mock_print.assert_any_call(
+            "Freshness issues exist, but no automatic research-cycle action is currently eligible."
+        )
+
     def test_dashboard_does_not_treat_failed_or_not_implemented_as_completed(self):
         now = datetime.now(timezone.utc)
         data_by_symbol = {

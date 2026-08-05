@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from research.experiment import ExperimentRequest
 from research.experiment import ExperimentRequestStatus
@@ -484,7 +484,7 @@ class ManualResearchFreshnessRunnerTests(unittest.TestCase):
     def test_suggested_commands_appear_for_stale_items_and_not_for_current_or_not_applicable(self):
         review_time = datetime(2026, 8, 4, 12, 0, tzinfo=timezone.utc)
         result_time = datetime(2026, 8, 4, 13, 0, tzinfo=timezone.utc)
-        proposal_time = datetime(2026, 8, 4, 11, 0, tzinfo=timezone.utc)
+        revision_review_time = datetime(2026, 8, 4, 14, 0, tzinfo=timezone.utc)
         stale_hypothesis = Hypothesis(
             hypothesis_id="hyp-stale-001",
             symbol="NVDA",
@@ -512,6 +512,15 @@ class ManualResearchFreshnessRunnerTests(unittest.TestCase):
             created_at=review_time,
             updated_at=review_time,
         )
+        revision_hypothesis = Hypothesis(
+            hypothesis_id="hyp-revise-001",
+            symbol="NVDA",
+            title="Needs revision",
+            description="Needs revision proposal.",
+            status=HypothesisStatus.ACTIVE,
+            created_at=review_time,
+            updated_at=review_time,
+        )
         stale_result = self._build_completed_result(
             experiment_request_id="expreq-001",
             hypothesis_id="hyp-stale-001",
@@ -529,6 +538,18 @@ class ManualResearchFreshnessRunnerTests(unittest.TestCase):
             hypothesis_id="hyp-fresh-001",
             completed_at=result_time,
             trade_count=4,
+        )
+        revision_result_one = self._build_completed_result(
+            experiment_request_id="expreq-010",
+            hypothesis_id="hyp-revise-001",
+            completed_at=result_time,
+            trade_count=0,
+        )
+        revision_result_two = self._build_completed_result(
+            experiment_request_id="expreq-011",
+            hypothesis_id="hyp-revise-001",
+            completed_at=result_time,
+            trade_count=0,
         )
         observation = Observation(
             observation_id="obs-001",
@@ -552,30 +573,39 @@ class ManualResearchFreshnessRunnerTests(unittest.TestCase):
             confidence=0.6,
             created_at=review_time,
         )
-        proposal = HypothesisRevisionProposal(
-            proposal_id="hyprevp-001",
+        revision_review = HypothesisReview(
+            review_id="hyprev-010",
+            hypothesis_id="hyp-revise-001",
             symbol="NVDA",
-            parent_hypothesis_id="hyp-stale-001",
-            source_review_id="hyprev-001",
-            lifecycle_action=HypothesisLifecycleAction.REFINE_CANDIDATE,
-            proposal_type=HypothesisRevisionProposalType.CREATE_CHILD_HYPOTHESIS,
-            proposed_title="Refined",
-            proposed_description="Refined description",
-            rationale="Refinement rationale",
+            recommendation=HypothesisReviewRecommendation.KEEP,
+            rationale="Keep.",
             confidence=0.6,
-            created_at=proposal_time,
+            created_at=revision_review_time,
         )
         storage = self._build_storage(
-            hypotheses=[stale_hypothesis, fresh_hypothesis, not_applicable_hypothesis],
+            hypotheses=[
+                stale_hypothesis,
+                fresh_hypothesis,
+                not_applicable_hypothesis,
+                revision_hypothesis,
+            ],
             observations=[observation],
             experiment_requests=[
                 self._build_executable_request(experiment_request_id="expreq-001", hypothesis_id="hyp-stale-001"),
                 self._build_executable_request(experiment_request_id="expreq-003", hypothesis_id="hyp-stale-001"),
                 self._build_executable_request(experiment_request_id="expreq-002", hypothesis_id="hyp-fresh-001"),
+                self._build_executable_request(experiment_request_id="expreq-010", hypothesis_id="hyp-revise-001"),
+                self._build_executable_request(experiment_request_id="expreq-011", hypothesis_id="hyp-revise-001"),
             ],
-            experiment_results=[stale_result, stale_result_two, fresh_result],
-            hypothesis_reviews=[review],
-            revision_proposals=[proposal],
+            experiment_results=[
+                stale_result,
+                stale_result_two,
+                fresh_result,
+                revision_result_one,
+                revision_result_two,
+            ],
+            hypothesis_reviews=[review, revision_review],
+            revision_proposals=[],
         )
 
         with patch("builtins.print") as mock_print:
@@ -649,6 +679,145 @@ class ManualResearchFreshnessRunnerTests(unittest.TestCase):
             run_manual_research_freshness(symbol="NVDA", storage=storage)
 
         mock_print.assert_any_call("No suggested follow-up commands from current freshness state.")
+
+    def test_stale_parent_review_is_reported_but_not_suggested_when_parent_is_skip_parent_refined(self):
+        review_time = datetime(2026, 8, 4, 12, 0, tzinfo=timezone.utc)
+        result_time = datetime(2026, 8, 4, 13, 0, tzinfo=timezone.utc)
+        parent = Hypothesis(
+            hypothesis_id="hyp-parent-001",
+            symbol="NVDA",
+            title="Parent",
+            description="Parent hypothesis.",
+            status=HypothesisStatus.ACTIVE,
+            created_at=review_time,
+            updated_at=review_time,
+        )
+        child = Hypothesis(
+            hypothesis_id="hyp-child-001",
+            symbol="NVDA",
+            title="Child",
+            description="Child hypothesis.",
+            status=HypothesisStatus.ACTIVE,
+            parent_hypothesis_id="hyp-parent-001",
+            source_revision_proposal_id="hyprevp-001",
+            created_at=result_time,
+            updated_at=result_time,
+        )
+        review = HypothesisReview(
+            review_id="hyprev-001",
+            hypothesis_id="hyp-parent-001",
+            symbol="NVDA",
+            recommendation=HypothesisReviewRecommendation.KEEP,
+            rationale="Keep.",
+            confidence=0.6,
+            created_at=review_time,
+        )
+        completed_result = self._build_completed_result(
+            experiment_request_id="expreq-001",
+            hypothesis_id="hyp-parent-001",
+            completed_at=result_time,
+        )
+        storage = self._build_storage(
+            hypotheses=[parent, child],
+            experiment_requests=[
+                self._build_executable_request(
+                    experiment_request_id="expreq-001",
+                    hypothesis_id="hyp-parent-001",
+                )
+            ],
+            experiment_results=[completed_result],
+            hypothesis_reviews=[review],
+            revision_proposals=[],
+        )
+
+        with patch("builtins.print") as mock_print:
+            run_manual_research_freshness(symbol="NVDA", storage=storage)
+
+        mock_print.assert_any_call(
+            "- hyp-parent-001 review_freshness=stale_after_new_result proposal_freshness=not_applicable"
+        )
+        self.assertNotIn(
+            call("- python -m research.runner research-cycle NVDA --reviews"),
+            mock_print.mock_calls,
+        )
+        mock_print.assert_any_call(
+            "Freshness issues exist, but no automatic research-cycle action is currently eligible."
+        )
+
+    def test_missing_review_on_actionable_hypothesis_suggests_reviews(self):
+        now = datetime.now(timezone.utc)
+        hypothesis = Hypothesis(
+            hypothesis_id="hyp-001",
+            symbol="NVDA",
+            title="Parent",
+            description="Parent hypothesis.",
+            status=HypothesisStatus.ACTIVE,
+            created_at=now,
+            updated_at=now,
+        )
+        completed_result = self._build_completed_result(
+            experiment_request_id="expreq-001",
+            hypothesis_id="hyp-001",
+            completed_at=now,
+        )
+        storage = self._build_storage(
+            hypotheses=[hypothesis],
+            experiment_requests=[
+                self._build_executable_request(
+                    experiment_request_id="expreq-001",
+                    hypothesis_id="hyp-001",
+                )
+            ],
+            experiment_results=[completed_result],
+        )
+
+        with patch("builtins.print") as mock_print:
+            run_manual_research_freshness(symbol="NVDA", storage=storage)
+
+        mock_print.assert_any_call("- python -m research.runner research-cycle NVDA --reviews")
+
+    def test_stale_review_on_actionable_hypothesis_suggests_reviews(self):
+        review_time = datetime(2026, 8, 4, 12, 0, tzinfo=timezone.utc)
+        result_time = datetime(2026, 8, 4, 13, 0, tzinfo=timezone.utc)
+        hypothesis = Hypothesis(
+            hypothesis_id="hyp-001",
+            symbol="NVDA",
+            title="Parent",
+            description="Parent hypothesis.",
+            status=HypothesisStatus.ACTIVE,
+            created_at=review_time,
+            updated_at=review_time,
+        )
+        review = HypothesisReview(
+            review_id="hyprev-001",
+            hypothesis_id="hyp-001",
+            symbol="NVDA",
+            recommendation=HypothesisReviewRecommendation.KEEP,
+            rationale="Keep.",
+            confidence=0.6,
+            created_at=review_time,
+        )
+        completed_result = self._build_completed_result(
+            experiment_request_id="expreq-001",
+            hypothesis_id="hyp-001",
+            completed_at=result_time,
+        )
+        storage = self._build_storage(
+            hypotheses=[hypothesis],
+            experiment_requests=[
+                self._build_executable_request(
+                    experiment_request_id="expreq-001",
+                    hypothesis_id="hyp-001",
+                )
+            ],
+            experiment_results=[completed_result],
+            hypothesis_reviews=[review],
+        )
+
+        with patch("builtins.print") as mock_print:
+            run_manual_research_freshness(symbol="NVDA", storage=storage)
+
+        mock_print.assert_any_call("- python -m research.runner research-cycle NVDA --reviews")
 
     def test_runner_uses_default_symbol_when_omitted(self):
         storage = self._build_storage(hypotheses=[])
