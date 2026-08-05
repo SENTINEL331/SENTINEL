@@ -311,50 +311,83 @@ def run_manual_research_cycle(
 	reviews=False,
 	planned_experiments=False,
 	run_experiments=False,
+	revisions=False,
+	full_safe=False,
 	storage=None,
 	hypothesis_review_service=None,
+	hypothesis_revision_service=None,
 	experiment_request_service=None,
 	executor=None,
 	journal=None,
 ):
 	"""Run a manual research cycle in one explicit orchestration mode."""
 
-	selected_modes = [dry_run, reviews, planned_experiments, run_experiments]
+	selected_modes = [
+		dry_run,
+		reviews,
+		planned_experiments,
+		run_experiments,
+		revisions,
+		full_safe,
+	]
 	if sum(1 for enabled in selected_modes if enabled) != 1:
 		raise ValueError(
-			"research-cycle mode is mutually exclusive: choose exactly one of dry-run, reviews, planned-experiments, or run-experiments"
+			"research-cycle mode is mutually exclusive: choose exactly one of dry-run, reviews, planned-experiments, run-experiments, revisions, or full-safe"
 		)
 
 	storage = storage or Storage()
-	hypotheses = storage.load_hypotheses(symbol)
-	experiment_requests = storage.load_experiment_requests(symbol)
-	experiment_results = storage.load_experiment_results(symbol)
-	load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
-	hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
-	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
-	revision_applications = storage.load_hypothesis_revision_applications(symbol)
-	evidence_summaries = evaluate_hypothesis_evidence(
-		hypotheses=hypotheses,
-		experiment_results=experiment_results,
-		experiment_requests=experiment_requests,
-	)
-	latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
-	lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
-		hypotheses=hypotheses,
-		evidence_summaries=evidence_summaries,
-		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
-	)
-	research_plan = build_research_plan(
-		symbol=symbol,
-		hypotheses=hypotheses,
-		experiment_requests=experiment_requests,
-		experiment_results=experiment_results,
-		evidence_summaries=evidence_summaries,
-		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
-		lifecycle_recommendations=lifecycle_recommendations,
-		revision_proposals=revision_proposals,
-		revision_applications=revision_applications,
-	)
+
+	def _build_cycle_state():
+		hypotheses = storage.load_hypotheses(symbol)
+		experiment_requests = storage.load_experiment_requests(symbol)
+		experiment_results = storage.load_experiment_results(symbol)
+		load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
+		hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
+		revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+		revision_applications = storage.load_hypothesis_revision_applications(symbol)
+		evidence_summaries = evaluate_hypothesis_evidence(
+			hypotheses=hypotheses,
+			experiment_results=experiment_results,
+			experiment_requests=experiment_requests,
+		)
+		latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+		lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+			hypotheses=hypotheses,
+			evidence_summaries=evidence_summaries,
+			latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+		)
+		research_plan = build_research_plan(
+			symbol=symbol,
+			hypotheses=hypotheses,
+			experiment_requests=experiment_requests,
+			experiment_results=experiment_results,
+			evidence_summaries=evidence_summaries,
+			latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+			lifecycle_recommendations=lifecycle_recommendations,
+			revision_proposals=revision_proposals,
+			revision_applications=revision_applications,
+		)
+
+		return {
+			"hypotheses": hypotheses,
+			"experiment_requests": experiment_requests,
+			"experiment_results": experiment_results,
+			"hypothesis_reviews": hypothesis_reviews,
+			"revision_proposals": revision_proposals,
+			"revision_applications": revision_applications,
+			"evidence_summaries": evidence_summaries,
+			"latest_reviews_by_hypothesis_id": latest_reviews_by_hypothesis_id,
+			"lifecycle_recommendations": lifecycle_recommendations,
+			"research_plan": research_plan,
+		}
+
+	state = _build_cycle_state()
+	hypotheses = state["hypotheses"]
+	experiment_requests = state["experiment_requests"]
+	experiment_results = state["experiment_results"]
+	evidence_summaries = state["evidence_summaries"]
+	latest_reviews_by_hypothesis_id = state["latest_reviews_by_hypothesis_id"]
+	research_plan = state["research_plan"]
 	planned_action_counts = {}
 	for item in research_plan.items:
 		planned_action_counts[item.recommended_action.value] = planned_action_counts.get(item.recommended_action.value, 0) + 1
@@ -400,24 +433,8 @@ def run_manual_research_cycle(
 				# Backward-compatible fallback if a custom service does not accept scoped hypotheses.
 				reviews_generated = hypothesis_review_service.generate_for_symbol(symbol=symbol)
 
-			updated_hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
-			updated_latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(updated_hypothesis_reviews)
-			updated_lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
-				hypotheses=hypotheses,
-				evidence_summaries=evidence_summaries,
-				latest_reviews_by_hypothesis_id=updated_latest_reviews_by_hypothesis_id,
-			)
-			final_plan = build_research_plan(
-				symbol=symbol,
-				hypotheses=hypotheses,
-				experiment_requests=experiment_requests,
-				experiment_results=experiment_results,
-				evidence_summaries=evidence_summaries,
-				latest_reviews_by_hypothesis_id=updated_latest_reviews_by_hypothesis_id,
-				lifecycle_recommendations=updated_lifecycle_recommendations,
-				revision_proposals=revision_proposals,
-				revision_applications=revision_applications,
-			)
+			state = _build_cycle_state()
+			final_plan = state["research_plan"]
 
 			print(f"Reviews Generated : {len(reviews_generated)}")
 			print(f"Research Plan Items : {len(final_plan.items)}")
@@ -481,23 +498,8 @@ def run_manual_research_cycle(
 				),
 			)
 
-			updated_experiment_requests = storage.load_experiment_requests(symbol)
-			updated_lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
-				hypotheses=hypotheses,
-				evidence_summaries=evidence_summaries,
-				latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
-			)
-			final_plan = build_research_plan(
-				symbol=symbol,
-				hypotheses=hypotheses,
-				experiment_requests=updated_experiment_requests,
-				experiment_results=experiment_results,
-				evidence_summaries=evidence_summaries,
-				latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
-				lifecycle_recommendations=updated_lifecycle_recommendations,
-				revision_proposals=revision_proposals,
-				revision_applications=revision_applications,
-			)
+			state = _build_cycle_state()
+			final_plan = state["research_plan"]
 
 			print(f"Experiment Requests Generated : {len(generated_requests)}")
 			print(f"Research Plan Items : {len(final_plan.items)}")
@@ -519,29 +521,8 @@ def run_manual_research_cycle(
 			executor=executor,
 		)
 
-		updated_experiment_requests = storage.load_experiment_requests(symbol)
-		updated_experiment_results = storage.load_experiment_results(symbol)
-		updated_evidence_summaries = evaluate_hypothesis_evidence(
-			hypotheses=hypotheses,
-			experiment_results=updated_experiment_results,
-			experiment_requests=updated_experiment_requests,
-		)
-		updated_lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
-			hypotheses=hypotheses,
-			evidence_summaries=updated_evidence_summaries,
-			latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
-		)
-		final_plan = build_research_plan(
-			symbol=symbol,
-			hypotheses=hypotheses,
-			experiment_requests=updated_experiment_requests,
-			experiment_results=updated_experiment_results,
-			evidence_summaries=updated_evidence_summaries,
-			latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
-			lifecycle_recommendations=updated_lifecycle_recommendations,
-			revision_proposals=revision_proposals,
-			revision_applications=revision_applications,
-		)
+		state = _build_cycle_state()
+		final_plan = state["research_plan"]
 
 		print()
 		print("=" * 50)
@@ -566,6 +547,269 @@ def run_manual_research_cycle(
 			print("Final Status : completed")
 
 		return final_plan
+
+	revision_candidate_hypothesis_ids = {
+		item.hypothesis_id
+		for item in research_plan.items
+		if item.recommended_action == ResearchPlanAction.GENERATE_REVISION_PROPOSAL
+	}
+	revision_candidates = [
+		hypothesis
+		for hypothesis in hypotheses
+		if hypothesis.hypothesis_id in revision_candidate_hypothesis_ids
+	]
+
+	if revisions:
+		generated_proposals = []
+		final_plan = research_plan
+
+		print()
+		print("=" * 50)
+		print(f"Manual Research Cycle: {symbol}")
+		print("=" * 50)
+		print()
+		print("Mode : revisions")
+		print("Records Modified : yes")
+		print("AI Calls Allowed : yes")
+		print(f"Hypotheses Loaded : {len(hypotheses)}")
+		print(f"Revision Candidates : {len(revision_candidates)}")
+
+		if revision_candidates:
+			hypothesis_revision_service = (
+				hypothesis_revision_service
+				or HypothesisRevisionService(storage=storage)
+			)
+
+			try:
+				generated_proposals = hypothesis_revision_service.generate_for_symbol(
+					symbol=symbol,
+					hypotheses=revision_candidates,
+				)
+			except TypeError:
+				# Backward-compatible fallback if a custom service does not accept scoped hypotheses.
+				generated_proposals = hypothesis_revision_service.generate_for_symbol(symbol=symbol)
+
+			state = _build_cycle_state()
+			final_plan = state["research_plan"]
+			print(f"Revision Proposals Generated : {len(generated_proposals)}")
+			print(f"Research Plan Items : {len(final_plan.items)}")
+			print("Final Status : completed")
+		else:
+			print("Revision Proposals Generated : 0")
+			print(f"Research Plan Items : {len(final_plan.items)}")
+			print("Final Status : no-op")
+			print()
+			print("No-op: no hypotheses currently require revision proposal generation.")
+
+		return final_plan
+
+	if full_safe:
+		current_state = state
+		current_plan = current_state["research_plan"]
+
+		planned_candidates = [
+			hypothesis
+			for hypothesis in current_state["hypotheses"]
+			if hypothesis.hypothesis_id in {
+				item.hypothesis_id
+				for item in current_plan.items
+				if item.recommended_action == ResearchPlanAction.GENERATE_EXPERIMENT_REQUEST
+			}
+		]
+		review_candidates = []
+		revision_candidates = []
+		generated_requests = []
+		generated_reviews = []
+		generated_proposals = []
+		step_failures = []
+		execution_summary = {
+			"requests_loaded": 0,
+			"requests_executed": 0,
+			"requests_skipped": 0,
+			"results_saved": 0,
+			"not_implemented": 0,
+		}
+
+		# Step 2: generate planned experiment requests.
+		if planned_candidates:
+			try:
+				journal = journal or ResearchJournal()
+				journal.storage = storage
+				experiment_request_service = experiment_request_service or ExperimentRequestService(
+					storage=storage
+				)
+				observations = storage.load_observations(symbol)
+				generated_requests = experiment_request_service.generate_for_symbol(
+					symbol=symbol,
+					journal=journal.build(symbol),
+					hypotheses=planned_candidates,
+					observations=json.dumps(
+						[
+							{
+								"observation_id": observation.observation_id,
+								"statement": observation.statement,
+							}
+							for observation in observations
+						],
+						indent=4,
+					),
+				)
+			except Exception as exc:
+				step_failures.append(
+					"Step 2 failed (planned experiment request generation): "
+					f"{exc.__class__.__name__}: {exc}"
+				)
+
+		# Step 3: execute currently executable experiment requests.
+		try:
+			executor = executor or ExperimentExecutor()
+			execution = _execute_experiment_requests_for_symbol(
+				symbol=symbol,
+				storage=storage,
+				executor=executor,
+			)
+			execution_summary = {
+				"requests_loaded": execution["requests_loaded"],
+				"requests_executed": execution["requests_executed"],
+				"requests_skipped": execution["requests_skipped"],
+				"results_saved": execution["results_saved"],
+				"not_implemented": execution["not_implemented"],
+			}
+		except Exception as exc:
+			step_failures.append(
+				"Step 3 failed (experiment execution): "
+				f"{exc.__class__.__name__}: {exc}"
+			)
+
+		# Step 4: rebuild evidence and research plan.
+		try:
+			current_state = _build_cycle_state()
+			current_plan = current_state["research_plan"]
+		except Exception as exc:
+			step_failures.append(
+				"Step 4 failed (post-execution plan rebuild): "
+				f"{exc.__class__.__name__}: {exc}"
+			)
+
+		# Step 5: generate reviews for plan-selected hypotheses.
+		review_candidates = [
+			hypothesis
+			for hypothesis in current_state["hypotheses"]
+			if hypothesis.hypothesis_id in {
+				item.hypothesis_id
+				for item in current_plan.items
+				if item.recommended_action == ResearchPlanAction.GENERATE_HYPOTHESIS_REVIEW
+			}
+		]
+		if review_candidates:
+			try:
+				hypothesis_review_service = (
+					hypothesis_review_service
+					or HypothesisReviewService(storage=storage)
+				)
+				try:
+					generated_reviews = hypothesis_review_service.generate_for_symbol(
+						symbol=symbol,
+						hypotheses=review_candidates,
+					)
+				except TypeError:
+					generated_reviews = hypothesis_review_service.generate_for_symbol(symbol=symbol)
+			except Exception as exc:
+				step_failures.append(
+					"Step 5 failed (hypothesis review generation): "
+					f"{exc.__class__.__name__}: {exc}"
+				)
+
+		# Step 6: rebuild lifecycle recommendations and plan.
+		try:
+			current_state = _build_cycle_state()
+			current_plan = current_state["research_plan"]
+		except Exception as exc:
+			step_failures.append(
+				"Step 6 failed (post-review plan rebuild): "
+				f"{exc.__class__.__name__}: {exc}"
+			)
+
+		# Step 7: generate revision proposals for plan-selected hypotheses.
+		revision_candidates = [
+			hypothesis
+			for hypothesis in current_state["hypotheses"]
+			if hypothesis.hypothesis_id in {
+				item.hypothesis_id
+				for item in current_plan.items
+				if item.recommended_action == ResearchPlanAction.GENERATE_REVISION_PROPOSAL
+			}
+		]
+		if revision_candidates:
+			try:
+				hypothesis_revision_service = (
+					hypothesis_revision_service
+					or HypothesisRevisionService(storage=storage)
+				)
+				try:
+					generated_proposals = hypothesis_revision_service.generate_for_symbol(
+						symbol=symbol,
+						hypotheses=revision_candidates,
+					)
+				except TypeError:
+					generated_proposals = hypothesis_revision_service.generate_for_symbol(
+						symbol=symbol
+					)
+			except Exception as exc:
+				step_failures.append(
+					"Step 7 failed (revision proposal generation): "
+					f"{exc.__class__.__name__}: {exc}"
+				)
+
+		# Step 8: final research plan rebuild.
+		try:
+			current_state = _build_cycle_state()
+			current_plan = current_state["research_plan"]
+		except Exception as exc:
+			step_failures.append(
+				"Step 8 failed (final plan rebuild): "
+				f"{exc.__class__.__name__}: {exc}"
+			)
+
+		print()
+		print("=" * 50)
+		print(f"Manual Research Cycle: {symbol}")
+		print("=" * 50)
+		print()
+		print("Mode : full-safe")
+		print("Records Modified : yes")
+		print("AI Calls Allowed : yes")
+		print(f"Initial Research Plan Items : {len(research_plan.items)}")
+		print(f"Planned Experiment Candidates : {len(planned_candidates)}")
+		print(f"Experiment Requests Generated : {len(generated_requests)}")
+		print(f"Requests Executed : {execution_summary['requests_executed']}")
+		print(f"Results Saved : {execution_summary['results_saved']}")
+		print(f"Review Candidates : {len(review_candidates)}")
+		print(f"Reviews Generated : {len(generated_reviews)}")
+		print(f"Revision Candidates : {len(revision_candidates)}")
+		print(f"Revision Proposals Generated : {len(generated_proposals)}")
+		print(f"Final Research Plan Items : {len(current_plan.items)}")
+
+		if step_failures:
+			print("Final Status : completed_with_step_failures")
+			print()
+			print("Step Failures")
+			print("-------------")
+			for failure in step_failures:
+				print(f"- {failure}")
+		else:
+			print("Final Status : completed")
+
+		print()
+		print("Safety Summary")
+		print("--------------")
+		print("- No hypotheses were mutated.")
+		print("- No revision proposals were applied.")
+		print("- No child hypotheses were created.")
+		print("- No trades were created or executed.")
+		print("Revision proposals are not applied automatically.")
+
+		return current_plan
 
 	print()
 	print("=" * 50)
@@ -1130,6 +1374,16 @@ def _build_arg_parser():
 		action="store_true",
 		help="Run deterministic execution for currently executable experiment requests.",
 	)
+	research_cycle_mode_group.add_argument(
+		"--revisions",
+		action="store_true",
+		help="Run revision proposal generation only for hypotheses selected by the research plan.",
+	)
+	research_cycle_mode_group.add_argument(
+		"--full-safe",
+		action="store_true",
+		help="Run the full safe orchestration chain without applying revisions or creating child hypotheses.",
+	)
 
 	hypothesis_revision_apply_parser = subparsers.add_parser(
 		"hypothesis-revision-apply",
@@ -1208,10 +1462,18 @@ def main(argv=None):
 	if args.mode == "research-cycle":
 		run_manual_research_cycle(
 			symbol=args.symbol,
-			dry_run=not (args.reviews or args.planned_experiments or args.run_experiments),
+			dry_run=not (
+				args.reviews
+				or args.planned_experiments
+				or args.run_experiments
+				or args.revisions
+				or args.full_safe
+			),
 			reviews=bool(args.reviews),
 			planned_experiments=bool(args.planned_experiments),
 			run_experiments=bool(args.run_experiments),
+			revisions=bool(args.revisions),
+			full_safe=bool(args.full_safe),
 		)
 		return 0
 

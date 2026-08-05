@@ -42,6 +42,18 @@ class RunnerCliTests(unittest.TestCase):
         mock_research_cycle.assert_not_called()
         mock_research_plan.assert_not_called()
 
+    def test_research_cycle_help_includes_new_mode_flags(self):
+        buffer = io.StringIO()
+
+        with redirect_stdout(buffer):
+            with self.assertRaises(SystemExit) as context:
+                main(["research-cycle", "--help"])
+
+        self.assertEqual(0, context.exception.code)
+        help_text = buffer.getvalue()
+        self.assertIn("--revisions", help_text)
+        self.assertIn("--full-safe", help_text)
+
     def test_hypotheses_command_dispatches_to_hypothesis_runner(self):
         with patch("research.runner.run_manual_hypothesis_generation") as mock_hypotheses, patch(
             "research.runner.run_manual_experiment_request_generation"
@@ -276,6 +288,8 @@ class RunnerCliTests(unittest.TestCase):
             reviews=False,
             planned_experiments=False,
             run_experiments=False,
+            revisions=False,
+            full_safe=False,
         )
 
     def test_research_cycle_command_with_dry_run_flag_dispatches_to_runner(self):
@@ -289,6 +303,8 @@ class RunnerCliTests(unittest.TestCase):
             reviews=False,
             planned_experiments=False,
             run_experiments=False,
+            revisions=False,
+            full_safe=False,
         )
 
     def test_research_cycle_command_with_reviews_flag_dispatches_to_runner(self):
@@ -302,6 +318,8 @@ class RunnerCliTests(unittest.TestCase):
             reviews=True,
             planned_experiments=False,
             run_experiments=False,
+            revisions=False,
+            full_safe=False,
         )
 
     def test_research_cycle_command_with_planned_experiments_flag_dispatches_to_runner(self):
@@ -315,6 +333,8 @@ class RunnerCliTests(unittest.TestCase):
             reviews=False,
             planned_experiments=True,
             run_experiments=False,
+            revisions=False,
+            full_safe=False,
         )
 
     def test_research_cycle_command_with_run_experiments_flag_dispatches_to_runner(self):
@@ -328,6 +348,38 @@ class RunnerCliTests(unittest.TestCase):
             reviews=False,
             planned_experiments=False,
             run_experiments=True,
+            revisions=False,
+            full_safe=False,
+        )
+
+    def test_research_cycle_command_with_revisions_flag_dispatches_to_runner(self):
+        with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:
+            exit_code = main(["research-cycle", "NVDA", "--revisions"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_cycle.assert_called_once_with(
+            symbol="NVDA",
+            dry_run=False,
+            reviews=False,
+            planned_experiments=False,
+            run_experiments=False,
+            revisions=True,
+            full_safe=False,
+        )
+
+    def test_research_cycle_command_with_full_safe_flag_dispatches_to_runner(self):
+        with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:
+            exit_code = main(["research-cycle", "NVDA", "--full-safe"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_cycle.assert_called_once_with(
+            symbol="NVDA",
+            dry_run=False,
+            reviews=False,
+            planned_experiments=False,
+            run_experiments=False,
+            revisions=False,
+            full_safe=True,
         )
 
     def test_research_cycle_command_rejects_dry_run_and_reviews_together(self):
@@ -363,6 +415,60 @@ class RunnerCliTests(unittest.TestCase):
     def test_research_cycle_command_rejects_planned_experiments_and_run_experiments_together(self):
         with self.assertRaises(SystemExit) as context:
             main(["research-cycle", "NVDA", "--planned-experiments", "--run-experiments"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_dry_run_and_revisions_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--dry-run", "--revisions"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_reviews_and_revisions_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--reviews", "--revisions"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_planned_experiments_and_revisions_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--planned-experiments", "--revisions"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_run_experiments_and_revisions_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--run-experiments", "--revisions"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_dry_run_and_full_safe_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--dry-run", "--full-safe"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_reviews_and_full_safe_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--reviews", "--full-safe"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_planned_experiments_and_full_safe_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--planned-experiments", "--full-safe"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_run_experiments_and_full_safe_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--run-experiments", "--full-safe"])
+
+        self.assertEqual(2, context.exception.code)
+
+    def test_research_cycle_command_rejects_revisions_and_full_safe_together(self):
+        with self.assertRaises(SystemExit) as context:
+            main(["research-cycle", "NVDA", "--revisions", "--full-safe"])
 
         self.assertEqual(2, context.exception.code)
 
