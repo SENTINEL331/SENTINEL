@@ -26,13 +26,16 @@ class RunnerCliTests(unittest.TestCase):
             "research.runner.run_manual_research_cycle"
         ) as mock_research_cycle, patch(
             "research.runner.run_manual_research_plan"
-        ) as mock_research_plan, redirect_stdout(buffer):
+        ) as mock_research_plan, patch(
+            "research.runner.run_manual_research_dashboard"
+        ) as mock_research_dashboard, redirect_stdout(buffer):
             with self.assertRaises(SystemExit) as context:
                 main(["--help"])
 
         self.assertEqual(0, context.exception.code)
         self.assertIn("research-cycle", buffer.getvalue())
         self.assertIn("research-state", buffer.getvalue())
+        self.assertIn("research-dashboard", buffer.getvalue())
         mock_hypotheses.assert_not_called()
         mock_experiment_requests.assert_not_called()
         mock_experiment_execution.assert_not_called()
@@ -42,6 +45,7 @@ class RunnerCliTests(unittest.TestCase):
         mock_hypothesis_revisions.assert_not_called()
         mock_research_cycle.assert_not_called()
         mock_research_plan.assert_not_called()
+        mock_research_dashboard.assert_not_called()
 
     def test_research_cycle_help_includes_new_mode_flags(self):
         buffer = io.StringIO()
@@ -291,6 +295,20 @@ class RunnerCliTests(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         mock_research_state.assert_called_once_with(symbol=DEFAULT_SYMBOL)
+
+    def test_research_dashboard_command_dispatches_with_watchlist_default(self):
+        with patch("research.runner.run_manual_research_dashboard") as mock_research_dashboard:
+            exit_code = main(["research-dashboard"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_dashboard.assert_called_once_with(symbols=[])
+
+    def test_research_dashboard_command_dispatches_with_explicit_symbols(self):
+        with patch("research.runner.run_manual_research_dashboard") as mock_research_dashboard:
+            exit_code = main(["research-dashboard", "NVDA", "AAPL"])
+
+        self.assertEqual(0, exit_code)
+        mock_research_dashboard.assert_called_once_with(symbols=["NVDA", "AAPL"])
 
     def test_research_cycle_command_dispatches_to_runner(self):
         with patch("research.runner.run_manual_research_cycle") as mock_research_cycle:

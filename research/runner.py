@@ -2,6 +2,8 @@
 import json
 import sys
 
+from config import settings
+
 from ai.experiment_request_service import ExperimentRequestService
 from ai.hypothesis_revision_application_service import HypothesisRevisionApplicationService
 from ai.hypothesis_revision_service import HypothesisRevisionService
@@ -481,6 +483,230 @@ def run_manual_research_state(
 	print("Research state read complete. No records were modified.")
 
 	return research_plan
+
+
+def run_manual_research_dashboard(
+	symbols=None,
+	storage=None,
+):
+	"""Render a deterministic read-only research dashboard for multiple symbols."""
+
+	storage = storage or Storage()
+
+	if symbols:
+		reviewed_symbols = list(symbols)
+	else:
+		reviewed_symbols = list(settings.WATCHLIST)
+
+	priority_rank = {
+		ResearchPlanPriority.HIGH: 0,
+		ResearchPlanPriority.MEDIUM: 1,
+		ResearchPlanPriority.LOW: 2,
+	}
+
+	action_order = [action.value for action in ResearchPlanAction]
+	aggregated_action_counts = {action: 0 for action in action_order}
+	attention_items = []
+	symbol_summaries = []
+	suggested_commands = []
+
+	for symbol in reviewed_symbols:
+		hypotheses = storage.load_hypotheses(symbol)
+		experiment_requests = storage.load_experiment_requests(symbol)
+		experiment_results = storage.load_experiment_results(symbol)
+		load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
+		hypothesis_reviews = load_hypothesis_reviews(symbol) if callable(load_hypothesis_reviews) else []
+		revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+		revision_applications = storage.load_hypothesis_revision_applications(symbol)
+
+		evidence_summaries = evaluate_hypothesis_evidence(
+			hypotheses=hypotheses,
+			experiment_results=experiment_results,
+			experiment_requests=experiment_requests,
+		)
+		latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+		lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+			hypotheses=hypotheses,
+			evidence_summaries=evidence_summaries,
+			latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+		)
+		research_plan = build_research_plan(
+			symbol=symbol,
+			hypotheses=hypotheses,
+			experiment_requests=experiment_requests,
+			experiment_results=experiment_results,
+			evidence_summaries=evidence_summaries,
+			latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+			lifecycle_recommendations=lifecycle_recommendations,
+			revision_proposals=revision_proposals,
+			revision_applications=revision_applications,
+		)
+
+		child_hypothesis_count = sum(
+			1
+			for hypothesis in hypotheses
+			if hypothesis.parent_hypothesis_id is not None
+		)
+		executable_request_count = sum(
+			1
+			for request in experiment_requests
+			if request.execution_state == ExperimentRequestExecutionState.EXECUTABLE
+		)
+		completed_result_count = sum(
+			1
+			for result in experiment_results
+			if result.status == ExperimentResultStatus.COMPLETED
+		)
+
+		per_symbol_action_counts = {action: 0 for action in action_order}
+		for item in research_plan.items:
+			per_symbol_action_counts[item.recommended_action.value] = (
+				per_symbol_action_counts.get(item.recommended_action.value, 0) + 1
+			)
+			aggregated_action_counts[item.recommended_action.value] = (
+				aggregated_action_counts.get(item.recommended_action.value, 0) + 1
+			)
+			attention_items.append(item)
+
+		highest_priority = "none"
+		if research_plan.items:
+			highest_priority_item = min(
+				research_plan.items,
+				key=lambda item: priority_rank.get(item.priority, 99),
+			)
+			highest_priority = highest_priority_item.priority.value
+
+		top_action = "none"
+		if research_plan.items:
+			for action_value in action_order:
+				if per_symbol_action_counts[action_value] == max(per_symbol_action_counts.values()):
+					top_action = action_value
+					break
+
+		symbol_summaries.append(
+			{
+				"symbol": symbol,
+				"hypotheses": len(hypotheses),
+				"children": child_hypothesis_count,
+				"executable_requests": executable_request_count,
+				"completed_results": completed_result_count,
+				"reviews": len(hypothesis_reviews),
+				"revision_proposals": len(revision_proposals),
+				"plan_items": len(research_plan.items),
+				"highest_priority": highest_priority,
+				"top_action": top_action,
+				"action_counts": per_symbol_action_counts,
+			}
+		)
+
+		if per_symbol_action_counts[ResearchPlanAction.GENERATE_EXPERIMENT_REQUEST.value] > 0:
+			suggested_commands.append(
+				f"python -m research.runner research-cycle {symbol} --planned-experiments"
+			)
+
+		if per_symbol_action_counts[ResearchPlanAction.GENERATE_HYPOTHESIS_REVIEW.value] > 0:
+			suggested_commands.append(
+				f"python -m research.runner research-cycle {symbol} --reviews"
+			)
+
+		if per_symbol_action_counts[ResearchPlanAction.GENERATE_REVISION_PROPOSAL.value] > 0:
+			suggested_commands.append(
+				f"python -m research.runner research-cycle {symbol} --revisions"
+			)
+
+		if executable_request_count > 0:
+			suggested_commands.append(
+				f"python -m research.runner research-cycle {symbol} --run-experiments"
+			)
+
+		if per_symbol_action_counts[ResearchPlanAction.APPLY_REVISION_PROPOSAL_CANDIDATE.value] > 0:
+			suggested_commands.append(
+				f"python -m research.runner hypothesis-revision-apply {symbol} <proposal_id> --dry-run"
+			)
+
+	sorted_attention_items = sorted(
+		attention_items,
+		key=lambda item: (
+			priority_rank.get(item.priority, 99),
+			item.symbol,
+			item.hypothesis_id,
+			item.recommended_action.value,
+		),
+	)
+
+	print()
+	print("=" * 50)
+	print("Manual Research Dashboard")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print(f"Symbols Reviewed : {len(reviewed_symbols)}")
+
+	print()
+	print("Per-Symbol Summary")
+	print("------------------")
+	for summary in symbol_summaries:
+		print(f"- {summary['symbol']}")
+		print(
+			"  hypotheses="
+			f"{summary['hypotheses']}, "
+			f"children={summary['children']}, "
+			f"executable_requests={summary['executable_requests']}, "
+			f"completed_results={summary['completed_results']}"
+		)
+		print(
+			"  reviews="
+			f"{summary['reviews']}, "
+			f"revision_proposals={summary['revision_proposals']}, "
+			f"plan_items={summary['plan_items']}"
+		)
+		print(f"  highest_priority={summary['highest_priority']}")
+		print(f"  top_action={summary['top_action']}")
+
+	print()
+	print("Watchlist Action Summary")
+	print("------------------------")
+	for action_value in action_order:
+		print(f"- {action_value} : {aggregated_action_counts.get(action_value, 0)}")
+
+	print()
+	print("Attention Queue")
+	print("---------------")
+	if sorted_attention_items:
+		for item in sorted_attention_items[:10]:
+			print(
+				"- "
+				f"symbol={item.symbol} "
+				f"hypothesis_id={item.hypothesis_id} "
+				f"action={item.recommended_action.value} "
+				f"priority={item.priority.value}"
+			)
+			print(f"  reason: {item.reason}")
+	else:
+		print("No attention items found across reviewed symbols.")
+
+	print()
+	print("Suggested Next Commands")
+	print("-----------------------")
+	if suggested_commands:
+		for command in suggested_commands:
+			print(f"- {command}")
+
+		if any(
+			summary["action_counts"][ResearchPlanAction.APPLY_REVISION_PROPOSAL_CANDIDATE.value] > 0
+			for summary in symbol_summaries
+		):
+			print(
+				"- Note: hypothesis-revision-apply requires a concrete proposal_id and explicit human choice."
+			)
+	else:
+		print("No suggested follow-up commands from current watchlist state.")
+
+	print()
+	print("Research dashboard read complete. No records were modified.")
+
+	return symbol_summaries
 
 
 def run_manual_research_cycle(
@@ -1532,6 +1758,16 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	research_dashboard_parser = subparsers.add_parser(
+		"research-dashboard",
+		help="Show deterministic read-only research dashboard for configured watchlist symbols.",
+	)
+	research_dashboard_parser.add_argument(
+		"symbols",
+		nargs="*",
+		help="Optional symbols to review; defaults to config.settings.WATCHLIST.",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -1650,6 +1886,10 @@ def main(argv=None):
 
 	if args.mode == "research-state":
 		run_manual_research_state(symbol=args.symbol)
+		return 0
+
+	if args.mode == "research-dashboard":
+		run_manual_research_dashboard(symbols=args.symbols)
 		return 0
 
 	if args.mode == "research-cycle":
