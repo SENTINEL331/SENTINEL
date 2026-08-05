@@ -207,7 +207,7 @@ class ManualResearchDashboardRunnerTests(unittest.TestCase):
 
         mock_print.assert_any_call("- NVDA")
         mock_print.assert_any_call(
-            "  hypotheses=2, children=1, executable_requests=1, completed_results=1"
+            "  hypotheses=2, children=1, executable_requests=1, pending_executable_requests=0, completed_results=1"
         )
         mock_print.assert_any_call("  reviews=1, revision_proposals=0, plan_items=2")
         mock_print.assert_any_call("  highest_priority=high")
@@ -221,8 +221,10 @@ class ManualResearchDashboardRunnerTests(unittest.TestCase):
             "- python -m research.runner research-cycle NVDA --planned-experiments"
         )
         mock_print.assert_any_call("- python -m research.runner research-cycle NVDA --reviews")
-        mock_print.assert_any_call(
-            "- python -m research.runner research-cycle NVDA --run-experiments"
+
+        self.assertNotIn(
+            call("- python -m research.runner research-cycle NVDA --run-experiments"),
+            mock_print.mock_calls,
         )
 
         self.assertNotIn(
@@ -476,6 +478,220 @@ class ManualResearchDashboardRunnerTests(unittest.TestCase):
             run_manual_research_dashboard(symbols=["NVDA"], storage=storage)
 
         mock_print.assert_any_call("No attention items found across reviewed symbols.")
+
+    def test_dashboard_suggests_run_experiments_only_for_pending_executable_requests(self):
+        now = datetime.now(timezone.utc)
+        data_by_symbol = {
+            "NVDA": {
+                "hypotheses": [
+                    Hypothesis(
+                        hypothesis_id="hyp-nvda-001",
+                        symbol="NVDA",
+                        title="NVDA",
+                        description="NVDA",
+                        status=HypothesisStatus.ACTIVE,
+                        confidence=0.5,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                ],
+                "experiment_requests": [
+                    ExperimentRequest(
+                        experiment_request_id="expreq-pending-001",
+                        hypothesis_id="hyp-nvda-001",
+                        hypothesis_version_id="hyp-nvda-001:v1",
+                        symbol="NVDA",
+                        title="Pending executable",
+                        objective="Objective",
+                        test_type=ExperimentTestType.INITIAL_BACKTEST,
+                        entry_conditions="Entry",
+                        machine_readable_entry_conditions=(
+                            {"field": "Close", "operator": ">", "value": 100.0},
+                        ),
+                        exit_conditions="Exit",
+                        time_horizon="5D",
+                        forward_horizon=5,
+                        status=ExperimentRequestStatus.PROPOSED,
+                    )
+                ],
+                "experiment_results": [],
+                "hypothesis_reviews": [],
+                "revision_proposals": [],
+                "revision_applications": [],
+            }
+        }
+        storage = self._build_storage(data_by_symbol)
+
+        def _plan_for_symbol(*, symbol, **kwargs):
+            return ResearchPlan(
+                symbol=symbol,
+                items=(
+                    ResearchPlanItem(
+                        symbol=symbol,
+                        hypothesis_id="hyp-nvda-001",
+                        hypothesis_title="NVDA",
+                        recommended_action=ResearchPlanAction.NO_ACTION,
+                        priority=ResearchPlanPriority.LOW,
+                        reason="No action.",
+                    ),
+                ),
+            )
+
+        with patch("research.runner.settings.WATCHLIST", ["NVDA"]), patch(
+            "research.runner.build_research_plan",
+            side_effect=_plan_for_symbol,
+        ), patch("builtins.print") as mock_print:
+            run_manual_research_dashboard(storage=storage)
+
+        mock_print.assert_any_call(
+            "- python -m research.runner research-cycle NVDA --run-experiments"
+        )
+
+    def test_dashboard_does_not_treat_failed_or_not_implemented_as_completed(self):
+        now = datetime.now(timezone.utc)
+        data_by_symbol = {
+            "NVDA": {
+                "hypotheses": [
+                    Hypothesis(
+                        hypothesis_id="hyp-nvda-001",
+                        symbol="NVDA",
+                        title="NVDA",
+                        description="NVDA",
+                        status=HypothesisStatus.ACTIVE,
+                        confidence=0.5,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                ],
+                "experiment_requests": [
+                    ExperimentRequest(
+                        experiment_request_id="expreq-completed-001",
+                        hypothesis_id="hyp-nvda-001",
+                        hypothesis_version_id="hyp-nvda-001:v1",
+                        symbol="NVDA",
+                        title="Completed executable",
+                        objective="Objective",
+                        test_type=ExperimentTestType.INITIAL_BACKTEST,
+                        entry_conditions="Entry",
+                        machine_readable_entry_conditions=(
+                            {"field": "Close", "operator": ">", "value": 100.0},
+                        ),
+                        exit_conditions="Exit",
+                        time_horizon="5D",
+                        forward_horizon=5,
+                        status=ExperimentRequestStatus.PROPOSED,
+                    ),
+                    ExperimentRequest(
+                        experiment_request_id="expreq-failed-001",
+                        hypothesis_id="hyp-nvda-001",
+                        hypothesis_version_id="hyp-nvda-001:v1",
+                        symbol="NVDA",
+                        title="Failed result executable",
+                        objective="Objective",
+                        test_type=ExperimentTestType.INITIAL_BACKTEST,
+                        entry_conditions="Entry",
+                        machine_readable_entry_conditions=(
+                            {"field": "Close", "operator": ">", "value": 100.0},
+                        ),
+                        exit_conditions="Exit",
+                        time_horizon="5D",
+                        forward_horizon=5,
+                        status=ExperimentRequestStatus.PROPOSED,
+                    ),
+                    ExperimentRequest(
+                        experiment_request_id="expreq-legacy-001",
+                        hypothesis_id="hyp-nvda-001",
+                        hypothesis_version_id="hyp-nvda-001:v1",
+                        symbol="NVDA",
+                        title="Legacy non-executable",
+                        objective="Objective",
+                        test_type=ExperimentTestType.INITIAL_BACKTEST,
+                        entry_conditions="Entry",
+                        exit_conditions="Exit",
+                        time_horizon="5D",
+                        status=ExperimentRequestStatus.PROPOSED,
+                    ),
+                ],
+                "experiment_results": [
+                    ExperimentResult(
+                        experiment_result_id="expr-completed-001",
+                        experiment_request_id="expreq-completed-001",
+                        hypothesis_id="hyp-nvda-001",
+                        symbol="NVDA",
+                        test_type=ExperimentTestType.INITIAL_BACKTEST,
+                        status=ExperimentResultStatus.COMPLETED,
+                        started_at=now,
+                        completed_at=now,
+                        metrics=ExperimentMetrics(trade_count=1, average_return=0.01, win_rate=0.6),
+                        summary="Completed",
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ExperimentResult(
+                        experiment_result_id="expr-failed-001",
+                        experiment_request_id="expreq-failed-001",
+                        hypothesis_id="hyp-nvda-001",
+                        symbol="NVDA",
+                        test_type=ExperimentTestType.INITIAL_BACKTEST,
+                        status=ExperimentResultStatus.FAILED,
+                        started_at=now,
+                        completed_at=now,
+                        metrics=ExperimentMetrics(),
+                        summary="Failed",
+                        failure_reason="Failed",
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    ExperimentResult(
+                        experiment_result_id="expr-notimpl-001",
+                        experiment_request_id="expreq-failed-001",
+                        hypothesis_id="hyp-nvda-001",
+                        symbol="NVDA",
+                        test_type=ExperimentTestType.INITIAL_BACKTEST,
+                        status=ExperimentResultStatus.NOT_IMPLEMENTED,
+                        started_at=now,
+                        completed_at=now,
+                        metrics=ExperimentMetrics(),
+                        summary="Not implemented",
+                        failure_reason="Not implemented",
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                ],
+                "hypothesis_reviews": [],
+                "revision_proposals": [],
+                "revision_applications": [],
+            }
+        }
+        storage = self._build_storage(data_by_symbol)
+
+        def _plan_for_symbol(*, symbol, **kwargs):
+            return ResearchPlan(
+                symbol=symbol,
+                items=(
+                    ResearchPlanItem(
+                        symbol=symbol,
+                        hypothesis_id="hyp-nvda-001",
+                        hypothesis_title="NVDA",
+                        recommended_action=ResearchPlanAction.NO_ACTION,
+                        priority=ResearchPlanPriority.LOW,
+                        reason="No action.",
+                    ),
+                ),
+            )
+
+        with patch("research.runner.settings.WATCHLIST", ["NVDA"]), patch(
+            "research.runner.build_research_plan",
+            side_effect=_plan_for_symbol,
+        ), patch("builtins.print") as mock_print:
+            run_manual_research_dashboard(storage=storage)
+
+        mock_print.assert_any_call(
+            "  hypotheses=1, children=0, executable_requests=2, pending_executable_requests=1, completed_results=1"
+        )
+        mock_print.assert_any_call(
+            "- python -m research.runner research-cycle NVDA --run-experiments"
+        )
 
 
 if __name__ == "__main__":

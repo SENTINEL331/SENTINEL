@@ -510,6 +510,13 @@ def run_manual_research_dashboard(
 	symbol_summaries = []
 	suggested_commands = []
 
+	def _completed_request_ids_for_results(experiment_results):
+		return {
+			result.experiment_request_id
+			for result in experiment_results
+			if result.status == ExperimentResultStatus.COMPLETED and result.experiment_request_id
+		}
+
 	for symbol in reviewed_symbols:
 		hypotheses = storage.load_hypotheses(symbol)
 		experiment_requests = storage.load_experiment_requests(symbol)
@@ -552,6 +559,13 @@ def run_manual_research_dashboard(
 			for request in experiment_requests
 			if request.execution_state == ExperimentRequestExecutionState.EXECUTABLE
 		)
+		completed_request_ids = _completed_request_ids_for_results(experiment_results)
+		pending_executable_request_count = sum(
+			1
+			for request in experiment_requests
+			if request.execution_state == ExperimentRequestExecutionState.EXECUTABLE
+			and request.experiment_request_id not in completed_request_ids
+		)
 		completed_result_count = sum(
 			1
 			for result in experiment_results
@@ -589,6 +603,7 @@ def run_manual_research_dashboard(
 				"hypotheses": len(hypotheses),
 				"children": child_hypothesis_count,
 				"executable_requests": executable_request_count,
+				"pending_executable_requests": pending_executable_request_count,
 				"completed_results": completed_result_count,
 				"reviews": len(hypothesis_reviews),
 				"revision_proposals": len(revision_proposals),
@@ -614,7 +629,7 @@ def run_manual_research_dashboard(
 				f"python -m research.runner research-cycle {symbol} --revisions"
 			)
 
-		if executable_request_count > 0:
+		if pending_executable_request_count > 0:
 			suggested_commands.append(
 				f"python -m research.runner research-cycle {symbol} --run-experiments"
 			)
@@ -653,6 +668,7 @@ def run_manual_research_dashboard(
 			f"{summary['hypotheses']}, "
 			f"children={summary['children']}, "
 			f"executable_requests={summary['executable_requests']}, "
+			f"pending_executable_requests={summary['pending_executable_requests']}, "
 			f"completed_results={summary['completed_results']}"
 		)
 		print(
