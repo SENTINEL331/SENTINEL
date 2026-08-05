@@ -12,6 +12,9 @@ from research.hypothesis import Hypothesis
 from research.hypothesis import HypothesisStatus
 from research.hypothesis_review import HypothesisReview
 from research.hypothesis_review import HypothesisReviewRecommendation
+from research.research_freshness import ProposalFreshnessStatus
+from research.research_freshness import ResearchFreshnessItem
+from research.research_freshness import ReviewFreshnessStatus
 from research.research_plan import ResearchPlan
 from research.research_plan import ResearchPlanAction
 from research.research_plan import ResearchPlanItem
@@ -23,6 +26,9 @@ class ManualResearchDashboardRunnerTests(unittest.TestCase):
     def _build_storage(self, data_by_symbol):
         storage = Mock()
         storage.load_hypotheses.side_effect = lambda symbol: data_by_symbol[symbol]["hypotheses"]
+        storage.load_observations.side_effect = lambda symbol: data_by_symbol[symbol].get(
+            "observations", []
+        )
         storage.load_experiment_requests.side_effect = lambda symbol: data_by_symbol[symbol][
             "experiment_requests"
         ]
@@ -39,6 +45,28 @@ class ManualResearchDashboardRunnerTests(unittest.TestCase):
             "revision_applications"
         ]
         return storage
+
+    def _freshness_item(
+        self,
+        *,
+        hypothesis_id,
+        hypothesis_title,
+        review_freshness,
+        proposal_freshness,
+        rationale="Freshness snapshot.",
+    ):
+        now = datetime(2026, 8, 5, 0, 0, tzinfo=timezone.utc)
+        return ResearchFreshnessItem(
+            hypothesis_id=hypothesis_id,
+            hypothesis_title=hypothesis_title,
+            latest_observation_at=now,
+            latest_completed_result_at=now,
+            latest_review_at=now,
+            latest_revision_proposal_at=now,
+            review_freshness=review_freshness,
+            proposal_freshness=proposal_freshness,
+            rationale=rationale,
+        )
 
     def test_dashboard_defaults_to_watchlist_and_is_read_only(self):
         now = datetime.now(timezone.utc)
@@ -209,7 +237,9 @@ class ManualResearchDashboardRunnerTests(unittest.TestCase):
         mock_print.assert_any_call(
             "  hypotheses=2, children=1, executable_requests=1, pending_executable_requests=0, completed_results=1"
         )
-        mock_print.assert_any_call("  reviews=1, revision_proposals=0, plan_items=2")
+        mock_print.assert_any_call(
+            "  reviews=1, revision_proposals=0, stale_reviews=0, missing_reviews=0, stale_revision_proposals=0, missing_revision_proposals=0, plan_items=2"
+        )
         mock_print.assert_any_call("  highest_priority=high")
         mock_print.assert_any_call("  top_action=generate_experiment_request")
 
@@ -546,6 +576,198 @@ class ManualResearchDashboardRunnerTests(unittest.TestCase):
         mock_print.assert_any_call(
             "- python -m research.runner research-cycle NVDA --run-experiments"
         )
+
+    def test_dashboard_suggests_reviews_for_freshness_and_deduplicates_plan_overlap(self):
+        now = datetime.now(timezone.utc)
+        data_by_symbol = {
+            "NVDA": {
+                "hypotheses": [
+                    Hypothesis(
+                        hypothesis_id="hyp-nvda-001",
+                        symbol="NVDA",
+                        title="NVDA",
+                        description="NVDA",
+                        status=HypothesisStatus.ACTIVE,
+                        confidence=0.5,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                ],
+                "experiment_requests": [],
+                "experiment_results": [],
+                "hypothesis_reviews": [],
+                "revision_proposals": [],
+                "revision_applications": [],
+            }
+        }
+        storage = self._build_storage(data_by_symbol)
+
+        plan = ResearchPlan(
+            symbol="NVDA",
+            items=(
+                ResearchPlanItem(
+                    symbol="NVDA",
+                    hypothesis_id="hyp-nvda-001",
+                    hypothesis_title="NVDA",
+                    recommended_action=ResearchPlanAction.GENERATE_HYPOTHESIS_REVIEW,
+                    priority=ResearchPlanPriority.MEDIUM,
+                    reason="Needs review from plan.",
+                ),
+            ),
+        )
+        freshness_items = [
+            self._freshness_item(
+                hypothesis_id="hyp-nvda-001",
+                hypothesis_title="NVDA",
+                review_freshness=ReviewFreshnessStatus.MISSING,
+                proposal_freshness=ProposalFreshnessStatus.NOT_APPLICABLE,
+            ),
+            self._freshness_item(
+                hypothesis_id="hyp-nvda-002",
+                hypothesis_title="NVDA child",
+                review_freshness=ReviewFreshnessStatus.STALE_AFTER_NEW_RESULT,
+                proposal_freshness=ProposalFreshnessStatus.NOT_APPLICABLE,
+            ),
+            self._freshness_item(
+                hypothesis_id="hyp-nvda-003",
+                hypothesis_title="NVDA alt",
+                review_freshness=ReviewFreshnessStatus.STALE_AFTER_NEW_OBSERVATION,
+                proposal_freshness=ProposalFreshnessStatus.NOT_APPLICABLE,
+            ),
+        ]
+
+        with patch("research.runner.build_research_plan", return_value=plan), patch(
+            "research.runner.build_research_freshness",
+            return_value=freshness_items,
+        ), patch("builtins.print") as mock_print:
+            run_manual_research_dashboard(symbols=["NVDA"], storage=storage)
+
+        mock_print.assert_any_call(
+            "  reviews=0, revision_proposals=0, stale_reviews=2, missing_reviews=1, stale_revision_proposals=0, missing_revision_proposals=0, plan_items=1"
+        )
+        self.assertEqual(
+            1,
+            mock_print.mock_calls.count(call("- python -m research.runner research-cycle NVDA --reviews")),
+        )
+
+    def test_dashboard_suggests_revisions_for_freshness_and_deduplicates_plan_overlap(self):
+        now = datetime.now(timezone.utc)
+        data_by_symbol = {
+            "NVDA": {
+                "hypotheses": [
+                    Hypothesis(
+                        hypothesis_id="hyp-nvda-001",
+                        symbol="NVDA",
+                        title="NVDA",
+                        description="NVDA",
+                        status=HypothesisStatus.ACTIVE,
+                        confidence=0.5,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                ],
+                "experiment_requests": [],
+                "experiment_results": [],
+                "hypothesis_reviews": [],
+                "revision_proposals": [],
+                "revision_applications": [],
+            }
+        }
+        storage = self._build_storage(data_by_symbol)
+
+        plan = ResearchPlan(
+            symbol="NVDA",
+            items=(
+                ResearchPlanItem(
+                    symbol="NVDA",
+                    hypothesis_id="hyp-nvda-001",
+                    hypothesis_title="NVDA",
+                    recommended_action=ResearchPlanAction.GENERATE_REVISION_PROPOSAL,
+                    priority=ResearchPlanPriority.MEDIUM,
+                    reason="Needs revision from plan.",
+                ),
+            ),
+        )
+        freshness_items = [
+            self._freshness_item(
+                hypothesis_id="hyp-nvda-001",
+                hypothesis_title="NVDA",
+                review_freshness=ReviewFreshnessStatus.NOT_APPLICABLE,
+                proposal_freshness=ProposalFreshnessStatus.MISSING_FOR_REFINE_CANDIDATE,
+            ),
+            self._freshness_item(
+                hypothesis_id="hyp-nvda-002",
+                hypothesis_title="NVDA child",
+                review_freshness=ReviewFreshnessStatus.NOT_APPLICABLE,
+                proposal_freshness=ProposalFreshnessStatus.STALE_AFTER_REVIEW,
+            ),
+        ]
+
+        with patch("research.runner.build_research_plan", return_value=plan), patch(
+            "research.runner.build_research_freshness",
+            return_value=freshness_items,
+        ), patch("builtins.print") as mock_print:
+            run_manual_research_dashboard(symbols=["NVDA"], storage=storage)
+
+        mock_print.assert_any_call(
+            "  reviews=0, revision_proposals=0, stale_reviews=0, missing_reviews=0, stale_revision_proposals=1, missing_revision_proposals=1, plan_items=1"
+        )
+        self.assertEqual(
+            1,
+            mock_print.mock_calls.count(call("- python -m research.runner research-cycle NVDA --revisions")),
+        )
+
+    def test_dashboard_does_not_suggest_freshness_commands_when_freshness_is_current_or_not_applicable(self):
+        now = datetime.now(timezone.utc)
+        data_by_symbol = {
+            "NVDA": {
+                "hypotheses": [
+                    Hypothesis(
+                        hypothesis_id="hyp-nvda-001",
+                        symbol="NVDA",
+                        title="NVDA",
+                        description="NVDA",
+                        status=HypothesisStatus.ACTIVE,
+                        confidence=0.5,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                ],
+                "experiment_requests": [],
+                "experiment_results": [],
+                "hypothesis_reviews": [],
+                "revision_proposals": [],
+                "revision_applications": [],
+            }
+        }
+        storage = self._build_storage(data_by_symbol)
+
+        plan = ResearchPlan(symbol="NVDA", items=())
+        freshness_items = [
+            self._freshness_item(
+                hypothesis_id="hyp-nvda-001",
+                hypothesis_title="NVDA",
+                review_freshness=ReviewFreshnessStatus.CURRENT,
+                proposal_freshness=ProposalFreshnessStatus.NOT_APPLICABLE,
+            ),
+            self._freshness_item(
+                hypothesis_id="hyp-nvda-002",
+                hypothesis_title="NVDA child",
+                review_freshness=ReviewFreshnessStatus.NOT_APPLICABLE,
+                proposal_freshness=ProposalFreshnessStatus.NOT_APPLICABLE,
+            ),
+        ]
+
+        with patch("research.runner.build_research_plan", return_value=plan), patch(
+            "research.runner.build_research_freshness",
+            return_value=freshness_items,
+        ), patch("builtins.print") as mock_print:
+            run_manual_research_dashboard(symbols=["NVDA"], storage=storage)
+
+        mock_print.assert_any_call(
+            "  reviews=0, revision_proposals=0, stale_reviews=0, missing_reviews=0, stale_revision_proposals=0, missing_revision_proposals=0, plan_items=0"
+        )
+        mock_print.assert_any_call("No suggested follow-up commands from current watchlist state.")
 
     def test_dashboard_does_not_treat_failed_or_not_implemented_as_completed(self):
         now = datetime.now(timezone.utc)

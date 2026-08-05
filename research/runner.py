@@ -628,6 +628,14 @@ def run_manual_research_dashboard(
 	attention_items = []
 	symbol_summaries = []
 	suggested_commands = []
+	suggested_command_set = set()
+
+	def _add_suggested_command(command):
+		if command in suggested_command_set:
+			return
+
+		suggested_command_set.add(command)
+		suggested_commands.append(command)
 
 	def _completed_request_ids_for_results(experiment_results):
 		return {
@@ -638,6 +646,7 @@ def run_manual_research_dashboard(
 
 	for symbol in reviewed_symbols:
 		hypotheses = storage.load_hypotheses(symbol)
+		observations = storage.load_observations(symbol)
 		experiment_requests = storage.load_experiment_requests(symbol)
 		experiment_results = storage.load_experiment_results(symbol)
 		load_hypothesis_reviews = getattr(storage, "load_hypothesis_reviews", None)
@@ -666,6 +675,34 @@ def run_manual_research_dashboard(
 			lifecycle_recommendations=lifecycle_recommendations,
 			revision_proposals=revision_proposals,
 			revision_applications=revision_applications,
+		)
+		freshness_items = build_research_freshness(
+			hypotheses=hypotheses,
+			observations=observations,
+			experiment_requests=experiment_requests,
+			experiment_results=experiment_results,
+			hypothesis_reviews=hypothesis_reviews,
+			revision_proposals=revision_proposals,
+			lifecycle_recommendations=lifecycle_recommendations,
+		)
+		stale_review_count = sum(
+			1
+			for item in freshness_items
+			if item.review_freshness in {
+				ReviewFreshnessStatus.STALE_AFTER_NEW_RESULT,
+				ReviewFreshnessStatus.STALE_AFTER_NEW_OBSERVATION,
+			}
+		)
+		missing_review_count = sum(
+			1 for item in freshness_items if item.review_freshness == ReviewFreshnessStatus.MISSING
+		)
+		stale_revision_proposal_count = sum(
+			1 for item in freshness_items if item.proposal_freshness == ProposalFreshnessStatus.STALE_AFTER_REVIEW
+		)
+		missing_revision_proposal_count = sum(
+			1
+			for item in freshness_items
+			if item.proposal_freshness == ProposalFreshnessStatus.MISSING_FOR_REFINE_CANDIDATE
 		)
 
 		child_hypothesis_count = sum(
@@ -726,6 +763,10 @@ def run_manual_research_dashboard(
 				"completed_results": completed_result_count,
 				"reviews": len(hypothesis_reviews),
 				"revision_proposals": len(revision_proposals),
+				"stale_reviews": stale_review_count,
+				"missing_reviews": missing_review_count,
+				"stale_revision_proposals": stale_revision_proposal_count,
+				"missing_revision_proposals": missing_revision_proposal_count,
 				"plan_items": len(research_plan.items),
 				"highest_priority": highest_priority,
 				"top_action": top_action,
@@ -734,29 +775,50 @@ def run_manual_research_dashboard(
 		)
 
 		if per_symbol_action_counts[ResearchPlanAction.GENERATE_EXPERIMENT_REQUEST.value] > 0:
-			suggested_commands.append(
+			_add_suggested_command(
 				f"python -m research.runner research-cycle {symbol} --planned-experiments"
 			)
 
 		if per_symbol_action_counts[ResearchPlanAction.GENERATE_HYPOTHESIS_REVIEW.value] > 0:
-			suggested_commands.append(
+			_add_suggested_command(
 				f"python -m research.runner research-cycle {symbol} --reviews"
 			)
 
 		if per_symbol_action_counts[ResearchPlanAction.GENERATE_REVISION_PROPOSAL.value] > 0:
-			suggested_commands.append(
+			_add_suggested_command(
 				f"python -m research.runner research-cycle {symbol} --revisions"
 			)
 
 		if pending_executable_request_count > 0:
-			suggested_commands.append(
+			_add_suggested_command(
 				f"python -m research.runner research-cycle {symbol} --run-experiments"
 			)
 
 		if per_symbol_action_counts[ResearchPlanAction.APPLY_REVISION_PROPOSAL_CANDIDATE.value] > 0:
-			suggested_commands.append(
+			_add_suggested_command(
 				f"python -m research.runner hypothesis-revision-apply {symbol} <proposal_id> --dry-run"
 			)
+
+		if any(
+			item.review_freshness
+			in {
+				ReviewFreshnessStatus.MISSING,
+				ReviewFreshnessStatus.STALE_AFTER_NEW_RESULT,
+				ReviewFreshnessStatus.STALE_AFTER_NEW_OBSERVATION,
+			}
+			for item in freshness_items
+		):
+			_add_suggested_command(f"python -m research.runner research-cycle {symbol} --reviews")
+
+		if any(
+			item.proposal_freshness
+			in {
+				ProposalFreshnessStatus.MISSING_FOR_REFINE_CANDIDATE,
+				ProposalFreshnessStatus.STALE_AFTER_REVIEW,
+			}
+			for item in freshness_items
+		):
+			_add_suggested_command(f"python -m research.runner research-cycle {symbol} --revisions")
 
 	sorted_attention_items = sorted(
 		attention_items,
@@ -794,6 +856,10 @@ def run_manual_research_dashboard(
 			"  reviews="
 			f"{summary['reviews']}, "
 			f"revision_proposals={summary['revision_proposals']}, "
+			f"stale_reviews={summary['stale_reviews']}, "
+			f"missing_reviews={summary['missing_reviews']}, "
+			f"stale_revision_proposals={summary['stale_revision_proposals']}, "
+			f"missing_revision_proposals={summary['missing_revision_proposals']}, "
 			f"plan_items={summary['plan_items']}"
 		)
 		print(f"  highest_priority={summary['highest_priority']}")
