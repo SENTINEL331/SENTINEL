@@ -38,6 +38,7 @@ class RunnerCliTests(unittest.TestCase):
         self.assertIn("research-state", buffer.getvalue())
         self.assertIn("research-dashboard", buffer.getvalue())
         self.assertIn("research-freshness", buffer.getvalue())
+        self.assertIn("promotion-candidates", buffer.getvalue())
         mock_hypotheses.assert_not_called()
         mock_experiment_requests.assert_not_called()
         mock_experiment_execution.assert_not_called()
@@ -62,6 +63,20 @@ class RunnerCliTests(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         mock_research_freshness.assert_called_once_with(symbol=DEFAULT_SYMBOL)
+
+    def test_promotion_candidates_command_dispatches_to_runner(self):
+        with patch("research.runner.run_manual_promotion_candidates") as mock_promotion_candidates:
+            exit_code = main(["promotion-candidates", "NVDA"])
+
+        self.assertEqual(0, exit_code)
+        mock_promotion_candidates.assert_called_once_with(symbol="NVDA")
+
+    def test_promotion_candidates_command_uses_default_symbol(self):
+        with patch("research.runner.run_manual_promotion_candidates") as mock_promotion_candidates:
+            exit_code = main(["promotion-candidates"])
+
+        self.assertEqual(0, exit_code)
+        mock_promotion_candidates.assert_called_once_with(symbol=DEFAULT_SYMBOL)
 
     def test_research_cycle_help_includes_new_mode_flags(self):
         buffer = io.StringIO()
