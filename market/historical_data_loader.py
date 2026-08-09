@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Iterable
 
 import pandas as pd
@@ -21,6 +22,8 @@ _REQUIRED_COLUMNS = (
     "Volume",
 )
 
+_LOOKBACK_PATTERN = re.compile(r"^\s*(\d+)\s*([dDwWmMyY])\s*$")
+
 
 def _missing_columns(data: pd.DataFrame, required_columns: Iterable[str]) -> list[str]:
     return [column for column in required_columns if column not in data.columns]
@@ -32,6 +35,40 @@ def _normalize_date_index(data: pd.DataFrame) -> pd.DataFrame:
     normalized = normalized.set_index("Date")
     normalized.index.name = "Date"
     return normalized.sort_index()
+
+
+def _apply_lookback_period(data: pd.DataFrame, period: str | None) -> pd.DataFrame:
+    if period is None:
+        return data
+
+    match = _LOOKBACK_PATTERN.match(period)
+    if match is None:
+        raise ValueError(
+            "period must be a positive lookback string such as '30d', '8w', '6m', or '2y'"
+        )
+
+    amount = int(match.group(1))
+    if amount <= 0:
+        raise ValueError(
+            "period must be a positive lookback string such as '30d', '8w', '6m', or '2y'"
+        )
+
+    unit = match.group(2).lower()
+    if unit == "d":
+        offset = pd.DateOffset(days=amount)
+    elif unit == "w":
+        offset = pd.DateOffset(weeks=amount)
+    elif unit == "m":
+        offset = pd.DateOffset(months=amount)
+    else:
+        offset = pd.DateOffset(years=amount)
+
+    if data.empty:
+        return data
+
+    latest_timestamp = data.index.max()
+    lookback_start = latest_timestamp - offset
+    return data.loc[data.index >= lookback_start]
 
 
 class HistoricalDataLoader:
@@ -72,7 +109,12 @@ class HistoricalDataLoader:
 
         return prepared.dropna(subset=derived_feature_columns)
 
-    def load(self, symbol: str, interval: str = DEFAULT_INTERVAL) -> pd.DataFrame:
+    def load(
+        self,
+        symbol: str,
+        period: str | None = None,
+        interval: str = DEFAULT_INTERVAL,
+    ) -> pd.DataFrame:
         raw_data = self._history_manager.load_history(symbol, interval)
 
         if not isinstance(raw_data, pd.DataFrame):
@@ -85,7 +127,7 @@ class HistoricalDataLoader:
                 + ", ".join(missing_required_columns)
             )
 
-        combined_data = _normalize_date_index(raw_data)
+        combined_data = _apply_lookback_period(_normalize_date_index(raw_data), period)
 
         if not self._feature_store.features_exist(symbol, interval):
             return self._prepare_required_features(combined_data)
