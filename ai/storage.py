@@ -13,6 +13,8 @@ from research.experiment_result import (
     ExperimentResult,
     ExperimentResultStatus,
 )
+from research.demo_trade_candidate import DemoTradeCandidate
+from research.demo_trade_candidate import DemoTradeCandidateStatus
 from research.hypothesis import Hypothesis, HypothesisStatus
 from research.hypothesis_lifecycle import HypothesisLifecycleAction
 from research.hypothesis_revision_application import HypothesisRevisionApplication
@@ -520,6 +522,100 @@ class Storage:
                 f,
                 indent=4,
             )
+
+    def save_demo_trade_candidate(
+        self,
+        candidate,
+    ):
+        """Append one demo trade candidate to the JSONL store."""
+
+        path = self.base / "demo_trade_candidates.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "trade_candidate_id": candidate.trade_candidate_id,
+                        "symbol": candidate.symbol,
+                        "source_hypothesis_id": candidate.source_hypothesis_id,
+                        "source_research_candidate_decision": candidate.source_research_candidate_decision,
+                        "created_at": candidate.created_at.isoformat(),
+                        "status": candidate.status.value,
+                        "entry_logic": candidate.entry_logic,
+                        "exit_logic": candidate.exit_logic,
+                        "invalidation_logic": candidate.invalidation_logic,
+                        "maximum_holding_period": candidate.maximum_holding_period,
+                        "position_sizing_rule": candidate.position_sizing_rule,
+                        "max_loss_per_trade": candidate.max_loss_per_trade,
+                        "max_portfolio_exposure": candidate.max_portfolio_exposure,
+                        "demo_only": candidate.demo_only,
+                        "monitoring_frequency": candidate.monitoring_frequency,
+                        "pause_conditions": list(candidate.pause_conditions),
+                        "source_evidence_summary": dict(candidate.source_evidence_summary),
+                        "source_review_action": candidate.source_review_action,
+                        "source_review_confidence": candidate.source_review_confidence,
+                        "risk_flags": list(candidate.risk_flags),
+                        "created_by": candidate.created_by,
+                    }
+                )
+            )
+            f.write("\n")
+
+    def load_demo_trade_candidates(
+        self,
+        symbol=None,
+    ):
+        """Load demo trade candidates, optionally filtered by symbol."""
+
+        path = self.base / "demo_trade_candidates.jsonl"
+        if not path.exists():
+            return []
+
+        candidates = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                item = json.loads(stripped)
+                item_symbol = item.get("symbol", "")
+                if symbol is not None and item_symbol != symbol:
+                    continue
+
+                candidates.append(
+                    DemoTradeCandidate(
+                        trade_candidate_id=item["trade_candidate_id"],
+                        symbol=item_symbol,
+                        source_hypothesis_id=item.get("source_hypothesis_id", ""),
+                        source_research_candidate_decision=item.get(
+                            "source_research_candidate_decision",
+                            "",
+                        ),
+                        created_at=self._parse_timestamp(item.get("created_at", item.get("created"))),
+                        status=DemoTradeCandidateStatus(
+                            item.get("status", DemoTradeCandidateStatus.PROPOSED.value)
+                        ),
+                        entry_logic=item.get("entry_logic", ""),
+                        exit_logic=item.get("exit_logic", ""),
+                        invalidation_logic=item.get("invalidation_logic", ""),
+                        maximum_holding_period=item.get("maximum_holding_period", ""),
+                        position_sizing_rule=item.get("position_sizing_rule", ""),
+                        max_loss_per_trade=item.get("max_loss_per_trade", 0.0),
+                        max_portfolio_exposure=item.get("max_portfolio_exposure", 0.0),
+                        demo_only=bool(item.get("demo_only", True)),
+                        monitoring_frequency=item.get("monitoring_frequency", ""),
+                        pause_conditions=tuple(item.get("pause_conditions", [])),
+                        source_evidence_summary=item.get("source_evidence_summary", {}),
+                        source_review_action=item.get("source_review_action"),
+                        source_review_confidence=item.get("source_review_confidence"),
+                        risk_flags=tuple(item.get("risk_flags", [])),
+                        created_by=item.get("created_by", ""),
+                    )
+                )
+
+        return candidates
 
     def save_hypothesis_revision_applications(
         self,

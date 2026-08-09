@@ -12,6 +12,7 @@ from ai.hypothesis_review_service import HypothesisReviewService
 from ai.journal import ResearchJournal
 from ai.storage import Storage
 from research.executor import ExperimentExecutor
+from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.experiment import ExperimentRequestExecutionState
 from research.experiment_result import ExperimentResultStatus
 from research.hypothesis import HypothesisStatus
@@ -2243,6 +2244,47 @@ def run_manual_trade_candidate_proposals(
 	return readiness_items
 
 
+def run_manual_demo_trade_candidates(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Inspect append-only demo trade candidates for one symbol in read-only mode."""
+
+	storage = storage or Storage()
+	candidates = storage.load_demo_trade_candidates(symbol=symbol)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Trade Candidates: {symbol}")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print(f"Candidates Loaded : {len(candidates)}")
+
+	if candidates:
+		print()
+		print("Demo Trade Candidates")
+		print("---------------------")
+		for candidate in candidates:
+			validation_status = "valid"
+			try:
+				validate_demo_trade_candidate(candidate)
+			except ValueError:
+				validation_status = "invalid"
+
+			print(f"- candidate_id={candidate.trade_candidate_id}")
+			print(f"  source_hypothesis_id={candidate.source_hypothesis_id}")
+			print(f"  status={candidate.status.value}")
+			print(f"  demo_only={candidate.demo_only}")
+			print(f"  validation={validation_status}")
+	else:
+		print()
+		print("No demo trade candidates found.")
+
+	return candidates
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -2413,6 +2455,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_trade_candidates_parser = subparsers.add_parser(
+		"demo-trade-candidates",
+		help="Inspect append-only demo trade candidates for one symbol in read-only mode.",
+	)
+	demo_trade_candidates_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -2557,6 +2610,10 @@ def main(argv=None):
 
 	if args.mode == "trade-candidate-proposals":
 		run_manual_trade_candidate_proposals(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-trade-candidates":
+		run_manual_demo_trade_candidates(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
