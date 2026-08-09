@@ -117,6 +117,9 @@ class PromotionCandidateTests(unittest.TestCase):
         )
 
         self.assertEqual(PromotionCandidateDecision.CANDIDATE, evaluations[0].decision)
+        self.assertEqual(0.7, evaluations[0].latest_review_confidence)
+        self.assertEqual("Review rationale.", evaluations[0].latest_review_rationale)
+        self.assertTrue(evaluations[0].review_current)
 
     def test_promising_hypothesis_with_current_review_and_thresholds_becomes_candidate(self):
         hypothesis = _hypothesis(hypothesis_id="hyp-001")
@@ -163,6 +166,28 @@ class PromotionCandidateTests(unittest.TestCase):
         self.assertEqual(PromotionCandidateDecision.NOT_CANDIDATE, evaluations[0].decision)
         self.assertIn("trade_count_below_threshold", evaluations[0].failed_checks)
 
+    def test_low_trade_count_margin_flag_works(self):
+        hypothesis = _hypothesis(hypothesis_id="hyp-risk-001")
+        evidence = _evidence(
+            hypothesis_id="hyp-risk-001",
+            evidence_status=HypothesisEvidenceStatus.PROMISING,
+            completed_experiment_count=3,
+            total_trade_count=60,
+            average_return=0.02,
+            win_rate=0.60,
+        )
+        freshness = _freshness(hypothesis_id="hyp-risk-001", review_freshness=ReviewFreshnessStatus.CURRENT)
+        review = _review(hypothesis_id="hyp-risk-001", recommendation=HypothesisReviewRecommendation.KEEP)
+
+        evaluations = evaluate_promotion_candidates(
+            hypotheses=[hypothesis],
+            evidence_summaries=[evidence],
+            freshness_items=[freshness],
+            latest_reviews_by_hypothesis_id={"hyp-risk-001": review},
+        )
+
+        self.assertIn("low_trade_count_margin", evaluations[0].risk_flags)
+
     def test_promising_hypothesis_with_stale_review_is_not_candidate(self):
         hypothesis = _hypothesis(hypothesis_id="hyp-003")
         evidence = _evidence(
@@ -185,6 +210,28 @@ class PromotionCandidateTests(unittest.TestCase):
 
         self.assertEqual(PromotionCandidateDecision.NOT_CANDIDATE, evaluations[0].decision)
         self.assertIn("review_not_current", evaluations[0].failed_checks)
+
+    def test_marginal_win_rate_flag_works(self):
+        hypothesis = _hypothesis(hypothesis_id="hyp-risk-002")
+        evidence = _evidence(
+            hypothesis_id="hyp-risk-002",
+            evidence_status=HypothesisEvidenceStatus.PROMISING,
+            completed_experiment_count=3,
+            total_trade_count=120,
+            average_return=0.02,
+            win_rate=0.58,
+        )
+        freshness = _freshness(hypothesis_id="hyp-risk-002", review_freshness=ReviewFreshnessStatus.CURRENT)
+        review = _review(hypothesis_id="hyp-risk-002", recommendation=HypothesisReviewRecommendation.KEEP)
+
+        evaluations = evaluate_promotion_candidates(
+            hypotheses=[hypothesis],
+            evidence_summaries=[evidence],
+            freshness_items=[freshness],
+            latest_reviews_by_hypothesis_id={"hyp-risk-002": review},
+        )
+
+        self.assertIn("marginal_win_rate", evaluations[0].risk_flags)
 
     def test_thresholds_are_applied_even_when_evidence_status_is_promising(self):
         hypothesis = _hypothesis(hypothesis_id="hyp-003b")
@@ -210,6 +257,28 @@ class PromotionCandidateTests(unittest.TestCase):
         self.assertIn("win_rate_below_threshold", evaluations[0].failed_checks)
         self.assertIn("average_return_below_threshold", evaluations[0].failed_checks)
 
+    def test_marginal_average_return_flag_works(self):
+        hypothesis = _hypothesis(hypothesis_id="hyp-risk-003")
+        evidence = _evidence(
+            hypothesis_id="hyp-risk-003",
+            evidence_status=HypothesisEvidenceStatus.PROMISING,
+            completed_experiment_count=3,
+            total_trade_count=120,
+            average_return=0.009,
+            win_rate=0.65,
+        )
+        freshness = _freshness(hypothesis_id="hyp-risk-003", review_freshness=ReviewFreshnessStatus.CURRENT)
+        review = _review(hypothesis_id="hyp-risk-003", recommendation=HypothesisReviewRecommendation.KEEP)
+
+        evaluations = evaluate_promotion_candidates(
+            hypotheses=[hypothesis],
+            evidence_summaries=[evidence],
+            freshness_items=[freshness],
+            latest_reviews_by_hypothesis_id={"hyp-risk-003": review},
+        )
+
+        self.assertIn("marginal_average_return", evaluations[0].risk_flags)
+
     def test_mixed_evidence_is_not_candidate(self):
         hypothesis = _hypothesis(hypothesis_id="hyp-004")
         evidence = _evidence(
@@ -232,6 +301,32 @@ class PromotionCandidateTests(unittest.TestCase):
 
         self.assertEqual(PromotionCandidateDecision.NOT_CANDIDATE, evaluations[0].decision)
         self.assertIn("evidence_not_promising", evaluations[0].failed_checks)
+
+    def test_large_worst_loss_flag_works(self):
+        hypothesis = _hypothesis(hypothesis_id="hyp-risk-004")
+        evidence = HypothesisEvidenceSummary(
+            hypothesis_id="hyp-risk-004",
+            hypothesis_title="Title hyp-risk-004",
+            completed_experiment_count=3,
+            zero_trade_completed_experiment_count=0,
+            total_trade_count=120,
+            average_return=0.02,
+            win_rate=0.65,
+            best_return=0.16,
+            worst_return=-0.14,
+            evidence_status=HypothesisEvidenceStatus.PROMISING,
+        )
+        freshness = _freshness(hypothesis_id="hyp-risk-004", review_freshness=ReviewFreshnessStatus.CURRENT)
+        review = _review(hypothesis_id="hyp-risk-004", recommendation=HypothesisReviewRecommendation.KEEP)
+
+        evaluations = evaluate_promotion_candidates(
+            hypotheses=[hypothesis],
+            evidence_summaries=[evidence],
+            freshness_items=[freshness],
+            latest_reviews_by_hypothesis_id={"hyp-risk-004": review},
+        )
+
+        self.assertIn("large_worst_loss", evaluations[0].risk_flags)
 
     def test_insufficient_data_is_not_candidate(self):
         hypothesis = _hypothesis(hypothesis_id="hyp-005")
@@ -293,6 +388,7 @@ class PromotionCandidateTests(unittest.TestCase):
         self.assertEqual(PromotionCandidateDecision.NOT_CANDIDATE, by_id["hyp-parent"].decision)
         self.assertIn("parent_has_append_only_child", by_id["hyp-parent"].failed_checks)
         self.assertEqual(PromotionCandidateDecision.CANDIDATE, by_id["hyp-child"].decision)
+        self.assertIn("parent_or_lineage_context", by_id["hyp-child"].risk_flags)
 
     def test_proposed_parent_hypothesis_with_append_only_child_is_not_candidate(self):
         parent = _hypothesis(hypothesis_id="hyp-parent-proposed", status=HypothesisStatus.PROPOSED)
@@ -376,6 +472,32 @@ class PromotionCandidateTests(unittest.TestCase):
 
         self.assertEqual(PromotionCandidateDecision.NOT_CANDIDATE, evaluations[0].decision)
         self.assertIn("review_recommendation_retire", evaluations[0].failed_checks)
+
+    def test_limited_experiment_count_flag_works(self):
+        hypothesis = _hypothesis(hypothesis_id="hyp-risk-005")
+        evidence = HypothesisEvidenceSummary(
+            hypothesis_id="hyp-risk-005",
+            hypothesis_title="Title hyp-risk-005",
+            completed_experiment_count=2,
+            zero_trade_completed_experiment_count=0,
+            total_trade_count=120,
+            average_return=0.02,
+            win_rate=0.65,
+            best_return=0.05,
+            worst_return=-0.02,
+            evidence_status=HypothesisEvidenceStatus.PROMISING,
+        )
+        freshness = _freshness(hypothesis_id="hyp-risk-005", review_freshness=ReviewFreshnessStatus.CURRENT)
+        review = _review(hypothesis_id="hyp-risk-005", recommendation=HypothesisReviewRecommendation.KEEP)
+
+        evaluations = evaluate_promotion_candidates(
+            hypotheses=[hypothesis],
+            evidence_summaries=[evidence],
+            freshness_items=[freshness],
+            latest_reviews_by_hypothesis_id={"hyp-risk-005": review},
+        )
+
+        self.assertIn("limited_experiment_count", evaluations[0].risk_flags)
 
     def test_old_records_without_review_are_not_candidates(self):
         hypothesis = _hypothesis(hypothesis_id="hyp-007")

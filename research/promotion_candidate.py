@@ -41,9 +41,48 @@ class PromotionCandidateEvaluation:
     trade_count: int
     average_return: float | None
     win_rate: float | None
+    best_return: float | None
+    worst_return: float | None
     latest_review_action: HypothesisReviewRecommendation | None
+    latest_review_confidence: float | None = None
+    latest_review_rationale: str | None = None
+    review_current: bool = False
+    has_lineage_context: bool = False
+    risk_flags: tuple[str, ...] = field(default_factory=tuple)
     failed_checks: tuple[str, ...] = field(default_factory=tuple)
     rationale: str = ""
+
+
+def _build_candidate_risk_flags(
+    *,
+    hypothesis: Hypothesis,
+    evidence: HypothesisEvidenceSummary,
+    thresholds: PromotionCandidateThresholds,
+) -> tuple[str, ...]:
+    risk_flags: list[str] = []
+
+    if evidence.total_trade_count < (2 * thresholds.min_trade_count):
+        risk_flags.append("low_trade_count_margin")
+
+    if evidence.win_rate is not None and evidence.win_rate <= (thresholds.min_win_rate + 0.05):
+        risk_flags.append("marginal_win_rate")
+
+    if (
+        evidence.average_return is not None
+        and evidence.average_return <= (thresholds.min_average_return + 0.005)
+    ):
+        risk_flags.append("marginal_average_return")
+
+    if evidence.worst_return is not None and evidence.worst_return <= -0.10:
+        risk_flags.append("large_worst_loss")
+
+    if evidence.completed_experiment_count <= thresholds.min_completed_experiments:
+        risk_flags.append("limited_experiment_count")
+
+    if hypothesis.parent_hypothesis_id is not None or hypothesis.lineage_hypothesis_ids:
+        risk_flags.append("parent_or_lineage_context")
+
+    return tuple(risk_flags)
 
 
 _ELIGIBLE_STATUSES = {
@@ -158,6 +197,15 @@ def evaluate_promotion_candidates(
             if not failed_checks_tuple
             else PromotionCandidateDecision.NOT_CANDIDATE
         )
+        risk_flags = (
+            _build_candidate_risk_flags(
+                hypothesis=hypothesis,
+                evidence=evidence,
+                thresholds=thresholds,
+            )
+            if decision == PromotionCandidateDecision.CANDIDATE
+            else ()
+        )
         rationale = (
             "Evidence exceeds promotion-candidate thresholds and latest review is current."
             if decision == PromotionCandidateDecision.CANDIDATE
@@ -174,7 +222,16 @@ def evaluate_promotion_candidates(
                 trade_count=evidence.total_trade_count,
                 average_return=evidence.average_return,
                 win_rate=evidence.win_rate,
+                best_return=evidence.best_return,
+                worst_return=evidence.worst_return,
                 latest_review_action=(latest_review.recommendation if latest_review is not None else None),
+                latest_review_confidence=(latest_review.confidence if latest_review is not None else None),
+                latest_review_rationale=(latest_review.rationale if latest_review is not None else None),
+                review_current=(freshness.review_freshness == ReviewFreshnessStatus.CURRENT),
+                has_lineage_context=bool(
+                    hypothesis.parent_hypothesis_id is not None or hypothesis.lineage_hypothesis_ids
+                ),
+                risk_flags=risk_flags,
                 failed_checks=failed_checks_tuple,
                 rationale=rationale,
             )

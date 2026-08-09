@@ -2006,6 +2006,9 @@ def run_manual_promotion_candidates(
 
 		return value.value
 
+	def _format_yes_no(value):
+		return "yes" if value else "no"
+
 	storage = storage or Storage()
 	hypotheses = storage.load_hypotheses(symbol)
 	observations = storage.load_observations(symbol)
@@ -2084,6 +2087,48 @@ def run_manual_promotion_candidates(
 	print("Suggested Next Commands")
 	print("-----------------------")
 	print("No automatic promotion action is available. Promotion candidates require explicit human review.")
+
+	print()
+	print("Candidate Detail")
+	print("----------------")
+	candidate_evaluations = [
+		evaluation
+		for evaluation in evaluations
+		if evaluation.decision == PromotionCandidateDecision.CANDIDATE
+	]
+	if candidate_evaluations:
+		for evaluation in candidate_evaluations:
+			print(f"- {evaluation.hypothesis_id}")
+			print(
+				"  evidence_strength: "
+				f"completed_experiments={evaluation.completed_experiments}, "
+				f"trade_count={evaluation.trade_count}, "
+				f"average_return={_format_percent(evaluation.average_return)}, "
+				f"win_rate={_format_percent(evaluation.win_rate)}, "
+				f"best_return={_format_percent(evaluation.best_return)}, "
+				f"worst_return={_format_percent(evaluation.worst_return)}"
+			)
+			print(
+				"  review_state: "
+				f"action={_format_review_action(evaluation.latest_review_action)}, "
+				f"confidence={'n/a' if evaluation.latest_review_confidence is None else f'{evaluation.latest_review_confidence:.2f}'}, "
+				f"current={_format_yes_no(evaluation.review_current)}"
+			)
+			if evaluation.latest_review_rationale:
+				print(f"  latest_review_summary: {evaluation.latest_review_rationale}")
+			print(
+				"  risk_flags="
+				+ (", ".join(evaluation.risk_flags) if evaluation.risk_flags else "none")
+			)
+			print("  required_human_checks:")
+			print("    - Confirm hypothesis still makes economic sense.")
+			print("    - Inspect experiment assumptions and setup conditions.")
+			print("    - Check whether returns are overlapping or regime-dependent.")
+			print("    - Check downside risk and worst-return behavior.")
+			print("    - Decide whether to create a trade-candidate proposal.")
+			print("  reminder: Promotion candidate is not approval to trade.")
+	else:
+		print("No promotion candidates available for candidate detail review.")
 
 	print()
 	print("Promotion candidate evaluation complete. No records were modified.")
