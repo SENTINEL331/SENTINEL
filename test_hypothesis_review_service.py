@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timezone
+from datetime import timedelta
 from unittest.mock import Mock
 
 from ai.hypothesis_review_service import HypothesisReviewService
@@ -11,8 +12,13 @@ from research.experiment_result import ExperimentResult
 from research.experiment_result import ExperimentResultStatus
 from research.hypothesis import Hypothesis
 from research.hypothesis import HypothesisStatus
+from research.hypothesis_evaluation import HypothesisEvidenceStatus
 from research.hypothesis_review import HypothesisReview
 from research.hypothesis_review import HypothesisReviewRecommendation
+from research.hypothesis_lifecycle import HypothesisLifecycleAction
+from research.hypothesis_lifecycle import HypothesisLifecycleRecommendation
+from research.research_freshness import ReviewFreshnessStatus
+from research.research_freshness import build_research_freshness
 
 
 class HypothesisReviewServiceTests(unittest.TestCase):
@@ -55,14 +61,17 @@ class HypothesisReviewServiceTests(unittest.TestCase):
             journal_builder=journal_builder,
         )
 
+        before_call = datetime.now(timezone.utc)
         reviews = service.generate_for_symbol(symbol="NVDA")
+        after_call = datetime.now(timezone.utc)
 
         self.assertEqual(1, len(reviews))
         self.assertIsInstance(reviews[0], HypothesisReview)
         self.assertEqual("hyprev-001", reviews[0].review_id)
         self.assertEqual(HypothesisReviewRecommendation.KEEP, reviews[0].recommendation)
         self.assertEqual(0.76, reviews[0].confidence)
-        self.assertEqual(datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc), reviews[0].created_at)
+        self.assertGreaterEqual(reviews[0].created_at, before_call - timedelta(seconds=1))
+        self.assertLessEqual(reviews[0].created_at, after_call + timedelta(seconds=1))
 
         storage.load_hypotheses.assert_called_once_with("NVDA")
         storage.load_experiment_requests.assert_called_once_with("NVDA")
@@ -243,6 +252,160 @@ class HypothesisReviewServiceTests(unittest.TestCase):
         self.assertIn("Evidence is currently insufficient", review_context)
         self.assertNotIn("unknown-field-error-from-legacy-run", review_context)
         self.assertNotIn("unsupported_experiment_request", review_context)
+
+    def test_generate_for_symbol_uses_ingestion_time_not_ai_created_at_for_freshness(self):
+        ai_client = Mock()
+        storage = Mock()
+        journal_builder = Mock()
+
+        ai_client.hypothesis_review.return_value = """
+        {
+            "hypothesis_reviews": [
+                {
+                    "review_id": "hyprev-002",
+                    "hypothesis_id": "hyp-001",
+                    "symbol": "NVDA",
+                    "recommendation": "keep",
+                    "rationale": "Evidence remains positive and stable.",
+                    "confidence": 0.76,
+                    "created_at": "2026-08-09T00:00:00+00:00"
+                }
+            ]
+        }
+        """
+
+        hypothesis = Hypothesis(
+            hypothesis_id="hyp-001",
+            symbol="NVDA",
+            title="Momentum continuation",
+            description="Test whether momentum persists.",
+            status=HypothesisStatus.ACTIVE,
+            confidence=0.68,
+        )
+        storage.load_hypotheses.return_value = [hypothesis]
+        storage.load_experiment_requests.return_value = []
+        storage.load_experiment_results.return_value = []
+
+        service = HypothesisReviewService(
+            ai_client=ai_client,
+            storage=storage,
+            journal_builder=journal_builder,
+        )
+
+        before_call = datetime.now(timezone.utc)
+        reviews = service.generate_for_symbol(symbol="NVDA")
+        after_call = datetime.now(timezone.utc)
+
+        self.assertEqual(1, len(reviews))
+        self.assertGreaterEqual(reviews[0].created_at, before_call - timedelta(seconds=1))
+        self.assertLessEqual(reviews[0].created_at, after_call + timedelta(seconds=1))
+
+    def test_generated_review_becomes_current_relative_to_existing_completed_result(self):
+        ai_client = Mock()
+        storage = Mock()
+        journal_builder = Mock()
+
+        ai_client.hypothesis_review.return_value = """
+        {
+            "hypothesis_reviews": [
+                {
+                    "review_id": "hyprev-003",
+                    "hypothesis_id": "hyp-001",
+                    "symbol": "NVDA",
+                    "recommendation": "keep",
+                    "rationale": "Evidence remains positive and stable.",
+                    "confidence": 0.76,
+                    "created_at": "2026-08-09T00:00:00+00:00"
+                }
+            ]
+        }
+        """
+
+        hypothesis = Hypothesis(
+            hypothesis_id="hyp-001",
+            symbol="NVDA",
+            title="Momentum continuation",
+            description="Test whether momentum persists.",
+            status=HypothesisStatus.ACTIVE,
+            confidence=0.68,
+        )
+        result_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        request = ExperimentRequest(
+            experiment_request_id="expreq-exec-010",
+            hypothesis_id="hyp-001",
+            hypothesis_version_id="hyp-001:v1",
+            symbol="NVDA",
+            title="Executable request",
+            objective="Objective",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Entry",
+            machine_readable_entry_conditions=(
+                {"field": "Close", "operator": ">", "value": 100.0},
+            ),
+            exit_conditions="Exit",
+            time_horizon="5D",
+            forward_horizon=5,
+            status=ExperimentRequestStatus.PROPOSED,
+        )
+        result = ExperimentResult(
+            experiment_result_id="expr-010",
+            experiment_request_id="expreq-exec-010",
+            hypothesis_id="hyp-001",
+            symbol="NVDA",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            status=ExperimentResultStatus.COMPLETED,
+            started_at=result_time,
+            completed_at=result_time,
+            metrics=ExperimentMetrics(trade_count=4, average_return=0.01, win_rate=0.6),
+            summary="Completed",
+            created_at=result_time,
+            updated_at=result_time,
+        )
+        storage.load_hypotheses.return_value = [hypothesis]
+        storage.load_experiment_requests.return_value = [request]
+        storage.load_experiment_results.return_value = [result]
+
+        saved_reviews = []
+
+        def _save_reviews(_symbol, reviews):
+            saved_reviews[:] = reviews
+
+        storage.save_hypothesis_reviews.side_effect = _save_reviews
+
+        service = HypothesisReviewService(
+            ai_client=ai_client,
+            storage=storage,
+            journal_builder=journal_builder,
+        )
+
+        reviews = service.generate_for_symbol(symbol="NVDA")
+        self.assertEqual(1, len(reviews))
+        self.assertEqual(1, len(saved_reviews))
+
+        freshness_items = build_research_freshness(
+            hypotheses=[hypothesis],
+            observations=[],
+            experiment_requests=[request],
+            experiment_results=[result],
+            hypothesis_reviews=saved_reviews,
+            revision_proposals=[],
+            lifecycle_recommendations=[
+                HypothesisLifecycleRecommendation(
+                    hypothesis_id="hyp-001",
+                    hypothesis_title="Momentum continuation",
+                    current_status=HypothesisStatus.ACTIVE,
+                    completed_experiment_count=1,
+                    zero_trade_completed_experiment_count=0,
+                    total_trade_count=4,
+                    action=HypothesisLifecycleAction.NEEDS_MORE_TESTS,
+                    rationale="Needs more tests.",
+                    evidence_status=HypothesisEvidenceStatus.INSUFFICIENT_DATA,
+                )
+            ],
+        )
+
+        self.assertEqual(1, len(freshness_items))
+        self.assertEqual(ReviewFreshnessStatus.CURRENT, freshness_items[0].review_freshness)
 
     def test_generate_for_symbol_rejects_invalid_hypothesis_inputs(self):
         service = HypothesisReviewService(

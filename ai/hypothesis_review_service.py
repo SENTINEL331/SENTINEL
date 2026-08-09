@@ -1,4 +1,6 @@
 import json
+from dataclasses import replace
+from datetime import datetime, timezone
 
 from ai.journal import ResearchJournal
 from ai.storage import Storage
@@ -137,6 +139,10 @@ class HypothesisReviewService:
 
         return json.dumps(serialized, indent=4)
 
+    def _stamp_reviews_with_ingestion_time(self, reviews):
+        ingested_at = datetime.now(timezone.utc)
+        return [replace(review, created_at=ingested_at) for review in reviews]
+
     def generate_for_symbol(
         self,
         symbol,
@@ -171,6 +177,7 @@ class HypothesisReviewService:
         )
 
         reviews = parse_hypothesis_reviews(symbol, response)
+        reviews = self._stamp_reviews_with_ingestion_time(reviews)
 
         self.storage.save_hypothesis_reviews(symbol, reviews)
 
