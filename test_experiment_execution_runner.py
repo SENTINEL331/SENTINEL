@@ -248,8 +248,18 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
                 extra_metrics={
                     "best_return": 0.08,
                     "worst_return": -0.03,
+                    "rows_loaded": 503,
+                    "rows_after_cleaning": 484,
+                    "matching_setups": 4,
+                    "forward_returns_available": 3,
+                    "forward_returns_missing": 1,
+                    "forward_horizon": 5,
                 },
             ),
+            diagnostics={
+                "first_match_date": "2025-01-02",
+                "last_match_date": "2026-07-31",
+            },
             summary="Basic backtest completed with deterministic metrics.",
             created_at=now,
             updated_at=now,
@@ -269,6 +279,9 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
         )
         mock_print.assert_any_call(
             "  metrics: trade_count=7, average_return=1.25%, win_rate=57.00%, best_return=8.00%, worst_return=-3.00%, total_return=8.75%"
+        )
+        mock_print.assert_any_call(
+            "  diagnostics: rows_loaded=503, rows_after_cleaning=484, matching_setups=4, forward_returns_available=3, forward_returns_missing=1, forward_horizon=5, first_match_date=2025-01-02, last_match_date=2026-07-31"
         )
 
     def test_runner_forwards_overridden_backtest_period_and_interval(self):

@@ -83,6 +83,40 @@ def _raise_component_error(component_name: str, exc: Exception) -> None:
     raise ValueError(f"{component_name} failed: {exc}") from exc
 
 
+def _format_match_date(index_value: Any) -> str:
+    timestamp = pd.Timestamp(index_value)
+
+    if (
+        timestamp.hour == 0
+        and timestamp.minute == 0
+        and timestamp.second == 0
+        and timestamp.microsecond == 0
+        and timestamp.nanosecond == 0
+    ):
+        return timestamp.date().isoformat()
+
+    return timestamp.isoformat()
+
+
+def _build_numeric_diagnostics(
+    *,
+    rows_loaded: int,
+    rows_after_cleaning: int,
+    matching_setups: int,
+    forward_returns_available: int,
+    forward_horizon: int,
+) -> dict[str, float]:
+    forward_returns_missing = matching_setups - forward_returns_available
+    return {
+        "rows_loaded": float(rows_loaded),
+        "rows_after_cleaning": float(rows_after_cleaning),
+        "matching_setups": float(matching_setups),
+        "forward_returns_available": float(forward_returns_available),
+        "forward_returns_missing": float(forward_returns_missing),
+        "forward_horizon": float(forward_horizon),
+    }
+
+
 class BasicBacktestRunner:
     """Execute a minimal deterministic backtest over historical feature data."""
 
@@ -104,6 +138,11 @@ class BasicBacktestRunner:
         except ValueError as exc:
             _raise_component_error("time_horizon_parser", exc)
 
+        rows_loaded = int(feature_data.attrs.get("rows_loaded", len(feature_data.index)))
+        rows_after_cleaning = int(
+            feature_data.attrs.get("rows_after_cleaning", len(feature_data.index))
+        )
+
         started_at = datetime.now(timezone.utc)
         base_result = ExperimentResult(
             experiment_result_id=_build_result_id(request, horizon, len(feature_data.index)),
@@ -121,13 +160,34 @@ class BasicBacktestRunner:
         except ValueError as exc:
             _raise_component_error("setup_scanner", exc)
 
+        matching_setups = len(matching_rows.index)
+        first_match_date = None
+        last_match_date = None
+        if matching_setups > 0:
+            first_match_date = _format_match_date(matching_rows.index.min())
+            last_match_date = _format_match_date(matching_rows.index.max())
+
+        base_extra_metrics = _build_numeric_diagnostics(
+            rows_loaded=rows_loaded,
+            rows_after_cleaning=rows_after_cleaning,
+            matching_setups=matching_setups,
+            forward_returns_available=0,
+            forward_horizon=horizon,
+        )
+        base_diagnostics = {
+            "first_match_date": first_match_date,
+            "last_match_date": last_match_date,
+        }
+
         if matching_rows.empty:
             return base_result.mark_completed(
                 summary="Basic backtest completed with no matching setups.",
                 metrics=ExperimentMetrics(
                     trade_count=0,
                     total_return=0.0,
+                    extra_metrics=base_extra_metrics,
                 ),
+                diagnostics=base_diagnostics,
                 completed_at=started_at,
                 updated_at=started_at,
             )
@@ -142,6 +202,14 @@ class BasicBacktestRunner:
             _raise_component_error("forward_return_calculator", exc)
 
         available_results = [item for item in forward_return_results if item.is_available]
+        available_count = len(available_results)
+        result_extra_metrics = _build_numeric_diagnostics(
+            rows_loaded=rows_loaded,
+            rows_after_cleaning=rows_after_cleaning,
+            matching_setups=matching_setups,
+            forward_returns_available=available_count,
+            forward_horizon=horizon,
+        )
 
         if not available_results:
             return base_result.mark_completed(
@@ -152,7 +220,9 @@ class BasicBacktestRunner:
                 metrics=ExperimentMetrics(
                     trade_count=0,
                     total_return=0.0,
+                    extra_metrics=result_extra_metrics,
                 ),
+                diagnostics=base_diagnostics,
                 completed_at=started_at,
                 updated_at=started_at,
             )
@@ -162,6 +232,10 @@ class BasicBacktestRunner:
         except ValueError as exc:
             _raise_component_error("backtest_metrics_calculator", exc)
 
+        merged_extra_metrics = dict(metrics_data.get("extra_metrics", {}))
+        merged_extra_metrics.update(result_extra_metrics)
+        metrics_data["extra_metrics"] = merged_extra_metrics
+
         return base_result.mark_completed(
             summary=(
                 "Basic backtest completed with "
@@ -169,6 +243,7 @@ class BasicBacktestRunner:
                 f"{metrics_data['trade_count']} available forward returns."
             ),
             metrics=ExperimentMetrics(**metrics_data),
+            diagnostics=base_diagnostics,
             completed_at=started_at,
             updated_at=started_at,
         )

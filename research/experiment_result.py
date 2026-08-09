@@ -110,6 +110,7 @@ class ExperimentResult:
     started_at: datetime = field(default_factory=_utc_now)
     completed_at: datetime | None = None
     metrics: ExperimentMetrics = field(default_factory=ExperimentMetrics)
+    diagnostics: Mapping[str, str | None] = field(default_factory=dict)
     summary: str = ""
     failure_reason: str | None = None
     created_at: datetime = field(default_factory=_utc_now)
@@ -164,6 +165,22 @@ class ExperimentResult:
             if self.completed_at is None:
                 raise ValueError("completed_at is required for non-completed terminal statuses")
 
+        normalized_diagnostics: dict[str, str | None] = {}
+        for diagnostic_name, diagnostic_value in dict(self.diagnostics).items():
+            if not diagnostic_name:
+                raise ValueError("diagnostic names must be non-empty")
+
+            if diagnostic_value is not None and not isinstance(diagnostic_value, str):
+                raise ValueError(f"diagnostics.{diagnostic_name} must be a string or None")
+
+            normalized_diagnostics[diagnostic_name] = diagnostic_value
+
+        object.__setattr__(
+            self,
+            "diagnostics",
+            MappingProxyType(normalized_diagnostics),
+        )
+
     @property
     def id(self) -> str:
         return self.experiment_result_id
@@ -172,6 +189,7 @@ class ExperimentResult:
         self,
         summary: str,
         metrics: ExperimentMetrics,
+        diagnostics: Mapping[str, str | None] | None = None,
         completed_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> ExperimentResult:
@@ -186,6 +204,7 @@ class ExperimentResult:
             status=ExperimentResultStatus.COMPLETED,
             completed_at=completion_time,
             metrics=metrics,
+            diagnostics=self.diagnostics if diagnostics is None else diagnostics,
             summary=summary,
             failure_reason=None,
             updated_at=touched,

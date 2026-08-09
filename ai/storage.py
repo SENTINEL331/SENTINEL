@@ -357,6 +357,7 @@ class Storage:
                         "expectancy": result.metrics.expectancy,
                         "extra_metrics": dict(result.metrics.extra_metrics),
                     },
+                    "diagnostics": dict(result.diagnostics),
                     "summary": result.summary,
                     "failure_reason": result.failure_reason,
                     "created_at": result.created_at.isoformat(),
@@ -815,9 +816,13 @@ class Storage:
         for item in data:
             metrics_item = item.get("metrics", {})
             extra_metrics = {}
+            diagnostics_item = item.get("diagnostics", {})
 
             if isinstance(metrics_item, dict):
                 extra_metrics = metrics_item.get("extra_metrics", {})
+
+            if not isinstance(diagnostics_item, dict):
+                diagnostics_item = {}
 
             experiment_results.append(
                 ExperimentResult(
@@ -849,6 +854,7 @@ class Storage:
                         expectancy=metrics_item.get("expectancy"),
                         extra_metrics=extra_metrics,
                     ),
+                    diagnostics=diagnostics_item,
                     summary=item.get("summary", ""),
                     failure_reason=item.get("failure_reason"),
                     created_at=self._parse_timestamp(

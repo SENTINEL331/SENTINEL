@@ -37,6 +37,7 @@ class ExperimentResultTests(unittest.TestCase):
         self.assertEqual("", result.summary)
         self.assertIsNone(result.failure_reason)
         self.assertEqual(ExperimentMetrics(), result.metrics)
+        self.assertEqual({}, dict(result.diagnostics))
         self.assertEqual(created_at, result.created_at)
         self.assertEqual(created_at, result.updated_at)
 
@@ -99,6 +100,10 @@ class ExperimentResultTests(unittest.TestCase):
         completed = result.mark_completed(
             summary="Initial backtest completed with positive net return.",
             metrics=metrics,
+            diagnostics={
+                "first_match_date": "2025-01-02",
+                "last_match_date": "2026-07-31",
+            },
             completed_at=completed_at,
             updated_at=completed_at,
         )
@@ -111,6 +116,8 @@ class ExperimentResultTests(unittest.TestCase):
             completed.summary,
         )
         self.assertEqual(metrics, completed.metrics)
+        self.assertEqual("2025-01-02", completed.diagnostics["first_match_date"])
+        self.assertEqual("2026-07-31", completed.diagnostics["last_match_date"])
         self.assertIsNone(completed.failure_reason)
 
     def test_mark_failed(self):

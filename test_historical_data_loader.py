@@ -54,6 +54,8 @@ class HistoricalDataLoaderTests(unittest.TestCase):
         self.assertEqual("Date", data.index.name)
         self.assertEqual(pd.Timestamp("2024-01-21"), data.index[0])
         self.assertEqual(6, len(data.index))
+        self.assertEqual(25, data.attrs["rows_loaded"])
+        self.assertEqual(6, data.attrs["rows_after_cleaning"])
         self.assertFalse(
             data[["SMA_20", "EMA_20", "RSI_14", "ATR_14", "BB_MIDDLE", "BB_UPPER", "BB_LOWER"]]
             .isna()
@@ -199,6 +201,49 @@ class HistoricalDataLoaderTests(unittest.TestCase):
         self.assertFalse(data.empty)
         lookback_days = (data.index.max() - data.index.min()).days
         self.assertLessEqual(lookback_days, 30)
+
+    def test_load_refreshes_history_when_cached_rows_do_not_cover_requested_period(self):
+        history_manager = Mock()
+        market_data_manager = Mock()
+        feature_store = Mock()
+
+        history_manager.load_history.return_value = self._build_raw_history(periods=30)
+        market_data_manager.download_history.return_value = self._build_raw_history(periods=800)
+        feature_store.features_exist.return_value = False
+
+        data = HistoricalDataLoader(
+            history_manager=history_manager,
+            market_data_manager=market_data_manager,
+            feature_store=feature_store,
+        ).load("NVDA", period="2y", interval="1d")
+
+        market_data_manager.download_history.assert_called_once_with(
+            "NVDA",
+            period="2y",
+            interval="1d",
+        )
+        history_manager.save_history.assert_called_once()
+        self.assertGreater(data.attrs["rows_loaded"], 30)
+
+    def test_load_ignores_short_feature_cache_for_longer_requested_period(self):
+        history_manager = Mock()
+        market_data_manager = Mock()
+        feature_store = Mock()
+
+        history_manager.load_history.return_value = self._build_raw_history(periods=30)
+        market_data_manager.download_history.return_value = self._build_raw_history(periods=800)
+        feature_store.features_exist.return_value = True
+        feature_store.load_features.return_value = self._build_raw_history(periods=30)[
+            ["Date", "Close"]
+        ]
+
+        data = HistoricalDataLoader(
+            history_manager=history_manager,
+            market_data_manager=market_data_manager,
+            feature_store=feature_store,
+        ).load("NVDA", period="2y", interval="1d")
+
+        self.assertGreater(data.attrs["rows_loaded"], 30)
 
 
 if __name__ == "__main__":

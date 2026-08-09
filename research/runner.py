@@ -61,6 +61,53 @@ def _print_completed_result_metrics(result) -> None:
 		print(f"  metrics: {', '.join(metric_lines)}")
 
 
+def _print_completed_result_diagnostics(result) -> None:
+	metrics = result.metrics
+	extra_metrics = metrics.extra_metrics
+	diagnostics = getattr(result, "diagnostics", {}) or {}
+
+	rows_loaded = extra_metrics.get("rows_loaded")
+	rows_after_cleaning = extra_metrics.get("rows_after_cleaning")
+	matching_setups = extra_metrics.get("matching_setups")
+	forward_returns_available = extra_metrics.get("forward_returns_available")
+	forward_returns_missing = extra_metrics.get("forward_returns_missing")
+	forward_horizon = extra_metrics.get("forward_horizon")
+	first_match_date = diagnostics.get("first_match_date")
+	last_match_date = diagnostics.get("last_match_date")
+
+	diagnostic_values = [
+		rows_loaded,
+		rows_after_cleaning,
+		matching_setups,
+		forward_returns_available,
+		forward_returns_missing,
+		forward_horizon,
+		first_match_date,
+		last_match_date,
+	]
+
+	if all(value is None for value in diagnostic_values):
+		return
+
+	def _format_count(value):
+		if value is None:
+			return "None"
+
+		return str(int(value))
+
+	print(
+		"  diagnostics: "
+		f"rows_loaded={_format_count(rows_loaded)}, "
+		f"rows_after_cleaning={_format_count(rows_after_cleaning)}, "
+		f"matching_setups={_format_count(matching_setups)}, "
+		f"forward_returns_available={_format_count(forward_returns_available)}, "
+		f"forward_returns_missing={_format_count(forward_returns_missing)}, "
+		f"forward_horizon={_format_count(forward_horizon)}, "
+		f"first_match_date={first_match_date if first_match_date is not None else 'None'}, "
+		f"last_match_date={last_match_date if last_match_date is not None else 'None'}"
+	)
+
+
 def run_manual_hypothesis_generation(
 	symbol=DEFAULT_SYMBOL,
 	sentinel=None,
@@ -1595,6 +1642,7 @@ def run_manual_experiment_execution(
 
 			if result.status == ExperimentResultStatus.COMPLETED:
 				_print_completed_result_metrics(result)
+				_print_completed_result_diagnostics(result)
 
 	else:
 		print()

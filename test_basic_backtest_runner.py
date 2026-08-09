@@ -50,6 +50,14 @@ class BasicBacktestRunnerTests(unittest.TestCase):
         self.assertAlmostEqual((100.0 - 101.0) / 101.0, result.metrics.average_return)
         self.assertAlmostEqual(0.0, result.metrics.win_rate)
         self.assertAlmostEqual(1.0, result.metrics.extra_metrics["loss_rate"])
+        self.assertEqual(5.0, result.metrics.extra_metrics["rows_loaded"])
+        self.assertEqual(5.0, result.metrics.extra_metrics["rows_after_cleaning"])
+        self.assertEqual(1.0, result.metrics.extra_metrics["matching_setups"])
+        self.assertEqual(1.0, result.metrics.extra_metrics["forward_returns_available"])
+        self.assertEqual(0.0, result.metrics.extra_metrics["forward_returns_missing"])
+        self.assertEqual(2.0, result.metrics.extra_metrics["forward_horizon"])
+        self.assertEqual("2024-01-03", result.diagnostics["first_match_date"])
+        self.assertEqual("2024-01-03", result.diagnostics["last_match_date"])
         self.assertIn("1 matching setups", result.summary)
 
     def test_run_handles_no_matching_setups_clearly(self):
@@ -82,6 +90,14 @@ class BasicBacktestRunnerTests(unittest.TestCase):
         self.assertEqual(ExperimentResultStatus.COMPLETED, result.status)
         self.assertEqual(0, result.metrics.trade_count)
         self.assertEqual(0.0, result.metrics.total_return)
+        self.assertEqual(3.0, result.metrics.extra_metrics["rows_loaded"])
+        self.assertEqual(3.0, result.metrics.extra_metrics["rows_after_cleaning"])
+        self.assertEqual(0.0, result.metrics.extra_metrics["matching_setups"])
+        self.assertEqual(0.0, result.metrics.extra_metrics["forward_returns_available"])
+        self.assertEqual(0.0, result.metrics.extra_metrics["forward_returns_missing"])
+        self.assertEqual(2.0, result.metrics.extra_metrics["forward_horizon"])
+        self.assertIsNone(result.diagnostics["first_match_date"])
+        self.assertIsNone(result.diagnostics["last_match_date"])
         self.assertIn("no matching setups", result.summary.lower())
 
     def test_run_handles_matching_setups_with_unavailable_forward_returns(self):
@@ -113,6 +129,14 @@ class BasicBacktestRunnerTests(unittest.TestCase):
         self.assertEqual(ExperimentResultStatus.COMPLETED, result.status)
         self.assertEqual(0, result.metrics.trade_count)
         self.assertEqual(0.0, result.metrics.total_return)
+        self.assertEqual(3.0, result.metrics.extra_metrics["rows_loaded"])
+        self.assertEqual(3.0, result.metrics.extra_metrics["rows_after_cleaning"])
+        self.assertEqual(1.0, result.metrics.extra_metrics["matching_setups"])
+        self.assertEqual(0.0, result.metrics.extra_metrics["forward_returns_available"])
+        self.assertEqual(1.0, result.metrics.extra_metrics["forward_returns_missing"])
+        self.assertEqual(2.0, result.metrics.extra_metrics["forward_horizon"])
+        self.assertEqual("2024-01-04", result.diagnostics["first_match_date"])
+        self.assertEqual("2024-01-04", result.diagnostics["last_match_date"])
         self.assertIn("no available forward returns", result.summary.lower())
 
 
