@@ -27,6 +27,8 @@ from research.research_freshness import build_research_freshness
 from research.research_plan import ResearchPlanAction
 from research.research_plan import ResearchPlanPriority
 from research.research_plan import build_research_plan
+from research.trade_candidate_proposal import TradeCandidateProposalDecision
+from research.trade_candidate_proposal import evaluate_trade_candidate_proposals
 
 
 DEFAULT_SYMBOL = "NVDA"
@@ -2136,6 +2138,111 @@ def run_manual_promotion_candidates(
 	return evaluations
 
 
+def run_manual_trade_candidate_proposals(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Run deterministic read-only trade candidate proposal readiness for one symbol."""
+
+	storage = storage or Storage()
+	hypotheses = storage.load_hypotheses(symbol)
+	observations = storage.load_observations(symbol)
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = storage.load_experiment_results(symbol)
+	hypothesis_reviews = storage.load_hypothesis_reviews(symbol)
+	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+
+	evidence_summaries = evaluate_hypothesis_evidence(
+		hypotheses=hypotheses,
+		experiment_results=experiment_results,
+		experiment_requests=experiment_requests,
+	)
+	latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+	lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	freshness_items = build_research_freshness(
+		hypotheses=hypotheses,
+		observations=observations,
+		experiment_requests=experiment_requests,
+		experiment_results=experiment_results,
+		hypothesis_reviews=hypothesis_reviews,
+		revision_proposals=revision_proposals,
+		lifecycle_recommendations=lifecycle_recommendations,
+	)
+	promotion_evaluations = evaluate_promotion_candidates(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		freshness_items=freshness_items,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	readiness_items = evaluate_trade_candidate_proposals(promotion_evaluations)
+
+	research_candidate_count = sum(
+		1
+		for evaluation in promotion_evaluations
+		if evaluation.decision == PromotionCandidateDecision.CANDIDATE
+	)
+	proposal_ready_count = sum(
+		1
+		for item in readiness_items
+		if item.decision == TradeCandidateProposalDecision.PROPOSAL_READY
+	)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Trade Candidate Proposals: {symbol}")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print(f"Hypotheses Loaded : {len(hypotheses)}")
+	print(f"Research Candidates Loaded : {research_candidate_count}")
+	print(f"Trade Candidate Proposals : {proposal_ready_count}")
+
+	print()
+	print("Trade Candidate Proposal Readiness")
+	print("----------------------------------")
+	for item in readiness_items:
+		print(f"- {item.hypothesis_id} decision={item.decision.value}")
+		print(f"  source_decision={item.source_decision.value}")
+		if item.required_components:
+			print(f"  required_components={', '.join(item.required_components)}")
+		if item.missing_components:
+			print(f"  missing_components={', '.join(item.missing_components)}")
+		print(f"  rationale: {item.rationale}")
+
+	print()
+	print("Proposal Design Checklist")
+	print("-------------------------")
+	proposal_ready_items = [
+		item for item in readiness_items if item.decision == TradeCandidateProposalDecision.PROPOSAL_READY
+	]
+	if proposal_ready_items:
+		for item in proposal_ready_items:
+			print(f"- {item.hypothesis_id}")
+			print("  - define entry trigger")
+			print("  - define exit trigger")
+			print("  - define invalidation condition")
+			print("  - define maximum holding period")
+			print("  - define position sizing rule")
+			print("  - define max loss per trade")
+			print("  - define max portfolio exposure")
+			print("  - define demo-only enforcement")
+			print("  - define monitoring frequency")
+			print("  - define evidence conditions that would pause the setup")
+	else:
+		print("No trade candidate proposals are ready for design review.")
+
+	print()
+	print("Trade candidate proposal is not approval to trade.")
+	print("Promotion comes only after demo-trading parameters/risk gates are defined and passed.")
+
+	return readiness_items
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -2295,6 +2402,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	trade_candidate_proposals_parser = subparsers.add_parser(
+		"trade-candidate-proposals",
+		help="Show deterministic read-only trade candidate proposal readiness for one symbol.",
+	)
+	trade_candidate_proposals_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -2435,6 +2553,10 @@ def main(argv=None):
 
 	if args.mode == "promotion-candidates":
 		run_manual_promotion_candidates(symbol=args.symbol)
+		return 0
+
+	if args.mode == "trade-candidate-proposals":
+		run_manual_trade_candidate_proposals(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
