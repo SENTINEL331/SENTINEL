@@ -19,6 +19,8 @@ from research.hypothesis_evaluation import evaluate_hypothesis_evidence
 from research.hypothesis_evaluation import HypothesisEvidenceStatus
 from research.hypothesis_lifecycle import recommend_hypothesis_lifecycle_actions
 from research.hypothesis_lifecycle import select_latest_hypothesis_reviews
+from research.promotion_candidate import PromotionCandidateDecision
+from research.promotion_candidate import evaluate_promotion_candidates
 from research.research_freshness import ProposalFreshnessStatus
 from research.research_freshness import ReviewFreshnessStatus
 from research.research_freshness import build_research_freshness
@@ -1986,6 +1988,109 @@ def run_manual_hypothesis_revision_apply(
 	return application
 
 
+def run_manual_promotion_candidates(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Run deterministic read-only promotion candidate evaluation for one symbol."""
+
+	def _format_percent(value):
+		if value is None:
+			return "n/a"
+
+		return f"{value * 100:.2f}%"
+
+	def _format_review_action(value):
+		if value is None:
+			return "none"
+
+		return value.value
+
+	storage = storage or Storage()
+	hypotheses = storage.load_hypotheses(symbol)
+	observations = storage.load_observations(symbol)
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = storage.load_experiment_results(symbol)
+	hypothesis_reviews = storage.load_hypothesis_reviews(symbol)
+	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+
+	evidence_summaries = evaluate_hypothesis_evidence(
+		hypotheses=hypotheses,
+		experiment_results=experiment_results,
+		experiment_requests=experiment_requests,
+	)
+	latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+	lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	freshness_items = build_research_freshness(
+		hypotheses=hypotheses,
+		observations=observations,
+		experiment_requests=experiment_requests,
+		experiment_results=experiment_results,
+		hypothesis_reviews=hypothesis_reviews,
+		revision_proposals=revision_proposals,
+		lifecycle_recommendations=lifecycle_recommendations,
+	)
+	evaluations = evaluate_promotion_candidates(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		freshness_items=freshness_items,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+
+	candidate_count = sum(
+		1
+		for evaluation in evaluations
+		if evaluation.decision == PromotionCandidateDecision.CANDIDATE
+	)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Promotion Candidates: {symbol}")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print(f"Hypotheses Loaded : {len(hypotheses)}")
+	print(f"Candidates Evaluated : {len(evaluations)}")
+	print(f"Promotion Candidates : {candidate_count}")
+
+	print()
+	print("Promotion Evaluation")
+	print("--------------------")
+	for evaluation in evaluations:
+		print(f"- {evaluation.hypothesis_id} decision={evaluation.decision.value}")
+		print(f"  evidence={evaluation.evidence_status.value}")
+		print(f"  completed_experiments={evaluation.completed_experiments}")
+		print(f"  trade_count={evaluation.trade_count}")
+		print(f"  average_return={_format_percent(evaluation.average_return)}")
+		print(f"  win_rate={_format_percent(evaluation.win_rate)}")
+		print(f"  latest_review_action={_format_review_action(evaluation.latest_review_action)}")
+		if evaluation.failed_checks:
+			print(f"  failed_checks={', '.join(evaluation.failed_checks)}")
+		print(f"  rationale: {evaluation.rationale}")
+
+	not_candidate_count = len(evaluations) - candidate_count
+	print()
+	print("Promotion Summary")
+	print("-----------------")
+	print(f"- candidate : {candidate_count}")
+	print(f"- not_candidate : {not_candidate_count}")
+
+	print()
+	print("Suggested Next Commands")
+	print("-----------------------")
+	print("No automatic promotion action is available. Promotion candidates require explicit human review.")
+
+	print()
+	print("Promotion candidate evaluation complete. No records were modified.")
+
+	return evaluations
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -2134,6 +2239,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	promotion_candidates_parser = subparsers.add_parser(
+		"promotion-candidates",
+		help="Show deterministic read-only promotion candidate evaluation for one symbol.",
+	)
+	promotion_candidates_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -2270,6 +2386,10 @@ def main(argv=None):
 
 	if args.mode == "research-freshness":
 		run_manual_research_freshness(symbol=args.symbol)
+		return 0
+
+	if args.mode == "promotion-candidates":
+		run_manual_promotion_candidates(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
