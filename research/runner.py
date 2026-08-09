@@ -990,6 +990,8 @@ def run_manual_research_cycle(
 	run_experiments=False,
 	revisions=False,
 	full_safe=False,
+	period=settings.BACKTEST_PERIOD,
+	interval=settings.BACKTEST_INTERVAL,
 	storage=None,
 	hypothesis_review_service=None,
 	hypothesis_revision_service=None,
@@ -1196,6 +1198,8 @@ def run_manual_research_cycle(
 			symbol=symbol,
 			storage=storage,
 			executor=executor,
+			period=period,
+			interval=interval,
 		)
 
 		state = _build_cycle_state()
@@ -1212,6 +1216,8 @@ def run_manual_research_cycle(
 		print(f"Requests Loaded : {execution_summary['requests_loaded']}")
 		print(f"Requests Executed : {execution_summary['requests_executed']}")
 		print(f"Requests Skipped : {execution_summary['requests_skipped']}")
+		print(f"Backtest Period : {period}")
+		print(f"Backtest Interval : {interval}")
 		print(f"Results Saved : {execution_summary['results_saved']}")
 		print(f"Not Implemented : {execution_summary['not_implemented']}")
 		print(f"Research Plan Items : {len(final_plan.items)}")
@@ -1344,6 +1350,8 @@ def run_manual_research_cycle(
 				symbol=symbol,
 				storage=storage,
 				executor=executor,
+				period=period,
+				interval=interval,
 			)
 			execution_summary = {
 				"requests_loaded": execution["requests_loaded"],
@@ -1459,6 +1467,8 @@ def run_manual_research_cycle(
 		print(f"Initial Research Plan Items : {len(research_plan.items)}")
 		print(f"Planned Experiment Candidates : {len(planned_candidates)}")
 		print(f"Experiment Requests Generated : {len(generated_requests)}")
+		print(f"Backtest Period : {period}")
+		print(f"Backtest Interval : {interval}")
 		print(f"Requests Executed : {execution_summary['requests_executed']}")
 		print(f"Results Saved : {execution_summary['results_saved']}")
 		print(f"Review Candidates : {len(review_candidates)}")
@@ -1533,6 +1543,8 @@ def run_manual_experiment_execution(
 	symbol=DEFAULT_SYMBOL,
 	storage=None,
 	executor=None,
+	period=settings.BACKTEST_PERIOD,
+	interval=settings.BACKTEST_INTERVAL,
 ):
 	"""Run one-symbol experiment execution on demand using stored requests."""
 
@@ -1542,6 +1554,8 @@ def run_manual_experiment_execution(
 		symbol=symbol,
 		storage=storage,
 		executor=executor,
+		period=period,
+		interval=interval,
 	)
 	experiment_results = execution_summary["experiment_results"]
 
@@ -1553,6 +1567,8 @@ def run_manual_experiment_execution(
 	print(f"Requests Loaded : {execution_summary['requests_loaded']}")
 	print(f"Requests Executed : {execution_summary['requests_executed']}")
 	print(f"Requests Skipped : {execution_summary['requests_skipped']}")
+	print(f"Backtest Period : {period}")
+	print(f"Backtest Interval : {interval}")
 	print(f"Skipped Non-Executable : {execution_summary['skipped_non_executable']}")
 	print(f"Skipped Obsolete : {execution_summary['skipped_obsolete']}")
 	print(f"Skipped Symbol Mismatch : {execution_summary['skipped_symbol_mismatch']}")
@@ -1591,6 +1607,8 @@ def _execute_experiment_requests_for_symbol(
 	symbol,
 	storage,
 	executor,
+	period,
+	interval,
 ):
 	"""Execute currently executable requests and return deterministic execution counts."""
 
@@ -1613,7 +1631,9 @@ def _execute_experiment_requests_for_symbol(
 			skipped_non_executable_count += 1
 			continue
 
-		experiment_results.append(executor.execute(request))
+		experiment_results.append(
+			executor.execute(request, period=period, interval=interval)
+		)
 
 	if experiment_results:
 		storage.save_experiment_results(symbol, experiment_results)
@@ -1964,6 +1984,20 @@ def _build_arg_parser():
 		default=DEFAULT_SYMBOL,
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
+	experiment_execution_parser.add_argument(
+		"--period",
+		help=(
+			"Historical lookback period for backtest execution "
+			f"(default: {settings.BACKTEST_PERIOD})."
+		),
+	)
+	experiment_execution_parser.add_argument(
+		"--interval",
+		help=(
+			"Historical sampling interval for backtest execution "
+			f"(default: {settings.BACKTEST_INTERVAL})."
+		),
+	)
 
 	hypothesis_evaluation_parser = subparsers.add_parser(
 		"hypothesis-evaluation",
@@ -2145,7 +2179,17 @@ def main(argv=None):
 		return 0
 
 	if args.mode == "experiment-execution":
-		run_manual_experiment_execution(symbol=args.symbol)
+		experiment_execution_kwargs = {
+			"symbol": args.symbol,
+		}
+
+		if args.period is not None:
+			experiment_execution_kwargs["period"] = args.period
+
+		if args.interval is not None:
+			experiment_execution_kwargs["interval"] = args.interval
+
+		run_manual_experiment_execution(**experiment_execution_kwargs)
 		return 0
 
 	if args.mode == "hypothesis-evaluation":

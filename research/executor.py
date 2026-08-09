@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pandas as pd
 
+from config.settings import BACKTEST_INTERVAL, BACKTEST_PERIOD
 from market.historical_data_loader import HistoricalDataLoader
 from research.basic_backtest_runner import BasicBacktestRunner
 from research.experiment import ExperimentRequest
@@ -131,7 +132,13 @@ class ExperimentExecutor:
 
         return None
 
-    def execute(self, request: ExperimentRequest, feature_data: pd.DataFrame | None = None) -> ExperimentResult:
+    def execute(
+        self,
+        request: ExperimentRequest,
+        feature_data: pd.DataFrame | None = None,
+        period: str = BACKTEST_PERIOD,
+        interval: str = BACKTEST_INTERVAL,
+    ) -> ExperimentResult:
         """Execute a supported deterministic backtest or return a clear placeholder."""
 
         support_error = self._request_support_error(request)
@@ -149,7 +156,11 @@ class ExperimentExecutor:
             historical_data = (
                 feature_data
                 if feature_data is not None
-                else self._historical_data_loader.load(request.symbol)
+                else self._historical_data_loader.load(
+                    request.symbol,
+                    period=period,
+                    interval=interval,
+                )
             )
         except FileNotFoundError:
             return self._build_not_implemented_result(

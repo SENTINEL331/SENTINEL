@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import pandas as pd
 
+from config import settings
 from research.executor import ExperimentExecutor
 from research.experiment import ExperimentRequest, ExperimentTestType
 from research.experiment import ExperimentRequestStatus
@@ -62,11 +63,114 @@ class ExperimentExecutorTests(unittest.TestCase):
         self.assertEqual("NVDA", result.symbol)
         self.assertEqual(ExperimentTestType.INITIAL_BACKTEST, result.test_type)
         self.assertEqual(ExperimentResultStatus.COMPLETED, result.status)
-        historical_data_loader.load.assert_called_once_with("NVDA")
+        historical_data_loader.load.assert_called_once_with(
+            "NVDA",
+            period=settings.BACKTEST_PERIOD,
+            interval=settings.BACKTEST_INTERVAL,
+        )
         runner_request = basic_backtest_runner.run.call_args.args[0]
         self.assertEqual('[{"field": "Close", "operator": ">", "value": 100.0}]', runner_request.entry_conditions)
         self.assertEqual("1D", runner_request.time_horizon)
         basic_backtest_runner.run.assert_called_once_with(runner_request, historical_data)
+
+    def test_execute_uses_overridden_period_and_interval(self):
+        request = ExperimentRequest(
+            experiment_request_id="expreq-001b",
+            hypothesis_id="hyp-001b",
+            hypothesis_version_id="hyp-001b:v1",
+            symbol="NVDA",
+            title="Validate overridden lookback inputs",
+            objective="Test whether custom period and interval are forwarded.",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Enter when close is above 100.",
+            machine_readable_entry_conditions=(
+                {"field": "Close", "operator": ">", "value": 100.0},
+            ),
+            exit_conditions="Exit after one session.",
+            time_horizon="1D",
+            forward_horizon=1,
+        )
+        historical_data = pd.DataFrame(
+            {"Close": [99.0, 101.0, 103.0]},
+            index=pd.Index(["2024-01-02", "2024-01-03", "2024-01-04"]),
+        )
+        historical_data_loader = Mock()
+        historical_data_loader.load.return_value = historical_data
+        basic_backtest_runner = Mock()
+        basic_backtest_runner.run.return_value = ExperimentResult(
+            experiment_result_id="expr-001b",
+            experiment_request_id="expreq-001b",
+            hypothesis_id="hyp-001b",
+            symbol="NVDA",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            status=ExperimentResultStatus.COMPLETED,
+            started_at=datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc),
+            summary="Basic backtest completed.",
+            created_at=datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc),
+        )
+
+        executor = ExperimentExecutor(
+            basic_backtest_runner=basic_backtest_runner,
+            historical_data_loader=historical_data_loader,
+        )
+        executor.execute(request, period="18m", interval="1wk")
+
+        historical_data_loader.load.assert_called_once_with(
+            "NVDA",
+            period="18m",
+            interval="1wk",
+        )
+
+    def test_execute_default_period_is_backtest_period_not_observation_default_period(self):
+        request = ExperimentRequest(
+            experiment_request_id="expreq-001c",
+            hypothesis_id="hyp-001c",
+            hypothesis_version_id="hyp-001c:v1",
+            symbol="NVDA",
+            title="Validate default backtest lookback",
+            objective="Ensure execution does not use observation period by default.",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Enter when close is above 100.",
+            machine_readable_entry_conditions=(
+                {"field": "Close", "operator": ">", "value": 100.0},
+            ),
+            exit_conditions="Exit after one session.",
+            time_horizon="1D",
+            forward_horizon=1,
+        )
+        historical_data_loader = Mock()
+        historical_data_loader.load.return_value = pd.DataFrame(
+            {"Close": [100.0]},
+            index=pd.Index(["2024-01-02"]),
+        )
+        basic_backtest_runner = Mock()
+        basic_backtest_runner.run.return_value = ExperimentResult(
+            experiment_result_id="expr-001c",
+            experiment_request_id="expreq-001c",
+            hypothesis_id="hyp-001c",
+            symbol="NVDA",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            status=ExperimentResultStatus.COMPLETED,
+            started_at=datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc),
+            summary="Basic backtest completed.",
+            created_at=datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc),
+        )
+
+        executor = ExperimentExecutor(
+            basic_backtest_runner=basic_backtest_runner,
+            historical_data_loader=historical_data_loader,
+        )
+        executor.execute(request)
+
+        self.assertNotEqual(settings.DEFAULT_PERIOD, settings.BACKTEST_PERIOD)
+        self.assertEqual(
+            settings.BACKTEST_PERIOD,
+            historical_data_loader.load.call_args.kwargs["period"],
+        )
 
     def test_execute_marks_unsupported_machine_unreadable_request_not_implemented(self):
         request = ExperimentRequest(
@@ -120,7 +224,11 @@ class ExperimentExecutorTests(unittest.TestCase):
         self.assertEqual(ExperimentResultStatus.NOT_IMPLEMENTED, result.status)
         self.assertEqual("historical_data_unavailable", result.failure_reason)
         self.assertIn("historical data is unavailable", result.summary.lower())
-        historical_data_loader.load.assert_called_once_with("NVDA")
+        historical_data_loader.load.assert_called_once_with(
+            "NVDA",
+            period=settings.BACKTEST_PERIOD,
+            interval=settings.BACKTEST_INTERVAL,
+        )
 
     def test_execute_marks_actual_execution_errors_failed(self):
         request = ExperimentRequest(

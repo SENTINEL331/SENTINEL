@@ -170,6 +170,36 @@ class HistoricalDataLoaderTests(unittest.TestCase):
         ):
             loader.load("NVDA")
 
+    def test_load_forwards_interval_to_history_manager(self):
+        history_manager = Mock()
+        feature_store = Mock()
+
+        history_manager.load_history.return_value = self._build_raw_history()
+        feature_store.features_exist.return_value = False
+
+        HistoricalDataLoader(
+            history_manager=history_manager,
+            feature_store=feature_store,
+        ).load("NVDA", interval="1wk")
+
+        history_manager.load_history.assert_called_once_with("NVDA", "1wk")
+
+    def test_load_applies_period_lookback_window(self):
+        history_manager = Mock()
+        feature_store = Mock()
+
+        history_manager.load_history.return_value = self._build_raw_history(periods=90)
+        feature_store.features_exist.return_value = False
+
+        data = HistoricalDataLoader(
+            history_manager=history_manager,
+            feature_store=feature_store,
+        ).load("NVDA", period="30d")
+
+        self.assertFalse(data.empty)
+        lookback_days = (data.index.max() - data.index.min()).days
+        self.assertLessEqual(lookback_days, 30)
+
 
 if __name__ == "__main__":
     unittest.main()

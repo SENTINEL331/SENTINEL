@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from config import settings
 from ai.storage import Storage
 from research.experiment import ExperimentRequest, ExperimentTestType
 from research.experiment import ExperimentRequestStatus
@@ -107,13 +108,19 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
 
         self.assertEqual([execution_result], results)
         storage.load_experiment_requests.assert_called_once_with("NVDA")
-        executor.execute.assert_called_once_with(executable_request)
+        executor.execute.assert_called_once_with(
+            executable_request,
+            period=settings.BACKTEST_PERIOD,
+            interval=settings.BACKTEST_INTERVAL,
+        )
         storage.save_experiment_results.assert_called_once_with("NVDA", [execution_result])
 
         mock_print.assert_any_call("Manual Experiment Execution: NVDA")
         mock_print.assert_any_call("Requests Loaded : 4")
         mock_print.assert_any_call("Requests Executed : 1")
         mock_print.assert_any_call("Requests Skipped : 3")
+        mock_print.assert_any_call(f"Backtest Period : {settings.BACKTEST_PERIOD}")
+        mock_print.assert_any_call(f"Backtest Interval : {settings.BACKTEST_INTERVAL}")
         mock_print.assert_any_call("Skipped Non-Executable : 1")
         mock_print.assert_any_call("Skipped Obsolete : 1")
         mock_print.assert_any_call("Skipped Symbol Mismatch : 1")
@@ -145,6 +152,8 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
         mock_print.assert_any_call("Requests Loaded : 0")
         mock_print.assert_any_call("Requests Executed : 0")
         mock_print.assert_any_call("Requests Skipped : 0")
+        mock_print.assert_any_call(f"Backtest Period : {settings.BACKTEST_PERIOD}")
+        mock_print.assert_any_call(f"Backtest Interval : {settings.BACKTEST_INTERVAL}")
         mock_print.assert_any_call("Skipped Non-Executable : 0")
         mock_print.assert_any_call("Skipped Obsolete : 0")
         mock_print.assert_any_call("Skipped Symbol Mismatch : 0")
@@ -260,6 +269,60 @@ class ManualExperimentExecutionRunnerTests(unittest.TestCase):
         )
         mock_print.assert_any_call(
             "  metrics: trade_count=7, average_return=1.25%, win_rate=57.00%, best_return=8.00%, worst_return=-3.00%, total_return=8.75%"
+        )
+
+    def test_runner_forwards_overridden_backtest_period_and_interval(self):
+        storage = Mock()
+        executor = Mock()
+
+        executable_request = ExperimentRequest(
+            experiment_request_id="expreq-300",
+            hypothesis_id="hyp-300",
+            hypothesis_version_id="hyp-300:v1",
+            symbol="NVDA",
+            title="Override window request",
+            objective="Verify overridden backtest lookback is forwarded.",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            entry_conditions="Entry",
+            machine_readable_entry_conditions=(
+                {"field": "Close", "operator": ">", "value": 100.0},
+            ),
+            exit_conditions="Exit",
+            time_horizon="5D",
+            forward_horizon=5,
+        )
+        storage.load_experiment_requests.return_value = [executable_request]
+
+        now = datetime(2026, 8, 4, 0, 0, tzinfo=timezone.utc)
+        execution_result = ExperimentResult(
+            experiment_result_id="expr-300",
+            experiment_request_id="expreq-300",
+            hypothesis_id="hyp-300",
+            symbol="NVDA",
+            test_type=ExperimentTestType.INITIAL_BACKTEST,
+            status=ExperimentResultStatus.NOT_IMPLEMENTED,
+            started_at=now,
+            completed_at=now,
+            summary="Not implemented placeholder.",
+            failure_reason="execution_not_implemented",
+            created_at=now,
+            updated_at=now,
+        )
+        executor.execute.return_value = execution_result
+
+        with patch("builtins.print"):
+            run_manual_experiment_execution(
+                symbol="NVDA",
+                storage=storage,
+                executor=executor,
+                period="18m",
+                interval="1wk",
+            )
+
+        executor.execute.assert_called_once_with(
+            executable_request,
+            period="18m",
+            interval="1wk",
         )
 
 

@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
+from config import settings
 from research.experiment import ExperimentRequest
 from research.experiment import ExperimentRequestStatus
 from research.experiment import ExperimentTestType
@@ -387,7 +388,11 @@ class ManualResearchCycleRunnerTests(unittest.TestCase):
             )
 
         self.assertEqual("NVDA", plan.symbol)
-        executor.execute.assert_called_once_with(executable_request)
+        executor.execute.assert_called_once_with(
+            executable_request,
+            period=settings.BACKTEST_PERIOD,
+            interval=settings.BACKTEST_INTERVAL,
+        )
         storage.save_experiment_results.assert_called_once_with("NVDA", [execution_result])
         mock_experiment_request_service.assert_not_called()
         mock_hypothesis_review_service.assert_not_called()
@@ -404,6 +409,8 @@ class ManualResearchCycleRunnerTests(unittest.TestCase):
         mock_print.assert_any_call("Requests Loaded : 1")
         mock_print.assert_any_call("Requests Executed : 1")
         mock_print.assert_any_call("Requests Skipped : 0")
+        mock_print.assert_any_call(f"Backtest Period : {settings.BACKTEST_PERIOD}")
+        mock_print.assert_any_call(f"Backtest Interval : {settings.BACKTEST_INTERVAL}")
         mock_print.assert_any_call("Results Saved : 1")
         mock_print.assert_any_call("Not Implemented : 0")
         mock_print.assert_any_call("Research Plan Items : 1")
@@ -713,8 +720,10 @@ class ManualResearchCycleRunnerTests(unittest.TestCase):
             ),
         ]
 
-        def _execute_request(request):
+        def _execute_request(request, period, interval):
             step_calls.append("step3_execute_experiment")
+            self.assertEqual(settings.BACKTEST_PERIOD, period)
+            self.assertEqual(settings.BACKTEST_INTERVAL, interval)
             return execution_results_queue.pop(0)
 
         executor.execute.side_effect = _execute_request

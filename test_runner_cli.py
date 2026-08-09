@@ -3,6 +3,7 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
+from config import settings
 from research.runner import DEFAULT_SYMBOL, main
 
 
@@ -113,6 +114,47 @@ class RunnerCliTests(unittest.TestCase):
         mock_experiment_execution.assert_called_once_with(symbol="NVDA")
         mock_hypotheses.assert_not_called()
         mock_experiment_requests.assert_not_called()
+
+    def test_experiment_execution_command_accepts_period_override(self):
+        with patch("research.runner.run_manual_experiment_execution") as mock_experiment_execution:
+            exit_code = main(["experiment-execution", "NVDA", "--period", "18m"])
+
+        self.assertEqual(0, exit_code)
+        mock_experiment_execution.assert_called_once_with(symbol="NVDA", period="18m")
+
+    def test_experiment_execution_command_accepts_interval_override(self):
+        with patch("research.runner.run_manual_experiment_execution") as mock_experiment_execution:
+            exit_code = main(["experiment-execution", "NVDA", "--interval", "1wk"])
+
+        self.assertEqual(0, exit_code)
+        mock_experiment_execution.assert_called_once_with(symbol="NVDA", interval="1wk")
+
+    def test_experiment_execution_command_accepts_period_and_interval_overrides(self):
+        with patch("research.runner.run_manual_experiment_execution") as mock_experiment_execution:
+            exit_code = main(
+                ["experiment-execution", "NVDA", "--period", "18m", "--interval", "1wk"]
+            )
+
+        self.assertEqual(0, exit_code)
+        mock_experiment_execution.assert_called_once_with(
+            symbol="NVDA",
+            period="18m",
+            interval="1wk",
+        )
+
+    def test_experiment_execution_help_mentions_backtest_defaults(self):
+        buffer = io.StringIO()
+
+        with redirect_stdout(buffer):
+            with self.assertRaises(SystemExit) as context:
+                main(["experiment-execution", "--help"])
+
+        self.assertEqual(0, context.exception.code)
+        help_text = buffer.getvalue()
+        self.assertIn("--period", help_text)
+        self.assertIn("--interval", help_text)
+        self.assertIn(settings.BACKTEST_PERIOD, help_text)
+        self.assertIn(settings.BACKTEST_INTERVAL, help_text)
 
     def test_empty_argv_shows_help_without_dispatch(self):
         with patch("research.runner.run_manual_hypothesis_generation") as mock_hypotheses, patch(
