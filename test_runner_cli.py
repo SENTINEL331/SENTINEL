@@ -42,6 +42,7 @@ class RunnerCliTests(unittest.TestCase):
         self.assertIn("trade-candidate-proposals", buffer.getvalue())
         self.assertIn("demo-trade-candidates", buffer.getvalue())
         self.assertIn("demo-trade-candidate-generation", buffer.getvalue())
+        self.assertIn("demo-trade-gate", buffer.getvalue())
         mock_hypotheses.assert_not_called()
         mock_experiment_requests.assert_not_called()
         mock_experiment_execution.assert_not_called()
@@ -126,6 +127,20 @@ class RunnerCliTests(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         mock_demo_trade_candidate_generation.assert_called_once_with(symbol=DEFAULT_SYMBOL)
+
+    def test_demo_trade_gate_command_dispatches_to_runner(self):
+        with patch("research.runner.run_manual_demo_trade_gate") as mock_demo_trade_gate:
+            exit_code = main(["demo-trade-gate", "NVDA"])
+
+        self.assertEqual(0, exit_code)
+        mock_demo_trade_gate.assert_called_once_with(symbol="NVDA")
+
+    def test_demo_trade_gate_command_uses_default_symbol(self):
+        with patch("research.runner.run_manual_demo_trade_gate") as mock_demo_trade_gate:
+            exit_code = main(["demo-trade-gate"])
+
+        self.assertEqual(0, exit_code)
+        mock_demo_trade_gate.assert_called_once_with(symbol=DEFAULT_SYMBOL)
 
     def test_research_cycle_help_includes_new_mode_flags(self):
         buffer = io.StringIO()

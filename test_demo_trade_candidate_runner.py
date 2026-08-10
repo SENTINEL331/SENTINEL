@@ -5,9 +5,11 @@ from unittest.mock import Mock, patch
 from ai.demo_trade_candidate_service import DemoTradeCandidateGenerationResult
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
+from research.demo_trade_gate import DemoTradeGateDecision
 from research.runner import (
     DEFAULT_SYMBOL,
     run_manual_demo_trade_candidate_generation,
+    run_manual_demo_trade_gate,
     run_manual_demo_trade_candidates,
 )
 
@@ -156,6 +158,107 @@ class ManualDemoTradeCandidateRunnerTests(unittest.TestCase):
             )
 
         mock_print.assert_any_call("No demo trade candidates generated.")
+
+    def test_demo_trade_gate_runner_is_read_only_and_prints_results(self):
+        storage = Mock()
+        storage.load_hypotheses.return_value = []
+        storage.load_observations.return_value = []
+        storage.load_experiment_requests.return_value = []
+        storage.load_experiment_results.return_value = []
+        storage.load_hypothesis_reviews.return_value = []
+        storage.load_hypothesis_revision_proposals.return_value = []
+        storage.load_demo_trade_candidates.return_value = [
+            _candidate("dtc-001"),
+            DemoTradeCandidate(
+                trade_candidate_id="dtc-002",
+                symbol="NVDA",
+                source_hypothesis_id="hyp-dtc-002",
+                source_research_candidate_decision="candidate",
+                created_at=datetime(2026, 8, 9, 12, 0, tzinfo=timezone.utc),
+                status=DemoTradeCandidateStatus.GATE_PASSED,
+                entry_logic="Entry one.",
+                exit_logic="Exit one.",
+                invalidation_logic="Invalidate one.",
+                maximum_holding_period="5D",
+                position_sizing_rule="Risk 50 bps of equity.",
+                max_loss_per_trade=0.01,
+                max_portfolio_exposure=0.05,
+                demo_only=True,
+                monitoring_frequency="15m",
+                pause_conditions=("halted_market",),
+                source_evidence_summary={"completed_experiments": 2},
+                source_review_action="keep",
+                source_review_confidence=0.72,
+                risk_flags=("limited_experiment_count",),
+                created_by="ai",
+            ),
+        ]
+
+        with patch("research.runner.evaluate_promotion_candidates") as mock_promotion_evaluations, patch(
+            "research.runner.evaluate_demo_trade_gate"
+        ) as mock_gate_evaluations, patch("builtins.print") as mock_print:
+            mock_promotion_evaluations.return_value = []
+            mock_gate_evaluations.return_value = [
+                Mock(
+                    trade_candidate_id="dtc-001",
+                    source_hypothesis_id="hyp-dtc-001",
+                    status=DemoTradeCandidateStatus.PROPOSED,
+                    decision=DemoTradeGateDecision.GATE_PASS,
+                    failed_checks=(),
+                    risk_flags=("large_worst_loss", "limited_experiment_count"),
+                    rationale="Candidate passes deterministic demo gate checks.",
+                ),
+                Mock(
+                    trade_candidate_id="dtc-002",
+                    source_hypothesis_id="hyp-dtc-002",
+                    status=DemoTradeCandidateStatus.GATE_PASSED,
+                    decision=DemoTradeGateDecision.NOT_EVALUATED,
+                    failed_checks=(),
+                    risk_flags=("limited_experiment_count",),
+                    rationale="Only proposed demo trade candidates are evaluated by the demo gate.",
+                ),
+            ]
+
+            evaluations = run_manual_demo_trade_gate(symbol="NVDA", storage=storage)
+
+        self.assertEqual(2, len(evaluations))
+        mock_print.assert_any_call("Manual Demo Trade Gate: NVDA")
+        mock_print.assert_any_call("Records Modified : no")
+        mock_print.assert_any_call("AI Calls Allowed : no")
+        mock_print.assert_any_call("Candidates Loaded : 2")
+        mock_print.assert_any_call("Gate Evaluated : 1")
+        mock_print.assert_any_call("Gate Passed : 1")
+        mock_print.assert_any_call("Gate Failed : 0")
+        mock_print.assert_any_call("Not Evaluated : 1")
+        mock_print.assert_any_call("Demo Trade Gate Results")
+        mock_print.assert_any_call("- candidate_id=dtc-001")
+        mock_print.assert_any_call("  source_hypothesis_id=hyp-dtc-001")
+        mock_print.assert_any_call("  status=proposed")
+        mock_print.assert_any_call("  decision=gate_pass")
+        mock_print.assert_any_call("  failed_checks=none")
+        mock_print.assert_any_call("  risk_flags=large_worst_loss, limited_experiment_count")
+        mock_print.assert_any_call("  rationale: Candidate passes deterministic demo gate checks.")
+        mock_print.assert_any_call("Suggested Next Commands")
+        mock_print.assert_any_call(
+            "Gate is read-only in this slice. No automatic demo queue action is available yet."
+        )
+
+        storage.save_demo_trade_candidate.assert_not_called()
+
+    def test_demo_trade_gate_runner_uses_default_symbol(self):
+        storage = Mock()
+        storage.load_hypotheses.return_value = []
+        storage.load_observations.return_value = []
+        storage.load_experiment_requests.return_value = []
+        storage.load_experiment_results.return_value = []
+        storage.load_hypothesis_reviews.return_value = []
+        storage.load_hypothesis_revision_proposals.return_value = []
+        storage.load_demo_trade_candidates.return_value = []
+
+        with patch("builtins.print"):
+            run_manual_demo_trade_gate(storage=storage)
+
+        storage.load_hypotheses.assert_called_once_with(DEFAULT_SYMBOL)
 
 
 if __name__ == "__main__":

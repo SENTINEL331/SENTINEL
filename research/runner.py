@@ -14,6 +14,8 @@ from ai.journal import ResearchJournal
 from ai.storage import Storage
 from research.executor import ExperimentExecutor
 from research.demo_trade_candidate import validate_demo_trade_candidate
+from research.demo_trade_gate import DemoTradeGateDecision
+from research.demo_trade_gate import evaluate_demo_trade_gate
 from research.experiment import ExperimentRequestExecutionState
 from research.experiment_result import ExperimentResultStatus
 from research.hypothesis import HypothesisStatus
@@ -2327,6 +2329,108 @@ def run_manual_demo_trade_candidate_generation(
 	return result
 
 
+def run_manual_demo_trade_gate(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Run deterministic read-only gate evaluation for proposed demo trade candidates."""
+
+	storage = storage or Storage()
+	hypotheses = storage.load_hypotheses(symbol)
+	observations = storage.load_observations(symbol)
+	experiment_requests = storage.load_experiment_requests(symbol)
+	experiment_results = storage.load_experiment_results(symbol)
+	hypothesis_reviews = storage.load_hypothesis_reviews(symbol)
+	revision_proposals = storage.load_hypothesis_revision_proposals(symbol)
+	candidates = storage.load_demo_trade_candidates(symbol=symbol)
+
+	evidence_summaries = evaluate_hypothesis_evidence(
+		hypotheses=hypotheses,
+		experiment_results=experiment_results,
+		experiment_requests=experiment_requests,
+	)
+	latest_reviews_by_hypothesis_id = select_latest_hypothesis_reviews(hypothesis_reviews)
+	lifecycle_recommendations = recommend_hypothesis_lifecycle_actions(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	freshness_items = build_research_freshness(
+		hypotheses=hypotheses,
+		observations=observations,
+		experiment_requests=experiment_requests,
+		experiment_results=experiment_results,
+		hypothesis_reviews=hypothesis_reviews,
+		revision_proposals=revision_proposals,
+		lifecycle_recommendations=lifecycle_recommendations,
+	)
+	promotion_evaluations = evaluate_promotion_candidates(
+		hypotheses=hypotheses,
+		evidence_summaries=evidence_summaries,
+		freshness_items=freshness_items,
+		latest_reviews_by_hypothesis_id=latest_reviews_by_hypothesis_id,
+	)
+	gate_evaluations = evaluate_demo_trade_gate(candidates, promotion_evaluations)
+
+	gate_passed = sum(
+		1
+		for evaluation in gate_evaluations
+		if evaluation.decision == DemoTradeGateDecision.GATE_PASS
+	)
+	gate_failed = sum(
+		1
+		for evaluation in gate_evaluations
+		if evaluation.decision == DemoTradeGateDecision.GATE_FAIL
+	)
+	not_evaluated = sum(
+		1
+		for evaluation in gate_evaluations
+		if evaluation.decision == DemoTradeGateDecision.NOT_EVALUATED
+	)
+	gate_evaluated = gate_passed + gate_failed
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Trade Gate: {symbol}")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print(f"Candidates Loaded : {len(candidates)}")
+	print(f"Gate Evaluated : {gate_evaluated}")
+	print(f"Gate Passed : {gate_passed}")
+	print(f"Gate Failed : {gate_failed}")
+	print(f"Not Evaluated : {not_evaluated}")
+
+	print()
+	print("Demo Trade Gate Results")
+	print("-----------------------")
+	if gate_evaluations:
+		for evaluation in gate_evaluations:
+			print(f"- candidate_id={evaluation.trade_candidate_id}")
+			print(f"  source_hypothesis_id={evaluation.source_hypothesis_id}")
+			print(f"  status={evaluation.status.value}")
+			print(f"  decision={evaluation.decision.value}")
+			print(
+				"  failed_checks="
+				+ (", ".join(evaluation.failed_checks) if evaluation.failed_checks else "none")
+			)
+			print(
+				"  risk_flags="
+				+ (", ".join(evaluation.risk_flags) if evaluation.risk_flags else "none")
+			)
+			print(f"  rationale: {evaluation.rationale}")
+	else:
+		print("No demo trade candidates found.")
+
+	print()
+	print("Suggested Next Commands")
+	print("-----------------------")
+	print("Gate is read-only in this slice. No automatic demo queue action is available yet.")
+
+	return gate_evaluations
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -2519,6 +2623,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_trade_gate_parser = subparsers.add_parser(
+		"demo-trade-gate",
+		help="Evaluate deterministic read-only gate checks for proposed demo trade candidates.",
+	)
+	demo_trade_gate_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -2671,6 +2786,10 @@ def main(argv=None):
 
 	if args.mode == "demo-trade-candidate-generation":
 		run_manual_demo_trade_candidate_generation(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-trade-gate":
+		run_manual_demo_trade_gate(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
