@@ -84,7 +84,55 @@ class DemoTradeCandidateStorageTests(unittest.TestCase):
             self.assertEqual(None, loaded[0].source_review_action)
             self.assertEqual(None, loaded[0].source_review_confidence)
             self.assertEqual((), loaded[0].risk_flags)
+            self.assertEqual(None, loaded[0].source_trade_candidate_id)
+            self.assertEqual(None, loaded[0].gate_checked_at)
+            self.assertEqual(None, loaded[0].gate_decision)
+            self.assertEqual((), loaded[0].failed_checks)
+            self.assertEqual(None, loaded[0].gate_rationale)
             self.assertEqual("", loaded[0].created_by)
+
+    def test_storage_round_trips_gate_metadata_fields(self):
+        storage = Storage()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            storage.base = Path(tmp_dir)
+            candidate = DemoTradeCandidate(
+                trade_candidate_id="dtc-002",
+                source_trade_candidate_id="dtc-001",
+                symbol="NVDA",
+                source_hypothesis_id="hyp-002",
+                source_research_candidate_decision="candidate",
+                created_at=datetime(2026, 8, 9, 13, 0, tzinfo=timezone.utc),
+                status=DemoTradeCandidateStatus.GATE_PASSED,
+                entry_logic="Enter on breakout close above prior range.",
+                exit_logic="Exit on trailing stop or target.",
+                invalidation_logic="Invalidate on range breakdown.",
+                maximum_holding_period="5D",
+                position_sizing_rule="Risk 50 bps of equity.",
+                max_loss_per_trade=0.01,
+                max_portfolio_exposure=0.05,
+                demo_only=True,
+                monitoring_frequency="15m",
+                pause_conditions=("halted_market",),
+                source_evidence_summary={"completed_experiments": 2},
+                source_review_action="keep",
+                source_review_confidence=0.72,
+                risk_flags=("limited_experiment_count",),
+                gate_checked_at=datetime(2026, 8, 9, 13, 0, tzinfo=timezone.utc),
+                gate_decision="gate_pass",
+                failed_checks=(),
+                gate_rationale="Candidate passes deterministic demo gate checks.",
+                created_by="sentinel",
+            )
+
+            storage.save_demo_trade_candidate(candidate)
+            loaded = storage.load_demo_trade_candidates(symbol="NVDA")
+
+            self.assertEqual(1, len(loaded))
+            self.assertEqual("dtc-001", loaded[0].source_trade_candidate_id)
+            self.assertEqual("gate_pass", loaded[0].gate_decision)
+            self.assertEqual(datetime(2026, 8, 9, 13, 0, tzinfo=timezone.utc), loaded[0].gate_checked_at)
+            self.assertEqual("Candidate passes deterministic demo gate checks.", loaded[0].gate_rationale)
 
 
 if __name__ == "__main__":

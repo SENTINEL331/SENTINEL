@@ -14,6 +14,7 @@ from ai.journal import ResearchJournal
 from ai.storage import Storage
 from research.executor import ExperimentExecutor
 from research.demo_trade_candidate import validate_demo_trade_candidate
+from research.demo_trade_gate_apply import DemoTradeGateApplyService
 from research.demo_trade_gate import DemoTradeGateDecision
 from research.demo_trade_gate import evaluate_demo_trade_gate
 from research.experiment import ExperimentRequestExecutionState
@@ -2431,6 +2432,63 @@ def run_manual_demo_trade_gate(
 	return gate_evaluations
 
 
+def run_manual_demo_trade_gate_apply(
+	symbol=DEFAULT_SYMBOL,
+	apply_changes=False,
+	storage=None,
+	demo_trade_gate_apply_service=None,
+):
+	"""Preview or apply append-only demo trade gate outcomes for one symbol."""
+
+	storage = storage or Storage()
+	demo_trade_gate_apply_service = demo_trade_gate_apply_service or DemoTradeGateApplyService(
+		storage=storage,
+	)
+	result = demo_trade_gate_apply_service.apply_for_symbol(
+		symbol=symbol,
+		apply_mode=apply_changes,
+	)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Trade Gate Apply: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Mode : {'apply' if apply_changes else 'dry-run'}")
+	print(f"Records Modified : {'yes' if apply_changes else 'no'}")
+	print("AI Calls Allowed : no")
+	print(f"Candidates Loaded : {result.candidates_loaded}")
+	print(f"Gate Evaluated : {result.gate_evaluated}")
+	print(f"Would Pass : {result.would_pass}")
+	print(f"Would Fail : {result.would_fail}")
+	print(f"Applied Passed : {result.applied_passed}")
+	print(f"Applied Failed : {result.applied_failed}")
+	print(f"Skipped Existing : {result.skipped_existing}")
+
+	print()
+	print("Applied Gate Results")
+	print("--------------------")
+	if result.applied_results:
+		for item in result.applied_results:
+			print(f"- candidate_id={item.trade_candidate_id}")
+			print(f"  source_hypothesis_id={item.source_hypothesis_id}")
+			print(f"  previous_status={item.previous_status.value}")
+			print(f"  new_status={item.new_status.value}")
+			print(f"  decision={item.decision.value}")
+	else:
+		print("No gate outcomes available to apply.")
+
+	print()
+	if apply_changes:
+		print("Apply reminder:")
+		print("Gate outcomes were recorded append-only. No orders were created.")
+	else:
+		print("Dry-run reminder:")
+		print("Dry-run only. No records were modified.")
+
+	return result
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -2634,6 +2692,28 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_trade_gate_apply_parser = subparsers.add_parser(
+		"demo-trade-gate-apply",
+		help="Preview or append deterministic demo trade gate outcomes for one symbol.",
+	)
+	demo_trade_gate_apply_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+	demo_trade_gate_apply_mode_group = demo_trade_gate_apply_parser.add_mutually_exclusive_group()
+	demo_trade_gate_apply_mode_group.add_argument(
+		"--dry-run",
+		action="store_true",
+		help="Preview deterministic gate outcomes without modifying records (default).",
+	)
+	demo_trade_gate_apply_mode_group.add_argument(
+		"--apply",
+		action="store_true",
+		help="Append deterministic gate outcome records for proposed demo trade candidates.",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -2790,6 +2870,13 @@ def main(argv=None):
 
 	if args.mode == "demo-trade-gate":
 		run_manual_demo_trade_gate(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-trade-gate-apply":
+		run_manual_demo_trade_gate_apply(
+			symbol=args.symbol,
+			apply_changes=bool(args.apply),
+		)
 		return 0
 
 	if args.mode == "research-cycle":

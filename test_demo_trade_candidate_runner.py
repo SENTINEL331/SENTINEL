@@ -5,10 +5,13 @@ from unittest.mock import Mock, patch
 from ai.demo_trade_candidate_service import DemoTradeCandidateGenerationResult
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
+from research.demo_trade_gate_apply import DemoTradeGateApplyResult
+from research.demo_trade_gate_apply import DemoTradeGateApplyItem
 from research.demo_trade_gate import DemoTradeGateDecision
 from research.runner import (
     DEFAULT_SYMBOL,
     run_manual_demo_trade_candidate_generation,
+    run_manual_demo_trade_gate_apply,
     run_manual_demo_trade_gate,
     run_manual_demo_trade_candidates,
 )
@@ -259,6 +262,87 @@ class ManualDemoTradeCandidateRunnerTests(unittest.TestCase):
             run_manual_demo_trade_gate(storage=storage)
 
         storage.load_hypotheses.assert_called_once_with(DEFAULT_SYMBOL)
+
+    def test_demo_trade_gate_apply_runner_defaults_to_dry_run_and_writes_nothing(self):
+        storage = Mock()
+        service = Mock()
+        service.apply_for_symbol.return_value = DemoTradeGateApplyResult(
+            apply_mode=False,
+            candidates_loaded=2,
+            gate_evaluated=2,
+            would_pass=1,
+            would_fail=1,
+            applied_passed=0,
+            applied_failed=0,
+            skipped_existing=0,
+            applied_results=(
+                DemoTradeGateApplyItem(
+                    trade_candidate_id="dtc-001",
+                    source_hypothesis_id="hyp-001",
+                    previous_status=DemoTradeCandidateStatus.PROPOSED,
+                    new_status=DemoTradeCandidateStatus.GATE_PASSED,
+                    decision=DemoTradeGateDecision.GATE_PASS,
+                ),
+            ),
+        )
+
+        with patch("builtins.print") as mock_print:
+            result = run_manual_demo_trade_gate_apply(
+                symbol="NVDA",
+                storage=storage,
+                demo_trade_gate_apply_service=service,
+            )
+
+        self.assertFalse(result.apply_mode)
+        service.apply_for_symbol.assert_called_once_with(symbol="NVDA", apply_mode=False)
+        mock_print.assert_any_call("Manual Demo Trade Gate Apply: NVDA")
+        mock_print.assert_any_call("Mode : dry-run")
+        mock_print.assert_any_call("Records Modified : no")
+        mock_print.assert_any_call("AI Calls Allowed : no")
+        mock_print.assert_any_call("Would Pass : 1")
+        mock_print.assert_any_call("Would Fail : 1")
+        mock_print.assert_any_call("Applied Passed : 0")
+        mock_print.assert_any_call("Applied Failed : 0")
+        mock_print.assert_any_call("Dry-run reminder:")
+        mock_print.assert_any_call("Dry-run only. No records were modified.")
+
+    def test_demo_trade_gate_apply_runner_prints_apply_mode(self):
+        storage = Mock()
+        service = Mock()
+        service.apply_for_symbol.return_value = DemoTradeGateApplyResult(
+            apply_mode=True,
+            candidates_loaded=1,
+            gate_evaluated=1,
+            would_pass=1,
+            would_fail=0,
+            applied_passed=1,
+            applied_failed=0,
+            skipped_existing=0,
+            applied_results=(
+                DemoTradeGateApplyItem(
+                    trade_candidate_id="dtc-001",
+                    source_hypothesis_id="hyp-001",
+                    previous_status=DemoTradeCandidateStatus.PROPOSED,
+                    new_status=DemoTradeCandidateStatus.GATE_PASSED,
+                    decision=DemoTradeGateDecision.GATE_PASS,
+                ),
+            ),
+        )
+
+        with patch("builtins.print") as mock_print:
+            result = run_manual_demo_trade_gate_apply(
+                symbol="NVDA",
+                apply_changes=True,
+                storage=storage,
+                demo_trade_gate_apply_service=service,
+            )
+
+        self.assertTrue(result.apply_mode)
+        service.apply_for_symbol.assert_called_once_with(symbol="NVDA", apply_mode=True)
+        mock_print.assert_any_call("Mode : apply")
+        mock_print.assert_any_call("Records Modified : yes")
+        mock_print.assert_any_call("Apply reminder:")
+        mock_print.assert_any_call("Gate outcomes were recorded append-only. No orders were created.")
 
 
 if __name__ == "__main__":

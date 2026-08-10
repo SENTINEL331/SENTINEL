@@ -37,6 +37,7 @@ class DemoTradeCandidate:
     symbol: str
     source_hypothesis_id: str
     source_research_candidate_decision: str
+    source_trade_candidate_id: str | None = None
     created_at: datetime = field(default_factory=_utc_now)
     status: DemoTradeCandidateStatus = DemoTradeCandidateStatus.PROPOSED
     entry_logic: str = ""
@@ -53,6 +54,10 @@ class DemoTradeCandidate:
     source_review_action: str | None = None
     source_review_confidence: float | None = None
     risk_flags: tuple[str, ...] = field(default_factory=tuple)
+    gate_checked_at: datetime | None = None
+    gate_decision: str | None = None
+    failed_checks: tuple[str, ...] = field(default_factory=tuple)
+    gate_rationale: str | None = None
     created_by: str = ""
 
     def __post_init__(self) -> None:
@@ -61,6 +66,10 @@ class DemoTradeCandidate:
 
         if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
             raise ValueError("created_at must be timezone-aware")
+
+        if self.gate_checked_at is not None:
+            if self.gate_checked_at.tzinfo is None or self.gate_checked_at.utcoffset() is None:
+                raise ValueError("gate_checked_at must be timezone-aware")
 
         normalized_evidence = MappingProxyType(dict(self.source_evidence_summary))
         object.__setattr__(self, "source_evidence_summary", normalized_evidence)

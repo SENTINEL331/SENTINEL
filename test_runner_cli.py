@@ -43,6 +43,7 @@ class RunnerCliTests(unittest.TestCase):
         self.assertIn("demo-trade-candidates", buffer.getvalue())
         self.assertIn("demo-trade-candidate-generation", buffer.getvalue())
         self.assertIn("demo-trade-gate", buffer.getvalue())
+        self.assertIn("demo-trade-gate-apply", buffer.getvalue())
         mock_hypotheses.assert_not_called()
         mock_experiment_requests.assert_not_called()
         mock_experiment_execution.assert_not_called()
@@ -141,6 +142,27 @@ class RunnerCliTests(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         mock_demo_trade_gate.assert_called_once_with(symbol=DEFAULT_SYMBOL)
+
+    def test_demo_trade_gate_apply_command_dispatches_to_runner_in_dry_run_mode(self):
+        with patch("research.runner.run_manual_demo_trade_gate_apply") as mock_demo_trade_gate_apply:
+            exit_code = main(["demo-trade-gate-apply", "NVDA", "--dry-run"])
+
+        self.assertEqual(0, exit_code)
+        mock_demo_trade_gate_apply.assert_called_once_with(symbol="NVDA", apply_changes=False)
+
+    def test_demo_trade_gate_apply_command_dispatches_to_runner_in_apply_mode(self):
+        with patch("research.runner.run_manual_demo_trade_gate_apply") as mock_demo_trade_gate_apply:
+            exit_code = main(["demo-trade-gate-apply", "NVDA", "--apply"])
+
+        self.assertEqual(0, exit_code)
+        mock_demo_trade_gate_apply.assert_called_once_with(symbol="NVDA", apply_changes=True)
+
+    def test_demo_trade_gate_apply_command_defaults_to_dry_run(self):
+        with patch("research.runner.run_manual_demo_trade_gate_apply") as mock_demo_trade_gate_apply:
+            exit_code = main(["demo-trade-gate-apply", "NVDA"])
+
+        self.assertEqual(0, exit_code)
+        mock_demo_trade_gate_apply.assert_called_once_with(symbol="NVDA", apply_changes=False)
 
     def test_research_cycle_help_includes_new_mode_flags(self):
         buffer = io.StringIO()

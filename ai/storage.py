@@ -537,6 +537,7 @@ class Storage:
                 json.dumps(
                     {
                         "trade_candidate_id": candidate.trade_candidate_id,
+                        "source_trade_candidate_id": candidate.source_trade_candidate_id,
                         "symbol": candidate.symbol,
                         "source_hypothesis_id": candidate.source_hypothesis_id,
                         "source_research_candidate_decision": candidate.source_research_candidate_decision,
@@ -556,6 +557,14 @@ class Storage:
                         "source_review_action": candidate.source_review_action,
                         "source_review_confidence": candidate.source_review_confidence,
                         "risk_flags": list(candidate.risk_flags),
+                        "gate_checked_at": (
+                            candidate.gate_checked_at.isoformat()
+                            if candidate.gate_checked_at is not None
+                            else None
+                        ),
+                        "gate_decision": candidate.gate_decision,
+                        "failed_checks": list(candidate.failed_checks),
+                        "gate_rationale": candidate.gate_rationale,
                         "created_by": candidate.created_by,
                     }
                 )
@@ -587,6 +596,7 @@ class Storage:
                 candidates.append(
                     DemoTradeCandidate(
                         trade_candidate_id=item["trade_candidate_id"],
+                        source_trade_candidate_id=item.get("source_trade_candidate_id"),
                         symbol=item_symbol,
                         source_hypothesis_id=item.get("source_hypothesis_id", ""),
                         source_research_candidate_decision=item.get(
@@ -611,6 +621,14 @@ class Storage:
                         source_review_action=item.get("source_review_action"),
                         source_review_confidence=item.get("source_review_confidence"),
                         risk_flags=tuple(item.get("risk_flags", [])),
+                        gate_checked_at=(
+                            self._parse_timestamp(item.get("gate_checked_at"))
+                            if item.get("gate_checked_at")
+                            else None
+                        ),
+                        gate_decision=item.get("gate_decision"),
+                        failed_checks=tuple(item.get("failed_checks", [])),
+                        gate_rationale=item.get("gate_rationale"),
                         created_by=item.get("created_by", ""),
                     )
                 )
