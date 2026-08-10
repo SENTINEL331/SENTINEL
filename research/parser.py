@@ -8,6 +8,7 @@ from research.experiment import (
     ExperimentRequestStatus,
     ExperimentTestType,
 )
+from research.demo_trade_candidate import DemoTradeCandidateStatus
 from research.hypothesis_lifecycle import HypothesisLifecycleAction
 from research.hypothesis_revision_proposal import HypothesisRevisionProposal
 from research.hypothesis_revision_proposal import HypothesisRevisionProposalType
@@ -716,5 +717,147 @@ def parse_hypothesis_revision_proposals(symbol, response):
                 created_at=created_at,
             )
         )
+
+    return proposals
+
+
+def _normalize_demo_trade_candidate_payload(response):
+    if isinstance(response, str):
+        try:
+            response = json.loads(response)
+        except json.JSONDecodeError as exc:
+            raise ValueError("demo trade candidate response must be valid JSON") from exc
+
+    if not isinstance(response, dict):
+        raise ValueError("demo trade candidate response must be a dict or JSON object")
+
+    if "demo_trade_candidates" not in response:
+        raise ValueError(
+            "demo trade candidate response must include a 'demo_trade_candidates' field"
+        )
+
+    candidates = response["demo_trade_candidates"]
+    if not isinstance(candidates, list):
+        raise ValueError("'demo_trade_candidates' must be a list")
+
+    return candidates
+
+
+def parse_demo_trade_candidate_proposals(symbol, response):
+    """Normalize validated demo trade candidate proposal payloads."""
+
+    items = _normalize_demo_trade_candidate_payload(response)
+    proposals = []
+
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise ValueError(f"demo_trade_candidates[{index}] must be an object")
+
+        item_symbol = item.get("symbol", symbol)
+        if not item_symbol:
+            raise ValueError(f"demo_trade_candidates[{index}].symbol is required")
+
+        source_hypothesis_id = item.get("source_hypothesis_id")
+        if not source_hypothesis_id:
+            raise ValueError(
+                f"demo_trade_candidates[{index}].source_hypothesis_id is required"
+            )
+
+        source_research_candidate_decision = item.get("source_research_candidate_decision")
+        if source_research_candidate_decision != "candidate":
+            raise ValueError(
+                f"demo_trade_candidates[{index}].source_research_candidate_decision must be 'candidate'"
+            )
+
+        status_value = item.get("status")
+        if status_value != DemoTradeCandidateStatus.PROPOSED.value:
+            raise ValueError(
+                f"demo_trade_candidates[{index}].status must be '{DemoTradeCandidateStatus.PROPOSED.value}'"
+            )
+
+        demo_only = item.get("demo_only")
+        if demo_only is not True:
+            raise ValueError(f"demo_trade_candidates[{index}].demo_only must be true")
+
+        created_by = item.get("created_by")
+        if created_by != "ai":
+            raise ValueError(f"demo_trade_candidates[{index}].created_by must be 'ai'")
+
+        pause_conditions = item.get("pause_conditions")
+        if not isinstance(pause_conditions, list):
+            raise ValueError(
+                f"demo_trade_candidates[{index}].pause_conditions must be a list"
+            )
+
+        risk_flags = item.get("risk_flags")
+        if not isinstance(risk_flags, list):
+            raise ValueError(f"demo_trade_candidates[{index}].risk_flags must be a list")
+
+        source_evidence_summary = item.get("source_evidence_summary")
+        if not isinstance(source_evidence_summary, dict):
+            raise ValueError(
+                f"demo_trade_candidates[{index}].source_evidence_summary must be an object"
+            )
+
+        source_review_confidence = item.get("source_review_confidence")
+        if isinstance(source_review_confidence, bool) or not isinstance(
+            source_review_confidence,
+            (int, float),
+        ):
+            raise ValueError(
+                f"demo_trade_candidates[{index}].source_review_confidence must be numeric"
+            )
+
+        max_loss_per_trade = item.get("max_loss_per_trade")
+        if isinstance(max_loss_per_trade, bool) or not isinstance(max_loss_per_trade, (int, float)):
+            raise ValueError(
+                f"demo_trade_candidates[{index}].max_loss_per_trade must be numeric"
+            )
+
+        max_portfolio_exposure = item.get("max_portfolio_exposure")
+        if isinstance(max_portfolio_exposure, bool) or not isinstance(
+            max_portfolio_exposure,
+            (int, float),
+        ):
+            raise ValueError(
+                f"demo_trade_candidates[{index}].max_portfolio_exposure must be numeric"
+            )
+
+        normalized = {
+            "symbol": item_symbol,
+            "source_hypothesis_id": source_hypothesis_id,
+            "source_research_candidate_decision": source_research_candidate_decision,
+            "status": status_value,
+            "entry_logic": item.get("entry_logic", ""),
+            "exit_logic": item.get("exit_logic", ""),
+            "invalidation_logic": item.get("invalidation_logic", ""),
+            "maximum_holding_period": item.get("maximum_holding_period", ""),
+            "position_sizing_rule": item.get("position_sizing_rule", ""),
+            "max_loss_per_trade": float(max_loss_per_trade),
+            "max_portfolio_exposure": float(max_portfolio_exposure),
+            "demo_only": True,
+            "monitoring_frequency": item.get("monitoring_frequency", ""),
+            "pause_conditions": tuple(pause_conditions),
+            "source_evidence_summary": source_evidence_summary,
+            "source_review_action": item.get("source_review_action", ""),
+            "source_review_confidence": float(source_review_confidence),
+            "risk_flags": tuple(risk_flags),
+            "created_by": created_by,
+        }
+
+        required_text_fields = (
+            "entry_logic",
+            "exit_logic",
+            "invalidation_logic",
+            "maximum_holding_period",
+            "position_sizing_rule",
+            "monitoring_frequency",
+            "source_review_action",
+        )
+        for field_name in required_text_fields:
+            if not normalized[field_name]:
+                raise ValueError(f"demo_trade_candidates[{index}].{field_name} is required")
+
+        proposals.append(normalized)
 
     return proposals

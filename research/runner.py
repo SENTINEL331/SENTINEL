@@ -4,6 +4,7 @@ import sys
 
 from config import settings
 
+from ai.demo_trade_candidate_service import DemoTradeCandidateService
 from ai.experiment_request_service import ExperimentRequestService
 from ai.hypothesis_revision_application_service import HypothesisRevisionApplicationService
 from ai.hypothesis_revision_service import HypothesisRevisionService
@@ -2285,6 +2286,47 @@ def run_manual_demo_trade_candidates(
 	return candidates
 
 
+def run_manual_demo_trade_candidate_generation(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	demo_trade_candidate_service=None,
+):
+	"""Generate append-only AI demo trade candidates for qualified research candidates."""
+
+	storage = storage or Storage()
+	demo_trade_candidate_service = demo_trade_candidate_service or DemoTradeCandidateService(
+		storage=storage,
+	)
+	result = demo_trade_candidate_service.generate_for_symbol(symbol=symbol)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Trade Candidate Generation: {symbol}")
+	print("=" * 50)
+	print()
+	print("Records Modified : yes")
+	print("AI Calls Allowed : yes")
+	print(f"Research Candidates Loaded : {result.research_candidates_loaded}")
+	print(f"Generation Candidates : {result.generation_candidates}")
+	print(f"Generated : {len(result.generated_candidates)}")
+	print(f"Skipped Existing : {result.skipped_existing}")
+	print(f"Failed Validation : {result.failed_validation}")
+
+	print()
+	print("Generated Demo Trade Candidates")
+	print("-------------------------------")
+	if result.generated_candidates:
+		for candidate in result.generated_candidates:
+			print(f"- candidate_id={candidate.trade_candidate_id}")
+			print(f"  source_hypothesis_id={candidate.source_hypothesis_id}")
+			print(f"  status={candidate.status.value}")
+			print("  validation=valid")
+	else:
+		print("No demo trade candidates generated.")
+
+	return result
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -2466,6 +2508,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_trade_candidate_generation_parser = subparsers.add_parser(
+		"demo-trade-candidate-generation",
+		help="Generate append-only AI demo trade candidates for one symbol.",
+	)
+	demo_trade_candidate_generation_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -2614,6 +2667,10 @@ def main(argv=None):
 
 	if args.mode == "demo-trade-candidates":
 		run_manual_demo_trade_candidates(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-trade-candidate-generation":
+		run_manual_demo_trade_candidate_generation(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":

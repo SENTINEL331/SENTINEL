@@ -262,6 +262,79 @@ Journal Context:
 """
 
 
+DEMO_TRADE_CANDIDATE_PROMPT = """
+Review the supplied qualified research candidates and deterministic evidence context.
+
+Your task:
+
+- Propose one demo trade candidate for each supplied qualified research candidate.
+- Design demo-trading setups only; do not place orders, create queue entries, or imply live approval.
+- Never mutate hypotheses, research candidates, or statuses outside the proposed demo trade candidate record.
+- Base every field on supplied context only.
+- Return VALID JSON ONLY.
+- Do not include markdown.
+- Do not include explanations before or after the JSON.
+- Your response will be parsed automatically by Sentinel.
+
+Rules:
+
+- Return at most one demo trade candidate per source_hypothesis_id.
+- source_research_candidate_decision must be candidate.
+- status must be proposed.
+- demo_only must be true.
+- max_loss_per_trade must be numeric, positive, and no greater than 0.02.
+- max_portfolio_exposure must be numeric, positive, and no greater than 0.10.
+- pause_conditions must be a JSON array of concise strings.
+- created_by must be ai.
+- Use only supplied evidence, review, and risk context.
+- If no qualified candidates are supplied, return an empty demo_trade_candidates list.
+
+Return this exact structure:
+
+{{
+    "demo_trade_candidates": [
+        {{
+            "symbol": "...",
+            "source_hypothesis_id": "...",
+            "source_research_candidate_decision": "candidate",
+            "status": "proposed",
+            "entry_logic": "...",
+            "exit_logic": "...",
+            "invalidation_logic": "...",
+            "maximum_holding_period": "...",
+            "position_sizing_rule": "...",
+            "max_loss_per_trade": 0.01,
+            "max_portfolio_exposure": 0.05,
+            "demo_only": true,
+            "monitoring_frequency": "...",
+            "pause_conditions": ["..."],
+            "source_evidence_summary": {{
+                "completed_experiments": 2,
+                "trade_count": 80,
+                "average_return": 0.02,
+                "win_rate": 0.65,
+                "best_return": 0.10,
+                "worst_return": -0.04,
+                "evidence_status": "promising"
+            }},
+            "source_review_action": "keep",
+            "source_review_confidence": 0.0,
+            "risk_flags": ["limited_experiment_count"],
+            "created_by": "ai"
+        }}
+    ]
+}}
+
+Qualified Research Candidate Context:
+
+{qualified_candidates}
+
+Journal Context:
+
+{journal}
+"""
+
+
 OBSERVATION_PROMPT = """
 Review the following market evidence.
 

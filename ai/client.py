@@ -14,6 +14,7 @@ from ai.prompts import (
     EXPERIMENT_REQUEST_PROMPT,
     HYPOTHESIS_REVIEW_PROMPT,
     HYPOTHESIS_REVISION_PROPOSAL_PROMPT,
+    DEMO_TRADE_CANDIDATE_PROMPT,
 )
 
 
@@ -219,6 +220,34 @@ class AIClient:
         prompt = HYPOTHESIS_REVISION_PROPOSAL_PROMPT.format(
             hypotheses=hypotheses,
             lifecycle_recommendations=lifecycle_recommendations,
+            journal="\n\n".join(prompt_sections),
+        )
+
+        return self.chat(
+            SYSTEM_PROMPT,
+            prompt,
+        )
+
+    def demo_trade_candidate_generation(
+        self,
+        symbol,
+        journal,
+        qualified_candidates,
+    ):
+        """Request demo trade candidate proposals for one symbol."""
+
+        prompt_sections = [
+            f"Symbol: {symbol}",
+        ]
+
+        if journal:
+
+            prompt_sections.append(
+                f"Journal Context:\n{journal}"
+            )
+
+        prompt = DEMO_TRADE_CANDIDATE_PROMPT.format(
+            qualified_candidates=qualified_candidates,
             journal="\n\n".join(prompt_sections),
         )
 
