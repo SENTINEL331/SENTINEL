@@ -16,6 +16,7 @@ from research.executor import ExperimentExecutor
 from research.demo_broker_account import check_demo_broker_account
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
+from research.demo_order_intent_add import DemoOrderIntentAddService
 from research.demo_trade_gate_apply import DemoTradeGateApplyService
 from research.demo_trade_gate import DemoTradeGateDecision
 from research.demo_trade_gate import evaluate_demo_trade_gate
@@ -2586,6 +2587,112 @@ def run_manual_demo_trade_queue_add(
 	return result
 
 
+def run_manual_demo_order_intents(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Inspect append-only demo order intents for one symbol in read-only mode."""
+
+	storage = storage or Storage()
+	intents = storage.load_demo_order_intents(symbol=symbol)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Order Intents: {symbol}")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print(f"Order Intents Loaded : {len(intents)}")
+
+	if intents:
+		print()
+		print("Demo Order Intents")
+		print("------------------")
+		for intent in intents:
+			print(f"- order_intent_id={intent.order_intent_id}")
+			print(f"  queue_item_id={intent.queue_item_id}")
+			print(f"  demo_trade_candidate_id={intent.demo_trade_candidate_id}")
+			print(f"  source_hypothesis_id={intent.source_hypothesis_id}")
+			print(f"  status={intent.status.value}")
+			print(f"  side={intent.side}")
+			print(f"  order_type={intent.order_type}")
+			print(f"  time_in_force={intent.time_in_force}")
+			print(f"  notional={intent.notional}")
+			print(f"  demo_only={intent.demo_only}")
+			print("  validation=valid")
+	else:
+		print()
+		print("No demo order intents found.")
+
+	return intents
+
+
+def run_manual_demo_order_intent_add(
+	symbol=DEFAULT_SYMBOL,
+	apply_changes=False,
+	storage=None,
+	demo_order_intent_add_service=None,
+):
+	"""Preview or append demo order intents created from queued demo queue items."""
+
+	storage = storage or Storage()
+	demo_order_intent_add_service = demo_order_intent_add_service or DemoOrderIntentAddService(
+		storage=storage,
+	)
+	result = demo_order_intent_add_service.apply_for_symbol(
+		symbol=symbol,
+		apply_mode=apply_changes,
+	)
+	records_modified = result.prepared > 0
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Order Intent Add: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Mode : {'apply' if apply_changes else 'dry-run'}")
+	print(f"Records Modified : {'yes' if records_modified else 'no'}")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print(f"Queued Items Loaded : {result.queued_items_loaded}")
+	print(f"Would Prepare : {result.would_prepare}")
+	print(f"Prepared : {result.prepared}")
+	print(f"Skipped Existing : {result.skipped_existing}")
+	print(f"Skipped Ineligible : {result.skipped_ineligible}")
+	print(f"Failed Validation : {result.failed_validation}")
+
+	print()
+	print("Order Intent Results")
+	print("--------------------")
+	if result.results:
+		for item in result.results:
+			print(f"- queue_item_id={item.queue_item_id}")
+			print(f"  demo_trade_candidate_id={item.demo_trade_candidate_id}")
+			print(f"  source_hypothesis_id={item.source_hypothesis_id}")
+			print(f"  action={item.action}")
+			print(f"  order_intent_id={item.order_intent_id if item.order_intent_id is not None else 'none'}")
+			print(f"  notional={item.notional if item.notional is not None else 'none'}")
+	else:
+		print("No queued items were eligible for demo order intent review.")
+
+	print()
+	if apply_changes:
+		print("Apply reminder:")
+		if records_modified:
+			print("Order intent records were created append-only. No orders were submitted.")
+		else:
+			print("No new order intent records were created. Existing intents were left unchanged. No orders were submitted.")
+	else:
+		print("Dry-run reminder:")
+		print("Dry-run only. No order intent records were created. No orders were submitted.")
+
+	return result
+
+
 def run_manual_demo_broker_readiness(storage=None):
 	"""Inspect deterministic demo broker readiness without network or broker calls."""
 
@@ -2943,6 +3050,39 @@ def _build_arg_parser():
 		help="Append queue entries for eligible demo trade candidates.",
 	)
 
+	demo_order_intents_parser = subparsers.add_parser(
+		"demo-order-intents",
+		help="Inspect append-only demo order intents for one symbol in read-only mode.",
+	)
+	demo_order_intents_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
+	demo_order_intent_add_parser = subparsers.add_parser(
+		"demo-order-intent-add",
+		help="Preview or append local demo order intents for one symbol.",
+	)
+	demo_order_intent_add_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+	demo_order_intent_add_mode_group = demo_order_intent_add_parser.add_mutually_exclusive_group()
+	demo_order_intent_add_mode_group.add_argument(
+		"--dry-run",
+		action="store_true",
+		help="Preview demo order intents without modifying records (default).",
+	)
+	demo_order_intent_add_mode_group.add_argument(
+		"--apply",
+		action="store_true",
+		help="Append prepared demo order intents for eligible queued items.",
+	)
+
 	demo_broker_readiness_parser = subparsers.add_parser(
 		"demo-broker-readiness",
 		help="Show deterministic read-only demo broker readiness.",
@@ -3124,6 +3264,17 @@ def main(argv=None):
 
 	if args.mode == "demo-trade-queue-add":
 		run_manual_demo_trade_queue_add(
+			symbol=args.symbol,
+			apply_changes=bool(args.apply),
+		)
+		return 0
+
+	if args.mode == "demo-order-intents":
+		run_manual_demo_order_intents(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-order-intent-add":
+		run_manual_demo_order_intent_add(
 			symbol=args.symbol,
 			apply_changes=bool(args.apply),
 		)

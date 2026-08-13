@@ -46,6 +46,8 @@ class RunnerCliTests(unittest.TestCase):
         self.assertIn("demo-trade-gate-apply", buffer.getvalue())
         self.assertIn("demo-trade-queue", buffer.getvalue())
         self.assertIn("demo-trade-queue-add", buffer.getvalue())
+        self.assertIn("demo-order-intents", buffer.getvalue())
+        self.assertIn("demo-order-intent-add", buffer.getvalue())
         self.assertIn("demo-broker-readiness", buffer.getvalue())
         self.assertIn("demo-broker-account", buffer.getvalue())
         mock_hypotheses.assert_not_called()

@@ -13,6 +13,8 @@ from research.experiment_result import (
     ExperimentResult,
     ExperimentResultStatus,
 )
+from research.demo_order_intent import DemoOrderIntent
+from research.demo_order_intent import DemoOrderIntentStatus
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
 from research.demo_trade_queue import DemoTradeQueueItem
@@ -709,6 +711,93 @@ class Storage:
                 )
 
         return items
+
+    def save_demo_order_intent(
+        self,
+        intent,
+    ):
+        """Append one demo order intent to the JSONL store."""
+
+        path = self.base / "demo_order_intents.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "order_intent_id": intent.order_intent_id,
+                        "symbol": intent.symbol,
+                        "queue_item_id": intent.queue_item_id,
+                        "demo_trade_candidate_id": intent.demo_trade_candidate_id,
+                        "source_hypothesis_id": intent.source_hypothesis_id,
+                        "created_at": intent.created_at.isoformat(),
+                        "status": getattr(intent.status, "value", intent.status),
+                        "demo_only": intent.demo_only,
+                        "side": intent.side,
+                        "order_type": intent.order_type,
+                        "time_in_force": intent.time_in_force,
+                        "notional": intent.notional,
+                        "quantity": intent.quantity,
+                        "limit_price": intent.limit_price,
+                        "stop_price": intent.stop_price,
+                        "max_loss_per_trade": intent.max_loss_per_trade,
+                        "max_portfolio_exposure": intent.max_portfolio_exposure,
+                        "intent_reason": intent.intent_reason,
+                        "created_by": intent.created_by,
+                    }
+                )
+            )
+            f.write("\n")
+
+    def load_demo_order_intents(
+        self,
+        symbol=None,
+    ):
+        """Load demo order intents, optionally filtered by symbol."""
+
+        path = self.base / "demo_order_intents.jsonl"
+        if not path.exists():
+            return []
+
+        intents = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                raw_intent = json.loads(stripped)
+                item_symbol = raw_intent.get("symbol", "")
+                if symbol is not None and item_symbol != symbol:
+                    continue
+
+                intents.append(
+                    DemoOrderIntent(
+                        order_intent_id=raw_intent["order_intent_id"],
+                        symbol=item_symbol,
+                        queue_item_id=raw_intent.get("queue_item_id", ""),
+                        demo_trade_candidate_id=raw_intent.get("demo_trade_candidate_id", ""),
+                        source_hypothesis_id=raw_intent.get("source_hypothesis_id", ""),
+                        created_at=self._parse_timestamp(raw_intent.get("created_at")),
+                        status=DemoOrderIntentStatus(
+                            raw_intent.get("status", DemoOrderIntentStatus.PREPARED.value)
+                        ),
+                        demo_only=bool(raw_intent.get("demo_only", True)),
+                        side=raw_intent.get("side", "buy"),
+                        order_type=raw_intent.get("order_type", "market"),
+                        time_in_force=raw_intent.get("time_in_force", "day"),
+                        notional=raw_intent.get("notional"),
+                        quantity=raw_intent.get("quantity"),
+                        limit_price=raw_intent.get("limit_price"),
+                        stop_price=raw_intent.get("stop_price"),
+                        max_loss_per_trade=raw_intent.get("max_loss_per_trade", 0.0),
+                        max_portfolio_exposure=raw_intent.get("max_portfolio_exposure", 0.0),
+                        intent_reason=raw_intent.get("intent_reason", ""),
+                        created_by=raw_intent.get("created_by", ""),
+                    )
+                )
+
+        return intents
 
     def save_hypothesis_revision_applications(
         self,

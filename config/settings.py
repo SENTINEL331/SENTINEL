@@ -37,6 +37,8 @@ DEMO_BROKER_MODE = os.getenv("DEMO_BROKER_MODE", "demo")
 ALPACA_BASE_URL = os.getenv("ALPACA_BASE_URL", "")
 ALPACA_API_KEY = os.getenv("ALPACA_API_KEY", "")
 ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "")
+DEMO_DEFAULT_ORDER_NOTIONAL = float(os.getenv("DEMO_DEFAULT_ORDER_NOTIONAL", "100.00"))
+DEMO_MAX_ORDER_NOTIONAL = float(os.getenv("DEMO_MAX_ORDER_NOTIONAL", "100.00"))
 
 
 def get_demo_broker_settings() -> dict[str, str]:
