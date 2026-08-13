@@ -14,6 +14,7 @@ from ai.journal import ResearchJournal
 from ai.storage import Storage
 from research.executor import ExperimentExecutor
 from research.demo_trade_candidate import validate_demo_trade_candidate
+from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_trade_gate_apply import DemoTradeGateApplyService
 from research.demo_trade_gate import DemoTradeGateDecision
 from research.demo_trade_gate import evaluate_demo_trade_gate
@@ -2584,6 +2585,56 @@ def run_manual_demo_trade_queue_add(
 	return result
 
 
+def run_manual_demo_broker_readiness(storage=None):
+	"""Inspect deterministic demo broker readiness without network or broker calls."""
+
+	storage = storage or Storage()
+	queue_items = storage.load_demo_trade_queue_items()
+	readiness = evaluate_demo_broker_readiness(
+		broker_mode=settings.BROKER_MODE,
+		broker_base_url=settings.BROKER_BASE_URL,
+		broker_api_key=settings.BROKER_API_KEY,
+		broker_api_secret=settings.BROKER_API_SECRET,
+		queue_items=queue_items,
+	)
+
+	print()
+	print("=" * 50)
+	print("Manual Demo Broker Readiness")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Live Mode Allowed : no")
+	print(f"Queue Items Loaded : {readiness.queue_items_loaded}")
+	print(f"Active Queue Items : {readiness.active_queue_items}")
+	print(f"Ready : {'yes' if readiness.ready else 'no'}")
+
+	print()
+	print("Demo Broker Checks")
+	print("------------------")
+	print(f"- broker_mode={readiness.broker_mode}")
+	print(f"  base_url_present={readiness.base_url_present}")
+	print(f"  api_key_present={readiness.api_key_present}")
+	print(f"  api_secret_present={readiness.api_secret_present}")
+	print(f"  demo_only_queue_safe={readiness.demo_only_queue_safe}")
+	print(f"  active_queue_items={readiness.active_queue_items}")
+	print(f"  rationale: {readiness.rationale}")
+
+	print()
+	print("Failed Checks")
+	print("-------------")
+	if readiness.failed_checks:
+		for check in readiness.failed_checks:
+			print(f"- {check}")
+	else:
+		print("None.")
+
+	return readiness
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -2842,6 +2893,11 @@ def _build_arg_parser():
 		help="Append queue entries for eligible demo trade candidates.",
 	)
 
+	demo_broker_readiness_parser = subparsers.add_parser(
+		"demo-broker-readiness",
+		help="Show deterministic read-only demo broker readiness.",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -3016,6 +3072,10 @@ def main(argv=None):
 			symbol=args.symbol,
 			apply_changes=bool(args.apply),
 		)
+		return 0
+
+	if args.mode == "demo-broker-readiness":
+		run_manual_demo_broker_readiness()
 		return 0
 
 	if args.mode == "research-cycle":
