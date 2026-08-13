@@ -749,6 +749,99 @@ class Storage:
             )
             f.write("\n")
 
+    def save_demo_broker_order_record(
+        self,
+        record,
+    ):
+        """Append one broker-order record for a submitted demo order intent."""
+
+        path = self.base / "demo_broker_order_records.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "broker_order_id": record.broker_order_id,
+                        "order_intent_id": record.order_intent_id,
+                        "symbol": record.symbol,
+                        "queue_item_id": record.queue_item_id,
+                        "demo_trade_candidate_id": record.demo_trade_candidate_id,
+                        "source_hypothesis_id": record.source_hypothesis_id,
+                        "created_at": record.created_at.isoformat(),
+                        "status": getattr(record.status, "value", record.status),
+                        "demo_only": record.demo_only,
+                        "side": record.side,
+                        "order_type": record.order_type,
+                        "time_in_force": record.time_in_force,
+                        "notional": record.notional,
+                        "quantity": record.quantity,
+                        "limit_price": record.limit_price,
+                        "stop_price": record.stop_price,
+                        "broker": record.broker,
+                        "mode": record.mode,
+                        "api_response_status": record.api_response_status,
+                        "rationale": record.rationale,
+                        "created_by": record.created_by,
+                    }
+                )
+            )
+            f.write("\n")
+
+    def load_demo_broker_order_records(
+        self,
+        symbol=None,
+    ):
+        """Load demo broker order records, optionally filtered by symbol."""
+
+        path = self.base / "demo_broker_order_records.jsonl"
+        if not path.exists():
+            return []
+
+        records = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                raw_record = json.loads(stripped)
+                record_symbol = raw_record.get("symbol", "")
+                if symbol is not None and record_symbol != symbol:
+                    continue
+
+                records.append(
+                    type(
+                        "DemoBrokerOrderRecord",
+                        (),
+                        {
+                            "broker_order_id": raw_record.get("broker_order_id", ""),
+                            "order_intent_id": raw_record.get("order_intent_id", ""),
+                            "symbol": record_symbol,
+                            "queue_item_id": raw_record.get("queue_item_id", ""),
+                            "demo_trade_candidate_id": raw_record.get("demo_trade_candidate_id", ""),
+                            "source_hypothesis_id": raw_record.get("source_hypothesis_id", ""),
+                            "created_at": self._parse_timestamp(raw_record.get("created_at")),
+                            "status": raw_record.get("status", "submitted"),
+                            "demo_only": bool(raw_record.get("demo_only", True)),
+                            "side": raw_record.get("side", "buy"),
+                            "order_type": raw_record.get("order_type", "market"),
+                            "time_in_force": raw_record.get("time_in_force", "day"),
+                            "notional": raw_record.get("notional"),
+                            "quantity": raw_record.get("quantity"),
+                            "limit_price": raw_record.get("limit_price"),
+                            "stop_price": raw_record.get("stop_price"),
+                            "broker": raw_record.get("broker", "alpaca"),
+                            "mode": raw_record.get("mode", "paper"),
+                            "api_response_status": raw_record.get("api_response_status", "accepted"),
+                            "rationale": raw_record.get("rationale", ""),
+                            "created_by": raw_record.get("created_by", "sentinel"),
+                        },
+                    )()
+                )
+
+        return records
+
     def load_demo_order_intents(
         self,
         symbol=None,

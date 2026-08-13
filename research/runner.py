@@ -17,6 +17,7 @@ from research.demo_broker_account import check_demo_broker_account
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
+from research.demo_paper_order_submit import DemoPaperOrderSubmitService
 from research.demo_trade_gate_apply import DemoTradeGateApplyService
 from research.demo_trade_gate import DemoTradeGateDecision
 from research.demo_trade_gate import evaluate_demo_trade_gate
@@ -2693,6 +2694,82 @@ def run_manual_demo_order_intent_add(
 	return result
 
 
+def run_manual_demo_paper_order_submit(
+	symbol=DEFAULT_SYMBOL,
+	apply_changes=False,
+	confirm_paper_submit=False,
+	storage=None,
+	demo_paper_order_submit_service=None,
+):
+	"""Preview or submit prepared demo order intents to the Alpaca paper endpoint."""
+
+	storage = storage or Storage()
+	demo_paper_order_submit_service = demo_paper_order_submit_service or DemoPaperOrderSubmitService(
+		storage=storage,
+	)
+	result = demo_paper_order_submit_service.apply_for_symbol(
+		symbol=symbol,
+		apply_mode=apply_changes,
+		confirm_paper_submit=confirm_paper_submit,
+	)
+	records_modified = result.submitted > 0
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Paper Order Submit: {symbol}")
+	print("=" * 50)
+	print()
+	broker_calls_allowed = bool(apply_changes and confirm_paper_submit)
+	order_placement_allowed = bool(apply_changes and confirm_paper_submit)
+
+	print(f"Mode : {'apply' if apply_changes else 'dry-run'}")
+	print(f"Records Modified : {'yes' if records_modified else 'no'}")
+	print("AI Calls Allowed : no")
+	print(f"Broker Calls Allowed : {'yes' if broker_calls_allowed else 'no'}")
+	print(f"Order Placement Allowed : {'yes' if order_placement_allowed else 'no'}")
+	print(f"Order Intents Loaded : {result.intents_loaded}")
+	print(f"Would Submit : {result.would_submit}")
+	print(f"Submitted : {result.submitted}")
+	print(f"Skipped Existing : {result.skipped_existing}")
+	print(f"Skipped Ineligible : {result.skipped_ineligible}")
+	print(f"Refused Without Confirmation : {result.refused_without_confirmation}")
+
+	print()
+	print("Paper Order Submit Results")
+	print("--------------------------")
+	if result.results:
+		for item in result.results:
+			print(f"- order_intent_id={item.order_intent_id}")
+			print(f"  queue_item_id={item.queue_item_id}")
+			print(f"  demo_trade_candidate_id={item.demo_trade_candidate_id}")
+			print(f"  symbol={item.symbol}")
+			print(f"  source_hypothesis_id={item.source_hypothesis_id}")
+			print(f"  action={item.action}")
+			print(f"  broker_order_id={item.broker_order_id if item.broker_order_id is not None else 'none'}")
+			print(f"  status={item.status if item.status is not None else 'none'}")
+			print(f"  notional={item.notional if item.notional is not None else 'none'}")
+	else:
+		print("No prepared demo order intents were eligible for paper submit review.")
+
+	print()
+	if apply_changes:
+		print("Apply reminder:")
+		if confirm_paper_submit:
+			if records_modified:
+				print("Broker order records were created append-only. No live orders were submitted.")
+			else:
+				print("No broker order records were created. Existing records were left unchanged. No live orders were submitted.")
+		elif result.refused_without_confirmation > 0:
+			print("Paper submission refused. --confirm-paper-submit is required before any broker order record is appended.")
+		else:
+			print("No broker order records were created. Existing records were left unchanged. No live orders were submitted.")
+	else:
+		print("Dry-run reminder:")
+		print("Dry-run only. No broker order records were created. No live orders were submitted.")
+
+	return result
+
+
 def run_manual_demo_broker_readiness(storage=None):
 	"""Inspect deterministic demo broker readiness without network or broker calls."""
 
@@ -3083,6 +3160,33 @@ def _build_arg_parser():
 		help="Append prepared demo order intents for eligible queued items.",
 	)
 
+	demo_paper_order_submit_parser = subparsers.add_parser(
+		"demo-paper-order-submit",
+		help="Preview or submit prepared demo order intents to the paper broker with explicit confirmation.",
+	)
+	demo_paper_order_submit_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+	demo_paper_order_submit_mode_group = demo_paper_order_submit_parser.add_mutually_exclusive_group()
+	demo_paper_order_submit_mode_group.add_argument(
+		"--dry-run",
+		action="store_true",
+		help="Preview paper submissions without modifying records (default).",
+	)
+	demo_paper_order_submit_mode_group.add_argument(
+		"--apply",
+		action="store_true",
+		help="Attempt paper order submission for prepared demo order intents.",
+	)
+	demo_paper_order_submit_parser.add_argument(
+		"--confirm-paper-submit",
+		action="store_true",
+		help="Require explicit confirmation before appending paper broker order records.",
+	)
+
 	demo_broker_readiness_parser = subparsers.add_parser(
 		"demo-broker-readiness",
 		help="Show deterministic read-only demo broker readiness.",
@@ -3277,6 +3381,14 @@ def main(argv=None):
 		run_manual_demo_order_intent_add(
 			symbol=args.symbol,
 			apply_changes=bool(args.apply),
+		)
+		return 0
+
+	if args.mode == "demo-paper-order-submit":
+		run_manual_demo_paper_order_submit(
+			symbol=args.symbol,
+			apply_changes=bool(args.apply),
+			confirm_paper_submit=bool(args.confirm_paper_submit),
 		)
 		return 0
 
