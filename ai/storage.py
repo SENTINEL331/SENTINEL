@@ -15,6 +15,8 @@ from research.experiment_result import (
 )
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
+from research.demo_trade_queue import DemoTradeQueueItem
+from research.demo_trade_queue import DemoTradeQueueStatus
 from research.hypothesis import Hypothesis, HypothesisStatus
 from research.hypothesis_lifecycle import HypothesisLifecycleAction
 from research.hypothesis_revision_application import HypothesisRevisionApplication
@@ -634,6 +636,79 @@ class Storage:
                 )
 
         return candidates
+
+    def save_demo_trade_queue_item(
+        self,
+        item,
+    ):
+        """Append one demo trade queue item to the JSONL store."""
+
+        path = self.base / "demo_trade_queue.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "queue_item_id": item.queue_item_id,
+                        "symbol": item.symbol,
+                        "demo_trade_candidate_id": item.demo_trade_candidate_id,
+                        "source_hypothesis_id": item.source_hypothesis_id,
+                        "created_at": item.created_at.isoformat(),
+                        "status": item.status.value,
+                        "demo_only": item.demo_only,
+                        "queue_reason": item.queue_reason,
+                        "risk_summary": item.risk_summary,
+                        "requested_action": item.requested_action,
+                        "created_by": item.created_by,
+                    }
+                )
+            )
+            f.write("\n")
+
+    def load_demo_trade_queue_items(
+        self,
+        symbol=None,
+    ):
+        """Load demo trade queue items, optionally filtered by symbol."""
+
+        path = self.base / "demo_trade_queue.jsonl"
+        if not path.exists():
+            return []
+
+        items = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                raw_item = json.loads(stripped)
+                item_symbol = raw_item.get("symbol", "")
+                if symbol is not None and item_symbol != symbol:
+                    continue
+
+                items.append(
+                    DemoTradeQueueItem(
+                        queue_item_id=raw_item["queue_item_id"],
+                        symbol=item_symbol,
+                        demo_trade_candidate_id=raw_item.get("demo_trade_candidate_id", ""),
+                        source_hypothesis_id=raw_item.get("source_hypothesis_id", ""),
+                        created_at=self._parse_timestamp(
+                            raw_item.get("created_at", raw_item.get("created"))
+                        ),
+                        status=DemoTradeQueueStatus(
+                            raw_item.get("status", DemoTradeQueueStatus.QUEUED.value)
+                        ),
+                        demo_only=bool(raw_item.get("demo_only", True)),
+                        queue_reason=raw_item.get("queue_reason", ""),
+                        risk_summary=raw_item.get("risk_summary", ""),
+                        requested_action=raw_item.get("requested_action", "prepare_demo_order"),
+                        created_by=raw_item.get("created_by", ""),
+                    )
+                )
+
+        return items
 
     def save_hypothesis_revision_applications(
         self,

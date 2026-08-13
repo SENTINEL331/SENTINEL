@@ -17,6 +17,7 @@ from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_trade_gate_apply import DemoTradeGateApplyService
 from research.demo_trade_gate import DemoTradeGateDecision
 from research.demo_trade_gate import evaluate_demo_trade_gate
+from research.demo_trade_queue_add import DemoTradeQueueAddService
 from research.experiment import ExperimentRequestExecutionState
 from research.experiment_result import ExperimentResultStatus
 from research.hypothesis import HypothesisStatus
@@ -2489,6 +2490,100 @@ def run_manual_demo_trade_gate_apply(
 	return result
 
 
+def run_manual_demo_trade_queue(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+):
+	"""Inspect append-only demo trade queue items for one symbol in read-only mode."""
+
+	storage = storage or Storage()
+	queue_items = storage.load_demo_trade_queue_items(symbol=symbol)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Trade Queue: {symbol}")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print(f"Queue Items Loaded : {len(queue_items)}")
+
+	if queue_items:
+		print()
+		print("Demo Trade Queue")
+		print("----------------")
+		for item in queue_items:
+			print(f"- queue_item_id={item.queue_item_id}")
+			print(f"  demo_trade_candidate_id={item.demo_trade_candidate_id}")
+			print(f"  source_hypothesis_id={item.source_hypothesis_id}")
+			print(f"  status={item.status.value}")
+			print(f"  requested_action={item.requested_action}")
+			print(f"  demo_only={item.demo_only}")
+	else:
+		print()
+		print("No demo trade queue items found.")
+
+	return queue_items
+
+
+def run_manual_demo_trade_queue_add(
+	symbol=DEFAULT_SYMBOL,
+	apply_changes=False,
+	storage=None,
+	demo_trade_queue_add_service=None,
+):
+	"""Preview or append demo trade queue items for eligible gate-passed candidates."""
+
+	storage = storage or Storage()
+	demo_trade_queue_add_service = demo_trade_queue_add_service or DemoTradeQueueAddService(
+		storage=storage,
+	)
+	result = demo_trade_queue_add_service.apply_for_symbol(
+		symbol=symbol,
+		apply_mode=apply_changes,
+	)
+	records_modified = result.queued > 0
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Trade Queue Add: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Mode : {'apply' if apply_changes else 'dry-run'}")
+	print(f"Records Modified : {'yes' if records_modified else 'no'}")
+	print("AI Calls Allowed : no")
+	print(f"Gate Passed Candidates Loaded : {result.gate_passed_candidates_loaded}")
+	print(f"Would Queue : {result.would_queue}")
+	print(f"Queued : {result.queued}")
+	print(f"Skipped Existing : {result.skipped_existing}")
+	print(f"Skipped Ineligible : {result.skipped_ineligible}")
+
+	print()
+	print("Queue Results")
+	print("-------------")
+	if result.results:
+		for item in result.results:
+			print(f"- demo_trade_candidate_id={item.demo_trade_candidate_id}")
+			print(f"  source_hypothesis_id={item.source_hypothesis_id}")
+			print(f"  action={item.action}")
+			print(f"  queue_item_id={item.queue_item_id if item.queue_item_id is not None else 'none'}")
+	else:
+		print("No gate-passed demo trade candidates were eligible for queue review.")
+
+	print()
+	if apply_changes:
+		print("Apply reminder:")
+		if records_modified:
+			print("Queue records were created append-only. No orders were submitted.")
+		else:
+			print("No new queue records were created. Existing queue items were left unchanged. No orders were submitted.")
+	else:
+		print("Dry-run reminder:")
+		print("Dry-run only. No queue records were created.")
+
+	return result
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -2714,6 +2809,39 @@ def _build_arg_parser():
 		help="Append deterministic gate outcome records for proposed demo trade candidates.",
 	)
 
+	demo_trade_queue_parser = subparsers.add_parser(
+		"demo-trade-queue",
+		help="Inspect append-only demo trade queue items for one symbol in read-only mode.",
+	)
+	demo_trade_queue_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
+	demo_trade_queue_add_parser = subparsers.add_parser(
+		"demo-trade-queue-add",
+		help="Preview or append demo trade queue items for one symbol.",
+	)
+	demo_trade_queue_add_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+	demo_trade_queue_add_mode_group = demo_trade_queue_add_parser.add_mutually_exclusive_group()
+	demo_trade_queue_add_mode_group.add_argument(
+		"--dry-run",
+		action="store_true",
+		help="Preview queue entries without modifying records (default).",
+	)
+	demo_trade_queue_add_mode_group.add_argument(
+		"--apply",
+		action="store_true",
+		help="Append queue entries for eligible demo trade candidates.",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -2874,6 +3002,17 @@ def main(argv=None):
 
 	if args.mode == "demo-trade-gate-apply":
 		run_manual_demo_trade_gate_apply(
+			symbol=args.symbol,
+			apply_changes=bool(args.apply),
+		)
+		return 0
+
+	if args.mode == "demo-trade-queue":
+		run_manual_demo_trade_queue(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-trade-queue-add":
+		run_manual_demo_trade_queue_add(
 			symbol=args.symbol,
 			apply_changes=bool(args.apply),
 		)
