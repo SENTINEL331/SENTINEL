@@ -1,5 +1,13 @@
 import os
 
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    def load_dotenv(*_args, **_kwargs):
+        return False
+
+load_dotenv()
+
 APP_NAME = "Sentinel"
 VERSION = "v1.0"
 AI_MODEL = "gpt-5"
@@ -29,6 +37,18 @@ DEMO_BROKER_MODE = os.getenv("DEMO_BROKER_MODE", "demo")
 ALPACA_BASE_URL = os.getenv("ALPACA_BASE_URL", "")
 ALPACA_API_KEY = os.getenv("ALPACA_API_KEY", "")
 ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "")
+
+
+def get_demo_broker_settings() -> dict[str, str]:
+    """Return demo broker configuration used by readiness and account checks."""
+
+    return {
+        "broker": DEMO_BROKER,
+        "mode": DEMO_BROKER_MODE,
+        "base_url": ALPACA_BASE_URL,
+        "api_key": ALPACA_API_KEY,
+        "secret_key": ALPACA_SECRET_KEY,
+    }
 
 FEATURE_SET = [
     {

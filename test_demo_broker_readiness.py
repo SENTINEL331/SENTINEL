@@ -7,6 +7,7 @@ from research.demo_broker_readiness import evaluate_demo_broker_readiness
 class DemoBrokerReadinessTests(unittest.TestCase):
     def test_missing_keys_and_base_url_fail_readiness(self):
         readiness = evaluate_demo_broker_readiness(
+            broker="alpaca",
             broker_mode="demo",
             broker_base_url="",
             broker_api_key="",
@@ -21,6 +22,7 @@ class DemoBrokerReadinessTests(unittest.TestCase):
 
     def test_live_mode_is_rejected(self):
         readiness = evaluate_demo_broker_readiness(
+            broker="alpaca",
             broker_mode="live",
             broker_base_url="https://paper.example.local",
             broker_api_key="key",
@@ -33,6 +35,7 @@ class DemoBrokerReadinessTests(unittest.TestCase):
 
     def test_paper_mode_can_be_ready(self):
         readiness = evaluate_demo_broker_readiness(
+            broker="alpaca",
             broker_mode="paper",
             broker_base_url="https://paper.example.local",
             broker_api_key="key",
@@ -41,12 +44,14 @@ class DemoBrokerReadinessTests(unittest.TestCase):
         )
 
         self.assertTrue(readiness.ready)
+        self.assertEqual("alpaca", readiness.broker)
         self.assertEqual(1, readiness.queue_items_loaded)
         self.assertEqual(1, readiness.active_queue_items)
         self.assertTrue(readiness.demo_only_queue_safe)
 
     def test_non_demo_queue_item_fails_safety(self):
         readiness = evaluate_demo_broker_readiness(
+            broker="alpaca",
             broker_mode="demo",
             broker_base_url="https://paper.example.local",
             broker_api_key="key",
@@ -56,6 +61,19 @@ class DemoBrokerReadinessTests(unittest.TestCase):
 
         self.assertFalse(readiness.ready)
         self.assertIn("queue_contains_non_demo_item", readiness.failed_checks)
+
+    def test_non_alpaca_broker_fails_readiness(self):
+        readiness = evaluate_demo_broker_readiness(
+            broker="other",
+            broker_mode="paper",
+            broker_base_url="https://paper.example.local",
+            broker_api_key="key",
+            broker_api_secret="secret",
+            queue_items=[],
+        )
+
+        self.assertFalse(readiness.ready)
+        self.assertIn("demo_broker_not_supported", readiness.failed_checks)
 
 
 if __name__ == "__main__":

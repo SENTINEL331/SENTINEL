@@ -12,6 +12,7 @@ _ACTIVE_QUEUE_STATUSES = {
     DemoTradeQueueStatus.SUBMITTED.value,
     DemoTradeQueueStatus.FILLED.value,
 }
+_SUPPORTED_BROKER = "alpaca"
 _ALLOWED_MODES = {"demo", "paper"}
 
 
@@ -19,6 +20,7 @@ _ALLOWED_MODES = {"demo", "paper"}
 class DemoBrokerReadiness:
     """Read-only readiness summary for demo broker configuration."""
 
+    broker: str
     broker_mode: str
     live_mode_allowed: bool
     base_url_present: bool
@@ -34,6 +36,7 @@ class DemoBrokerReadiness:
 
 def evaluate_demo_broker_readiness(
     *,
+    broker: str,
     broker_mode: str,
     broker_base_url: str,
     broker_api_key: str,
@@ -42,6 +45,7 @@ def evaluate_demo_broker_readiness(
 ) -> DemoBrokerReadiness:
     """Evaluate whether demo broker configuration is safe for demo-only readiness."""
 
+    normalized_broker = (broker or "").strip().casefold()
     normalized_mode = (broker_mode or "").strip().casefold()
     base_url_present = bool((broker_base_url or "").strip())
     api_key_present = bool((broker_api_key or "").strip())
@@ -61,6 +65,9 @@ def evaluate_demo_broker_readiness(
             demo_only_queue_safe = False
 
     failed_checks: list[str] = []
+    if normalized_broker != _SUPPORTED_BROKER:
+        failed_checks.append("demo_broker_not_supported")
+
     if normalized_mode not in _ALLOWED_MODES:
         if normalized_mode == "live":
             failed_checks.append("live_mode_not_allowed")
@@ -87,6 +94,7 @@ def evaluate_demo_broker_readiness(
     )
 
     return DemoBrokerReadiness(
+        broker=normalized_broker or "unset",
         broker_mode=normalized_mode or "unset",
         live_mode_allowed=False,
         base_url_present=base_url_present,

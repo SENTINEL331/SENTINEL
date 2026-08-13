@@ -6,14 +6,42 @@ from research.runner import run_manual_demo_broker_readiness
 
 
 class ManualDemoBrokerReadinessRunnerTests(unittest.TestCase):
+    def test_readiness_uses_same_demo_alpaca_settings_source_as_account(self):
+        storage = Mock()
+        storage.load_demo_trade_queue_items.return_value = [
+            SimpleNamespace(status="queued", demo_only=True),
+        ]
+
+        with patch("research.runner.settings.DEMO_BROKER", "alpaca"), patch(
+            "research.runner.settings.DEMO_BROKER_MODE", "paper"
+        ), patch("research.runner.settings.ALPACA_BASE_URL", "https://paper-api.alpaca.markets"), patch(
+            "research.runner.settings.ALPACA_API_KEY", "demo-key"
+        ), patch("research.runner.settings.ALPACA_SECRET_KEY", "demo-secret"), patch(
+            "research.runner.settings.BROKER_MODE", "live"
+        ), patch("research.runner.settings.BROKER_BASE_URL", ""), patch(
+            "research.runner.settings.BROKER_API_KEY", ""
+        ), patch("research.runner.settings.BROKER_API_SECRET", ""), patch(
+            "builtins.print"
+        ) as mock_print:
+            readiness = run_manual_demo_broker_readiness(storage=storage)
+
+        self.assertTrue(readiness.ready)
+        mock_print.assert_any_call("- broker=alpaca")
+        mock_print.assert_any_call("- broker_mode=paper")
+        mock_print.assert_any_call("  base_url_present=True")
+        mock_print.assert_any_call("  api_key_present=True")
+        mock_print.assert_any_call("  api_secret_present=True")
+        mock_print.assert_any_call("Ready : yes")
+
     def test_runner_reports_missing_keys_without_leaking_secrets(self):
         storage = Mock()
         storage.load_demo_trade_queue_items.return_value = []
 
-        with patch("research.runner.settings.BROKER_MODE", "demo"), patch(
-            "research.runner.settings.BROKER_BASE_URL", ""
-        ), patch("research.runner.settings.BROKER_API_KEY", "super-secret-key"), patch(
-            "research.runner.settings.BROKER_API_SECRET", "super-secret-secret"
+        with patch("research.runner.settings.DEMO_BROKER", "alpaca"), patch(
+            "research.runner.settings.DEMO_BROKER_MODE", "demo"
+        ), patch("research.runner.settings.ALPACA_BASE_URL", ""), patch(
+            "research.runner.settings.ALPACA_API_KEY", "super-secret-key"
+        ), patch("research.runner.settings.ALPACA_SECRET_KEY", "super-secret-secret"
         ), patch("builtins.print") as mock_print:
             readiness = run_manual_demo_broker_readiness(storage=storage)
 
@@ -26,6 +54,7 @@ class ManualDemoBrokerReadinessRunnerTests(unittest.TestCase):
         mock_print.assert_any_call("Live Mode Allowed : no")
         mock_print.assert_any_call("Queue Items Loaded : 0")
         mock_print.assert_any_call("Ready : no")
+        mock_print.assert_any_call("- broker=alpaca")
         mock_print.assert_any_call("  base_url_present=False")
         mock_print.assert_any_call("  api_key_present=True")
         mock_print.assert_any_call("  api_secret_present=True")
@@ -40,10 +69,11 @@ class ManualDemoBrokerReadinessRunnerTests(unittest.TestCase):
         storage = Mock()
         storage.load_demo_trade_queue_items.return_value = []
 
-        with patch("research.runner.settings.BROKER_MODE", "live"), patch(
-            "research.runner.settings.BROKER_BASE_URL", "https://paper.example.local"
-        ), patch("research.runner.settings.BROKER_API_KEY", "key"), patch(
-            "research.runner.settings.BROKER_API_SECRET", "secret"
+        with patch("research.runner.settings.DEMO_BROKER", "alpaca"), patch(
+            "research.runner.settings.DEMO_BROKER_MODE", "live"
+        ), patch("research.runner.settings.ALPACA_BASE_URL", "https://paper.example.local"), patch(
+            "research.runner.settings.ALPACA_API_KEY", "key"
+        ), patch("research.runner.settings.ALPACA_SECRET_KEY", "secret"
         ), patch("builtins.print") as mock_print:
             readiness = run_manual_demo_broker_readiness(storage=storage)
 
@@ -58,10 +88,11 @@ class ManualDemoBrokerReadinessRunnerTests(unittest.TestCase):
             SimpleNamespace(status="completed", demo_only=True),
         ]
 
-        with patch("research.runner.settings.BROKER_MODE", "paper"), patch(
-            "research.runner.settings.BROKER_BASE_URL", "https://paper.example.local"
-        ), patch("research.runner.settings.BROKER_API_KEY", "key"), patch(
-            "research.runner.settings.BROKER_API_SECRET", "secret"
+        with patch("research.runner.settings.DEMO_BROKER", "alpaca"), patch(
+            "research.runner.settings.DEMO_BROKER_MODE", "paper"
+        ), patch("research.runner.settings.ALPACA_BASE_URL", "https://paper.example.local"), patch(
+            "research.runner.settings.ALPACA_API_KEY", "key"
+        ), patch("research.runner.settings.ALPACA_SECRET_KEY", "secret"
         ), patch("builtins.print") as mock_print:
             readiness = run_manual_demo_broker_readiness(storage=storage)
 

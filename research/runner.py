@@ -2591,11 +2591,13 @@ def run_manual_demo_broker_readiness(storage=None):
 
 	storage = storage or Storage()
 	queue_items = storage.load_demo_trade_queue_items()
+	demo_broker_settings = settings.get_demo_broker_settings()
 	readiness = evaluate_demo_broker_readiness(
-		broker_mode=settings.BROKER_MODE,
-		broker_base_url=settings.BROKER_BASE_URL,
-		broker_api_key=settings.BROKER_API_KEY,
-		broker_api_secret=settings.BROKER_API_SECRET,
+		broker=demo_broker_settings["broker"],
+		broker_mode=demo_broker_settings["mode"],
+		broker_base_url=demo_broker_settings["base_url"],
+		broker_api_key=demo_broker_settings["api_key"],
+		broker_api_secret=demo_broker_settings["secret_key"],
 		queue_items=queue_items,
 	)
 
@@ -2616,6 +2618,7 @@ def run_manual_demo_broker_readiness(storage=None):
 	print()
 	print("Demo Broker Checks")
 	print("------------------")
+	print(f"- broker={readiness.broker}")
 	print(f"- broker_mode={readiness.broker_mode}")
 	print(f"  base_url_present={readiness.base_url_present}")
 	print(f"  api_key_present={readiness.api_key_present}")
@@ -2639,12 +2642,13 @@ def run_manual_demo_broker_readiness(storage=None):
 def run_manual_demo_broker_account(account_check_fn=check_demo_broker_account):
 	"""Check the Alpaca paper account endpoint in read-only mode."""
 
+	demo_broker_settings = settings.get_demo_broker_settings()
 	account_check = account_check_fn(
-		broker=settings.DEMO_BROKER,
-		mode=settings.DEMO_BROKER_MODE,
-		base_url=settings.ALPACA_BASE_URL,
-		api_key=settings.ALPACA_API_KEY,
-		secret_key=settings.ALPACA_SECRET_KEY,
+		broker=demo_broker_settings["broker"],
+		mode=demo_broker_settings["mode"],
+		base_url=demo_broker_settings["base_url"],
+		api_key=demo_broker_settings["api_key"],
+		secret_key=demo_broker_settings["secret_key"],
 	)
 
 	print()
