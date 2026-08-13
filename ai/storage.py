@@ -15,6 +15,7 @@ from research.experiment_result import (
 )
 from research.demo_order_intent import DemoOrderIntent
 from research.demo_order_intent import DemoOrderIntentStatus
+from research.demo_broker_order_status import DemoBrokerOrderStatus
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
 from research.demo_trade_queue import DemoTradeQueueItem
@@ -841,6 +842,85 @@ class Storage:
                 )
 
         return records
+
+    def save_demo_broker_order_status(
+        self,
+        status_record,
+    ):
+        """Append one demo broker order status snapshot to the JSONL store."""
+
+        path = self.base / "demo_broker_order_statuses.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "broker_order_status_id": status_record.broker_order_status_id,
+                        "broker_order_record_id": status_record.broker_order_record_id,
+                        "order_intent_id": status_record.order_intent_id,
+                        "symbol": status_record.symbol,
+                        "broker": status_record.broker,
+                        "broker_mode": status_record.broker_mode,
+                        "broker_order_id": status_record.broker_order_id,
+                        "synced_at": status_record.synced_at.isoformat(),
+                        "status": status_record.status,
+                        "raw_status": status_record.raw_status,
+                        "filled_qty": status_record.filled_qty,
+                        "filled_avg_price": status_record.filled_avg_price,
+                        "submitted_notional": status_record.submitted_notional,
+                        "submitted_quantity": status_record.submitted_quantity,
+                        "demo_only": status_record.demo_only,
+                        "created_by": status_record.created_by,
+                    }
+                )
+            )
+            f.write("\n")
+
+    def load_demo_broker_order_statuses(
+        self,
+        symbol=None,
+    ):
+        """Load demo broker order status snapshots, optionally filtered by symbol."""
+
+        path = self.base / "demo_broker_order_statuses.jsonl"
+        if not path.exists():
+            return []
+
+        statuses = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                raw_status = json.loads(stripped)
+                status_symbol = raw_status.get("symbol", "")
+                if symbol is not None and status_symbol != symbol:
+                    continue
+
+                statuses.append(
+                    DemoBrokerOrderStatus(
+                        broker_order_status_id=raw_status.get("broker_order_status_id", ""),
+                        broker_order_record_id=raw_status.get("broker_order_record_id", ""),
+                        order_intent_id=raw_status.get("order_intent_id", ""),
+                        symbol=status_symbol,
+                        broker=raw_status.get("broker", "alpaca"),
+                        broker_mode=raw_status.get("broker_mode", "paper"),
+                        broker_order_id=raw_status.get("broker_order_id", ""),
+                        synced_at=self._parse_timestamp(raw_status.get("synced_at")),
+                        status=raw_status.get("status", "n/a"),
+                        raw_status=raw_status.get("raw_status", "n/a"),
+                        filled_qty=raw_status.get("filled_qty"),
+                        filled_avg_price=raw_status.get("filled_avg_price"),
+                        submitted_notional=raw_status.get("submitted_notional"),
+                        submitted_quantity=raw_status.get("submitted_quantity"),
+                        demo_only=bool(raw_status.get("demo_only", True)),
+                        created_by=raw_status.get("created_by", "sentinel"),
+                    )
+                )
+
+        return statuses
 
     def load_demo_order_intents(
         self,

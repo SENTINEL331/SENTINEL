@@ -14,6 +14,7 @@ from ai.journal import ResearchJournal
 from ai.storage import Storage
 from research.executor import ExperimentExecutor
 from research.demo_broker_account import check_demo_broker_account
+from research.demo_broker_order_status import sync_demo_broker_order_statuses
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -2869,6 +2870,57 @@ def run_manual_demo_broker_account(account_check_fn=check_demo_broker_account):
 	return account_check
 
 
+def run_manual_demo_broker_order_status_sync(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	status_sync_fn=sync_demo_broker_order_statuses,
+):
+	"""Sync append-only broker order status snapshots for previously submitted demo orders."""
+
+	storage = storage or Storage()
+	result = status_sync_fn(symbol=symbol, storage=storage)
+	records_modified = result.records_modified
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Broker Order Status Sync: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Records Modified : {'yes' if records_modified else 'no'}")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : yes")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Live Mode Allowed : no")
+	print(f"Broker Order Records Loaded : {result.records_loaded}")
+	print(f"Status Synced : {result.status_synced}")
+	print(f"Skipped Ineligible : {result.skipped_ineligible}")
+	print(f"Failed Sync : {result.failed_sync}")
+
+	print()
+	print("Broker Order Status Results")
+	print("---------------------------")
+	if result.refused_reason is not None:
+		print(f"Refused : {result.refused_reason}")
+	elif result.results:
+		for item in result.results:
+			print(f"- broker_order_id={item.broker_order_id if item.broker_order_id else 'none'}")
+			print(f"  order_intent_id={item.order_intent_id if item.order_intent_id else 'none'}")
+			print(f"  symbol={item.symbol}")
+			print(f"  action={item.action}")
+			print(f"  status={item.status if item.status is not None else 'none'}")
+			print(f"  filled_qty={item.filled_qty if item.filled_qty is not None else 'none'}")
+			print(f"  filled_avg_price={item.filled_avg_price if item.filled_avg_price is not None else 'none'}")
+	else:
+		print("No broker order records were eligible for status sync.")
+
+	print()
+	print("Reminder:")
+	print("Broker order statuses were synced append-only. No orders were submitted, cancelled, or modified.")
+
+	return result
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -3196,6 +3248,16 @@ def _build_arg_parser():
 		"demo-broker-account",
 		help="Check the Alpaca paper/demo account endpoint in read-only mode.",
 	)
+	demo_broker_order_status_sync_parser = subparsers.add_parser(
+		"demo-broker-order-status-sync",
+		help="Sync append-only status snapshots for previously submitted demo broker orders.",
+	)
+	demo_broker_order_status_sync_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
 
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
@@ -3398,6 +3460,10 @@ def main(argv=None):
 
 	if args.mode == "demo-broker-account":
 		run_manual_demo_broker_account()
+		return 0
+
+	if args.mode == "demo-broker-order-status-sync":
+		run_manual_demo_broker_order_status_sync(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
