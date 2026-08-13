@@ -24,6 +24,12 @@ BROKER_BASE_URL = os.getenv("BROKER_BASE_URL", "")
 BROKER_API_KEY = os.getenv("BROKER_API_KEY", "")
 BROKER_API_SECRET = os.getenv("BROKER_API_SECRET", "")
 
+DEMO_BROKER = os.getenv("DEMO_BROKER", "")
+DEMO_BROKER_MODE = os.getenv("DEMO_BROKER_MODE", "demo")
+ALPACA_BASE_URL = os.getenv("ALPACA_BASE_URL", "")
+ALPACA_API_KEY = os.getenv("ALPACA_API_KEY", "")
+ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "")
+
 FEATURE_SET = [
     {
         "name": "SMA",

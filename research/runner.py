@@ -13,6 +13,7 @@ from ai.hypothesis_review_service import HypothesisReviewService
 from ai.journal import ResearchJournal
 from ai.storage import Storage
 from research.executor import ExperimentExecutor
+from research.demo_broker_account import check_demo_broker_account
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_trade_gate_apply import DemoTradeGateApplyService
@@ -2635,6 +2636,51 @@ def run_manual_demo_broker_readiness(storage=None):
 	return readiness
 
 
+def run_manual_demo_broker_account(account_check_fn=check_demo_broker_account):
+	"""Check the Alpaca paper account endpoint in read-only mode."""
+
+	account_check = account_check_fn(
+		broker=settings.DEMO_BROKER,
+		mode=settings.DEMO_BROKER_MODE,
+		base_url=settings.ALPACA_BASE_URL,
+		api_key=settings.ALPACA_API_KEY,
+		secret_key=settings.ALPACA_SECRET_KEY,
+	)
+
+	print()
+	print("=" * 50)
+	print("Manual Demo Broker Account")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : yes")
+	print("Order Placement Allowed : no")
+	print("Live Mode Allowed : no")
+
+	print()
+	print("Broker Account Check")
+	print("--------------------")
+	print(f"- broker={account_check.broker}")
+	print(f"- mode={account_check.mode}")
+	print(f"- endpoint={account_check.endpoint}")
+	print(f"- account_reachable={'yes' if account_check.account_reachable else 'no'}")
+	print(f"- account_status={account_check.account_status}")
+	print(f"- trading_blocked={account_check.trading_blocked}")
+	print(f"- account_number={account_check.account_number}")
+
+	print()
+	print("Result")
+	print("------")
+	print(f"status={account_check.status}")
+	print(f"rationale: {account_check.rationale}")
+
+	print()
+	print("This command only checks the paper/demo account. No orders were submitted.")
+
+	return account_check
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -2898,6 +2944,11 @@ def _build_arg_parser():
 		help="Show deterministic read-only demo broker readiness.",
 	)
 
+	demo_broker_account_parser = subparsers.add_parser(
+		"demo-broker-account",
+		help="Check the Alpaca paper/demo account endpoint in read-only mode.",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -3076,6 +3127,10 @@ def main(argv=None):
 
 	if args.mode == "demo-broker-readiness":
 		run_manual_demo_broker_readiness()
+		return 0
+
+	if args.mode == "demo-broker-account":
+		run_manual_demo_broker_account()
 		return 0
 
 	if args.mode == "research-cycle":

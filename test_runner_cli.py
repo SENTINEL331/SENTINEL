@@ -47,6 +47,7 @@ class RunnerCliTests(unittest.TestCase):
         self.assertIn("demo-trade-queue", buffer.getvalue())
         self.assertIn("demo-trade-queue-add", buffer.getvalue())
         self.assertIn("demo-broker-readiness", buffer.getvalue())
+        self.assertIn("demo-broker-account", buffer.getvalue())
         mock_hypotheses.assert_not_called()
         mock_experiment_requests.assert_not_called()
         mock_experiment_execution.assert_not_called()
@@ -208,6 +209,13 @@ class RunnerCliTests(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         mock_demo_broker_readiness.assert_called_once_with()
+
+    def test_demo_broker_account_command_dispatches_to_runner(self):
+        with patch("research.runner.run_manual_demo_broker_account") as mock_demo_broker_account:
+            exit_code = main(["demo-broker-account"])
+
+        self.assertEqual(0, exit_code)
+        mock_demo_broker_account.assert_called_once_with()
 
     def test_research_cycle_help_includes_new_mode_flags(self):
         buffer = io.StringIO()
