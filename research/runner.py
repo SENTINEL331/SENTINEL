@@ -15,6 +15,7 @@ from ai.storage import Storage
 from research.executor import ExperimentExecutor
 from research.demo_broker_account import check_demo_broker_account
 from research.demo_broker_order_status import sync_demo_broker_order_statuses
+from research.demo_position_snapshot import sync_demo_position_snapshot
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -2921,6 +2922,64 @@ def run_manual_demo_broker_order_status_sync(
 	return result
 
 
+def run_manual_demo_position_snapshot(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	snapshot_sync_fn=sync_demo_position_snapshot,
+):
+	"""Snapshot the current Alpaca paper position for one symbol in read-only mode."""
+
+	storage = storage or Storage()
+	result = snapshot_sync_fn(symbol=symbol, storage=storage)
+	records_modified = result.records_modified
+	position_found = result.position_found
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Position Snapshot: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Records Modified : {'yes' if records_modified else 'no'}")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : yes")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print(f"Position Found : {'yes' if position_found else 'no'}")
+	print(f"Snapshots Loaded : {result.snapshots_loaded}")
+	print(f"Snapshots Created : {result.snapshots_created}")
+	print(f"Failed Snapshot : {result.failed_snapshot}")
+
+	print()
+	print("Position Snapshot")
+	print("-----------------")
+	if result.refused_reason is not None:
+		print(f"Refused : {result.refused_reason}")
+	elif result.snapshot is not None:
+		snapshot = result.snapshot
+		print(f"- position_snapshot_id={snapshot.position_snapshot_id}")
+		print(f"  symbol={snapshot.symbol}")
+		print(f"  status={snapshot.status}")
+		print(f"  qty={snapshot.qty if snapshot.qty is not None else 'none'}")
+		print(f"  side={snapshot.side}")
+		print(f"  market_value={snapshot.market_value if snapshot.market_value is not None else 'none'}")
+		print(f"  cost_basis={snapshot.cost_basis if snapshot.cost_basis is not None else 'none'}")
+		print(f"  avg_entry_price={snapshot.avg_entry_price if snapshot.avg_entry_price is not None else 'none'}")
+		print(f"  current_price={snapshot.current_price if snapshot.current_price is not None else 'none'}")
+		print(f"  unrealized_pl={snapshot.unrealized_pl if snapshot.unrealized_pl is not None else 'none'}")
+		print(f"  unrealized_plpc={snapshot.unrealized_plpc if snapshot.unrealized_plpc is not None else 'none'}")
+		print(f"  demo_only={snapshot.demo_only}")
+	else:
+		print("No position snapshot was created.")
+
+	print()
+	print("Reminder:")
+	print("Position snapshot was appended locally. No orders were submitted, cancelled, replaced, or closed.")
+
+	return result
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -3259,6 +3318,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_position_snapshot_parser = subparsers.add_parser(
+		"demo-position-snapshot",
+		help="Snapshot the current Alpaca paper position for one symbol in read-only mode.",
+	)
+	demo_position_snapshot_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -3464,6 +3534,10 @@ def main(argv=None):
 
 	if args.mode == "demo-broker-order-status-sync":
 		run_manual_demo_broker_order_status_sync(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-position-snapshot":
+		run_manual_demo_position_snapshot(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":

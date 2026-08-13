@@ -16,6 +16,7 @@ from research.experiment_result import (
 from research.demo_order_intent import DemoOrderIntent
 from research.demo_order_intent import DemoOrderIntentStatus
 from research.demo_broker_order_status import DemoBrokerOrderStatus
+from research.demo_position_snapshot import DemoPositionSnapshot
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
 from research.demo_trade_queue import DemoTradeQueueItem
@@ -921,6 +922,89 @@ class Storage:
                 )
 
         return statuses
+
+    def save_demo_position_snapshot(
+        self,
+        snapshot,
+    ):
+        """Append one demo position snapshot to the JSONL store."""
+
+        path = self.base / "demo_position_snapshots.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "position_snapshot_id": snapshot.position_snapshot_id,
+                        "symbol": snapshot.symbol,
+                        "broker": snapshot.broker,
+                        "broker_mode": snapshot.broker_mode,
+                        "synced_at": snapshot.synced_at.isoformat(),
+                        "status": snapshot.status,
+                        "qty": snapshot.qty,
+                        "side": snapshot.side,
+                        "market_value": snapshot.market_value,
+                        "cost_basis": snapshot.cost_basis,
+                        "avg_entry_price": snapshot.avg_entry_price,
+                        "current_price": snapshot.current_price,
+                        "unrealized_pl": snapshot.unrealized_pl,
+                        "unrealized_plpc": snapshot.unrealized_plpc,
+                        "asset_id": snapshot.asset_id,
+                        "exchange": snapshot.exchange,
+                        "demo_only": snapshot.demo_only,
+                        "created_by": snapshot.created_by,
+                    }
+                )
+            )
+            f.write("\n")
+
+    def load_demo_position_snapshots(
+        self,
+        symbol=None,
+    ):
+        """Load demo position snapshots, optionally filtered by symbol."""
+
+        path = self.base / "demo_position_snapshots.jsonl"
+        if not path.exists():
+            return []
+
+        snapshots = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                raw_snapshot = json.loads(stripped)
+                snapshot_symbol = raw_snapshot.get("symbol", "")
+                if symbol is not None and snapshot_symbol != symbol:
+                    continue
+
+                snapshots.append(
+                    DemoPositionSnapshot(
+                        position_snapshot_id=raw_snapshot.get("position_snapshot_id", ""),
+                        symbol=snapshot_symbol,
+                        broker=raw_snapshot.get("broker", "alpaca"),
+                        broker_mode=raw_snapshot.get("broker_mode", "paper"),
+                        synced_at=self._parse_timestamp(raw_snapshot.get("synced_at")),
+                        status=raw_snapshot.get("status", "failed"),
+                        qty=raw_snapshot.get("qty"),
+                        side=raw_snapshot.get("side", "none"),
+                        market_value=raw_snapshot.get("market_value"),
+                        cost_basis=raw_snapshot.get("cost_basis"),
+                        avg_entry_price=raw_snapshot.get("avg_entry_price"),
+                        current_price=raw_snapshot.get("current_price"),
+                        unrealized_pl=raw_snapshot.get("unrealized_pl"),
+                        unrealized_plpc=raw_snapshot.get("unrealized_plpc"),
+                        asset_id=raw_snapshot.get("asset_id", ""),
+                        exchange=raw_snapshot.get("exchange", ""),
+                        demo_only=bool(raw_snapshot.get("demo_only", True)),
+                        created_by=raw_snapshot.get("created_by", "sentinel"),
+                    )
+                )
+
+        return snapshots
 
     def load_demo_order_intents(
         self,
