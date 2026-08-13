@@ -17,6 +17,7 @@ from research.demo_order_intent import DemoOrderIntent
 from research.demo_order_intent import DemoOrderIntentStatus
 from research.demo_broker_order_status import DemoBrokerOrderStatus
 from research.demo_position_snapshot import DemoPositionSnapshot
+from research.demo_trade_performance_snapshot import DemoTradePerformanceSnapshot
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
 from research.demo_trade_queue import DemoTradeQueueItem
@@ -999,6 +1000,95 @@ class Storage:
                         unrealized_plpc=raw_snapshot.get("unrealized_plpc"),
                         asset_id=raw_snapshot.get("asset_id", ""),
                         exchange=raw_snapshot.get("exchange", ""),
+                        demo_only=bool(raw_snapshot.get("demo_only", True)),
+                        created_by=raw_snapshot.get("created_by", "sentinel"),
+                    )
+                )
+
+        return snapshots
+
+    def save_demo_trade_performance_snapshot(
+        self,
+        snapshot,
+    ):
+        """Append one demo trade performance snapshot to the JSONL store."""
+
+        path = self.base / "demo_trade_performance_snapshots.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "performance_snapshot_id": snapshot.performance_snapshot_id,
+                        "symbol": snapshot.symbol,
+                        "order_intent_id": snapshot.order_intent_id,
+                        "broker_order_id": snapshot.broker_order_id,
+                        "broker_order_record_id": snapshot.broker_order_record_id,
+                        "queue_item_id": snapshot.queue_item_id,
+                        "demo_trade_candidate_id": snapshot.demo_trade_candidate_id,
+                        "source_hypothesis_id": snapshot.source_hypothesis_id,
+                        "snapshot_at": snapshot.snapshot_at.isoformat(),
+                        "status": snapshot.status,
+                        "side": snapshot.side,
+                        "filled_qty": snapshot.filled_qty,
+                        "filled_avg_price": snapshot.filled_avg_price,
+                        "current_price": snapshot.current_price,
+                        "entry_value": snapshot.entry_value,
+                        "current_value": snapshot.current_value,
+                        "unrealized_pl": snapshot.unrealized_pl,
+                        "unrealized_plpc": snapshot.unrealized_plpc,
+                        "position_snapshot_id": snapshot.position_snapshot_id,
+                        "demo_only": snapshot.demo_only,
+                        "created_by": snapshot.created_by,
+                    }
+                )
+            )
+            f.write("\n")
+
+    def load_demo_trade_performance_snapshots(
+        self,
+        symbol=None,
+    ):
+        """Load demo trade performance snapshots, optionally filtered by symbol."""
+
+        path = self.base / "demo_trade_performance_snapshots.jsonl"
+        if not path.exists():
+            return []
+
+        snapshots = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                raw_snapshot = json.loads(stripped)
+                snapshot_symbol = raw_snapshot.get("symbol", "")
+                if symbol is not None and snapshot_symbol != symbol:
+                    continue
+
+                snapshots.append(
+                    DemoTradePerformanceSnapshot(
+                        performance_snapshot_id=raw_snapshot.get("performance_snapshot_id", ""),
+                        symbol=snapshot_symbol,
+                        order_intent_id=raw_snapshot.get("order_intent_id", ""),
+                        broker_order_id=raw_snapshot.get("broker_order_id", ""),
+                        broker_order_record_id=raw_snapshot.get("broker_order_record_id", ""),
+                        queue_item_id=raw_snapshot.get("queue_item_id", ""),
+                        demo_trade_candidate_id=raw_snapshot.get("demo_trade_candidate_id", ""),
+                        source_hypothesis_id=raw_snapshot.get("source_hypothesis_id", ""),
+                        snapshot_at=self._parse_timestamp(raw_snapshot.get("snapshot_at")),
+                        status=raw_snapshot.get("status", "failed"),
+                        side=raw_snapshot.get("side", "none"),
+                        filled_qty=raw_snapshot.get("filled_qty"),
+                        filled_avg_price=raw_snapshot.get("filled_avg_price"),
+                        current_price=raw_snapshot.get("current_price"),
+                        entry_value=raw_snapshot.get("entry_value"),
+                        current_value=raw_snapshot.get("current_value"),
+                        unrealized_pl=raw_snapshot.get("unrealized_pl"),
+                        unrealized_plpc=raw_snapshot.get("unrealized_plpc"),
+                        position_snapshot_id=raw_snapshot.get("position_snapshot_id", ""),
                         demo_only=bool(raw_snapshot.get("demo_only", True)),
                         created_by=raw_snapshot.get("created_by", "sentinel"),
                     )

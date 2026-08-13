@@ -16,6 +16,7 @@ from research.executor import ExperimentExecutor
 from research.demo_broker_account import check_demo_broker_account
 from research.demo_broker_order_status import sync_demo_broker_order_statuses
 from research.demo_position_snapshot import sync_demo_position_snapshot
+from research.demo_trade_performance_snapshot import build_demo_trade_performance_snapshots
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -2980,6 +2981,74 @@ def run_manual_demo_position_snapshot(
 	return result
 
 
+def run_manual_demo_trade_performance_snapshot(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	performance_snapshot_fn=build_demo_trade_performance_snapshots,
+):
+	"""Build local demo trade performance snapshots from stored records only."""
+
+	storage = storage or Storage()
+	result = performance_snapshot_fn(symbol=symbol, storage=storage)
+	records_modified = result.records_modified
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Trade Performance Snapshot: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Records Modified : {'yes' if records_modified else 'no'}")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print(f"Broker Orders Loaded : {result.broker_orders_loaded}")
+	print(f"Filled Orders Evaluated : {result.filled_orders_evaluated}")
+	print(f"Performance Snapshots Created : {result.performance_snapshots_created}")
+	print(f"Skipped Not Filled : {result.skipped_not_filled}")
+	print(f"Skipped Missing Position : {result.skipped_missing_position}")
+	print(f"Failed Calculations : {result.failed_calculations}")
+
+	print()
+	print("Demo Trade Performance")
+	print("----------------------")
+	if result.snapshots:
+		for snapshot in result.snapshots:
+			print(f"- performance_snapshot_id={snapshot.performance_snapshot_id}")
+			print(f"  order_intent_id={snapshot.order_intent_id}")
+			print(f"  broker_order_id={snapshot.broker_order_id}")
+			print(f"  source_hypothesis_id={snapshot.source_hypothesis_id}")
+			print(f"  demo_trade_candidate_id={snapshot.demo_trade_candidate_id}")
+			print(f"  status={snapshot.status}")
+			print(f"  side={snapshot.side}")
+			print(f"  filled_qty={snapshot.filled_qty if snapshot.filled_qty is not None else 'none'}")
+			print(f"  filled_avg_price={snapshot.filled_avg_price if snapshot.filled_avg_price is not None else 'none'}")
+			print(f"  current_price={snapshot.current_price if snapshot.current_price is not None else 'none'}")
+			print(f"  entry_value={snapshot.entry_value if snapshot.entry_value is not None else 'none'}")
+			print(f"  current_value={snapshot.current_value if snapshot.current_value is not None else 'none'}")
+			print(f"  unrealized_pl={snapshot.unrealized_pl if snapshot.unrealized_pl is not None else 'none'}")
+			print(f"  unrealized_plpc={snapshot.unrealized_plpc if snapshot.unrealized_plpc is not None else 'none'}")
+			print(f"  demo_only={snapshot.demo_only}")
+	else:
+		print("No demo trade performance snapshots were created.")
+
+	print()
+	print("Summary")
+	print("-------")
+	print(f"total_entry_value={result.total_entry_value}")
+	print(f"total_current_value={result.total_current_value}")
+	print(f"total_unrealized_pl={result.total_unrealized_pl}")
+	print(f"total_unrealized_plpc={result.total_unrealized_plpc}")
+
+	print()
+	print("Reminder:")
+	print("Demo trade performance snapshots were appended locally. No broker calls were made. No orders were submitted, cancelled, replaced, or closed.")
+
+	return result
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -3329,6 +3398,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_trade_performance_snapshot_parser = subparsers.add_parser(
+		"demo-trade-performance-snapshot",
+		help="Build local append-only demo trade performance snapshots for one symbol.",
+	)
+	demo_trade_performance_snapshot_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -3538,6 +3618,10 @@ def main(argv=None):
 
 	if args.mode == "demo-position-snapshot":
 		run_manual_demo_position_snapshot(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-trade-performance-snapshot":
+		run_manual_demo_trade_performance_snapshot(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
