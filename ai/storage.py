@@ -19,6 +19,7 @@ from research.demo_broker_order_status import DemoBrokerOrderStatus
 from research.demo_position_snapshot import DemoPositionSnapshot
 from research.demo_trade_performance_snapshot import DemoTradePerformanceSnapshot
 from research.demo_trade_evaluation import DemoTradeEvaluation
+from research.demo_hypothesis_performance_summary import DemoHypothesisPerformanceSummary
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
 from research.demo_trade_queue import DemoTradeQueueItem
@@ -1213,6 +1214,119 @@ class Storage:
                 )
 
         return evaluations
+
+    def save_demo_hypothesis_performance_summary(
+        self,
+        summary,
+    ):
+        """Append one demo hypothesis performance summary to the JSONL store."""
+
+        path = self.base / "demo_hypothesis_performance_summaries.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "demo_hypothesis_summary_id": summary.demo_hypothesis_summary_id,
+                        "symbol": summary.symbol,
+                        "source_hypothesis_id": summary.source_hypothesis_id,
+                        "summarized_at": summary.summarized_at.isoformat(),
+                        "evaluation_fingerprint": summary.evaluation_fingerprint,
+                        "evaluation_ids": list(summary.evaluation_ids),
+                        "demo_trade_candidate_ids": list(summary.demo_trade_candidate_ids),
+                        "trades_evaluated": summary.trades_evaluated,
+                        "unique_demo_trade_candidates": summary.unique_demo_trade_candidates,
+                        "needs_more_time_count": summary.needs_more_time_count,
+                        "successful_window_count": summary.successful_window_count,
+                        "flat_window_count": summary.flat_window_count,
+                        "weak_window_count": summary.weak_window_count,
+                        "risk_breach_count": summary.risk_breach_count,
+                        "unknown_count": summary.unknown_count,
+                        "evaluation_window_complete_count": summary.evaluation_window_complete_count,
+                        "open_count": summary.open_count,
+                        "total_entry_value": summary.total_entry_value,
+                        "total_current_value": summary.total_current_value,
+                        "total_unrealized_pl": summary.total_unrealized_pl,
+                        "total_unrealized_plpc": summary.total_unrealized_plpc,
+                        "average_unrealized_plpc": summary.average_unrealized_plpc,
+                        "best_unrealized_plpc": summary.best_unrealized_plpc,
+                        "worst_unrealized_plpc": summary.worst_unrealized_plpc,
+                        "risk_breach_rate": summary.risk_breach_rate,
+                        "completion_rate": summary.completion_rate,
+                        "current_summary_rating": summary.current_summary_rating,
+                        "promotion_readiness": summary.promotion_readiness,
+                        "note": summary.note,
+                        "demo_only": summary.demo_only,
+                        "created_by": summary.created_by,
+                    }
+                )
+            )
+            f.write("\n")
+
+    def load_demo_hypothesis_performance_summaries(
+        self,
+        symbol=None,
+    ):
+        """Load demo hypothesis performance summaries, optionally filtered by symbol."""
+
+        path = self.base / "demo_hypothesis_performance_summaries.jsonl"
+        if not path.exists():
+            return []
+
+        summaries = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                raw_summary = json.loads(stripped)
+                summary_symbol = raw_summary.get("symbol", "")
+                if symbol is not None and summary_symbol != symbol:
+                    continue
+
+                summaries.append(
+                    DemoHypothesisPerformanceSummary(
+                        demo_hypothesis_summary_id=raw_summary.get("demo_hypothesis_summary_id", ""),
+                        symbol=summary_symbol,
+                        source_hypothesis_id=raw_summary.get("source_hypothesis_id", ""),
+                        summarized_at=self._parse_timestamp(raw_summary.get("summarized_at")),
+                        evaluation_fingerprint=raw_summary.get("evaluation_fingerprint", ""),
+                        evaluation_ids=tuple(raw_summary.get("evaluation_ids", [])),
+                        demo_trade_candidate_ids=tuple(raw_summary.get("demo_trade_candidate_ids", [])),
+                        trades_evaluated=int(raw_summary.get("trades_evaluated", 0)),
+                        unique_demo_trade_candidates=int(
+                            raw_summary.get("unique_demo_trade_candidates", 0)
+                        ),
+                        needs_more_time_count=int(raw_summary.get("needs_more_time_count", 0)),
+                        successful_window_count=int(raw_summary.get("successful_window_count", 0)),
+                        flat_window_count=int(raw_summary.get("flat_window_count", 0)),
+                        weak_window_count=int(raw_summary.get("weak_window_count", 0)),
+                        risk_breach_count=int(raw_summary.get("risk_breach_count", 0)),
+                        unknown_count=int(raw_summary.get("unknown_count", 0)),
+                        evaluation_window_complete_count=int(
+                            raw_summary.get("evaluation_window_complete_count", 0)
+                        ),
+                        open_count=int(raw_summary.get("open_count", 0)),
+                        total_entry_value=raw_summary.get("total_entry_value", 0.0),
+                        total_current_value=raw_summary.get("total_current_value", 0.0),
+                        total_unrealized_pl=raw_summary.get("total_unrealized_pl", 0.0),
+                        total_unrealized_plpc=raw_summary.get("total_unrealized_plpc", 0.0),
+                        average_unrealized_plpc=raw_summary.get("average_unrealized_plpc", 0.0),
+                        best_unrealized_plpc=raw_summary.get("best_unrealized_plpc"),
+                        worst_unrealized_plpc=raw_summary.get("worst_unrealized_plpc"),
+                        risk_breach_rate=raw_summary.get("risk_breach_rate", 0.0),
+                        completion_rate=raw_summary.get("completion_rate", 0.0),
+                        current_summary_rating=raw_summary.get("current_summary_rating", "unknown"),
+                        promotion_readiness=raw_summary.get("promotion_readiness", "not_ready"),
+                        note=raw_summary.get("note", ""),
+                        demo_only=bool(raw_summary.get("demo_only", True)),
+                        created_by=raw_summary.get("created_by", "sentinel"),
+                    )
+                )
+
+        return summaries
 
     def load_demo_order_intents(
         self,

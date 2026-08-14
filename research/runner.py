@@ -19,6 +19,10 @@ from research.demo_position_snapshot import sync_demo_position_snapshot
 from research.demo_trade_performance_snapshot import build_demo_trade_performance_snapshots
 from research.demo_trade_performance_dashboard import build_demo_trade_performance_dashboard
 from research.demo_trade_evaluation import EVALUATION_STATUS_ORDER, build_demo_trade_evaluations
+from research.demo_hypothesis_performance_summary import (
+	SUMMARY_RATING_ORDER,
+	build_demo_hypothesis_performance_summaries,
+)
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -3207,6 +3211,83 @@ def run_manual_demo_trade_evaluation(
 	return result
 
 
+def run_manual_demo_hypothesis_performance_summary(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	summary_fn=build_demo_hypothesis_performance_summaries,
+):
+	"""Append deterministic per-hypothesis demo evidence summaries from stored evaluations only."""
+
+	storage = storage or Storage()
+	result = summary_fn(symbol=symbol, storage=storage)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Hypothesis Performance Summary: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Records Modified : {'yes' if result.records_modified else 'no'}")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print(f"Trade Evaluations Loaded : {result.trade_evaluations_loaded}")
+	print(f"Hypotheses Summarized : {result.hypotheses_summarized}")
+	print(f"Summaries Created : {result.summaries_created}")
+	print(f"Skipped Existing : {result.skipped_existing}")
+	print(f"Skipped Ineligible : {result.skipped_ineligible}")
+	print(f"Failed Summaries : {result.failed_summaries}")
+
+	print()
+	print("Demo Hypothesis Performance Summary")
+	print("-----------------------------------")
+	if result.summaries:
+		for summary in result.summaries:
+			print(f"- demo_hypothesis_summary_id={summary.demo_hypothesis_summary_id}")
+			print(f"  source_hypothesis_id={summary.source_hypothesis_id}")
+			print(f"  trades_evaluated={summary.trades_evaluated}")
+			print(f"  unique_demo_trade_candidates={summary.unique_demo_trade_candidates}")
+			print(f"  needs_more_time_count={summary.needs_more_time_count}")
+			print(f"  successful_window_count={summary.successful_window_count}")
+			print(f"  flat_window_count={summary.flat_window_count}")
+			print(f"  weak_window_count={summary.weak_window_count}")
+			print(f"  risk_breach_count={summary.risk_breach_count}")
+			print(f"  evaluation_window_complete_count={summary.evaluation_window_complete_count}")
+			print(f"  total_entry_value={summary.total_entry_value}")
+			print(f"  total_current_value={summary.total_current_value}")
+			print(f"  total_unrealized_pl={summary.total_unrealized_pl}")
+			print(f"  total_unrealized_plpc={summary.total_unrealized_plpc}")
+			print(f"  average_unrealized_plpc={summary.average_unrealized_plpc}")
+			print(f"  best_unrealized_plpc={summary.best_unrealized_plpc if summary.best_unrealized_plpc is not None else 'none'}")
+			print(f"  worst_unrealized_plpc={summary.worst_unrealized_plpc if summary.worst_unrealized_plpc is not None else 'none'}")
+			print(f"  risk_breach_rate={summary.risk_breach_rate}")
+			print(f"  completion_rate={summary.completion_rate}")
+			print(f"  current_summary_rating={summary.current_summary_rating}")
+			print(f"  promotion_readiness={summary.promotion_readiness}")
+			print(f"  note={summary.note}")
+			print(f"  demo_only={summary.demo_only}")
+	else:
+		print("No new demo hypothesis performance summaries were created.")
+
+	print()
+	print("Summary")
+	print("-------")
+	print(f"hypotheses_summarized={result.hypotheses_summarized}")
+	for rating in SUMMARY_RATING_ORDER:
+		print(f"{rating}={result.rating_counts.get(rating, 0)}")
+
+	print()
+	print("Reminder:")
+	if result.summaries_created > 0:
+		print("Demo hypothesis performance summaries were appended locally. This is not promotion and not an exit order. No broker calls were made. No orders were submitted, cancelled, replaced, or closed.")
+	else:
+		print("No new demo hypothesis performance summaries were created. Existing summaries were left unchanged. This is not promotion and not an exit order. No broker calls were made. No orders were submitted, cancelled, replaced, or closed.")
+
+	return result
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -3589,6 +3670,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_hypothesis_performance_summary_parser = subparsers.add_parser(
+		"demo-hypothesis-performance-summary",
+		help="Append deterministic demo evidence summaries grouped by source hypothesis.",
+	)
+	demo_hypothesis_performance_summary_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -3810,6 +3902,10 @@ def main(argv=None):
 
 	if args.mode == "demo-trade-evaluation":
 		run_manual_demo_trade_evaluation(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-hypothesis-performance-summary":
+		run_manual_demo_hypothesis_performance_summary(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
