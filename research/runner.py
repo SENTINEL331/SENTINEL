@@ -17,6 +17,7 @@ from research.demo_broker_account import check_demo_broker_account
 from research.demo_broker_order_status import sync_demo_broker_order_statuses
 from research.demo_position_snapshot import sync_demo_position_snapshot
 from research.demo_trade_performance_snapshot import build_demo_trade_performance_snapshots
+from research.demo_trade_performance_dashboard import build_demo_trade_performance_dashboard
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -3049,6 +3050,95 @@ def run_manual_demo_trade_performance_snapshot(
 	return result
 
 
+def run_manual_demo_trade_performance_dashboard(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	dashboard_fn=build_demo_trade_performance_dashboard,
+):
+	"""Print a read-only demo trade performance dashboard from stored records only."""
+
+	storage = storage or Storage()
+	result = dashboard_fn(symbol=symbol, storage=storage)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Trade Performance Dashboard: {symbol}")
+	print("=" * 50)
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print(f"Performance Snapshots Loaded : {result.performance_snapshots_loaded}")
+	print(f"Latest Trades Displayed : {result.latest_trades_displayed}")
+	print(f"Hypotheses Displayed : {result.hypotheses_displayed}")
+
+	print()
+	print("Current Position Summary")
+	print("------------------------")
+	position_snapshot = result.position_snapshot
+	if position_snapshot is not None:
+		print(f"symbol={symbol}")
+		print(f"position_snapshot_id={position_snapshot.position_snapshot_id}")
+		print(f"qty={position_snapshot.qty if position_snapshot.qty is not None else 'none'}")
+		print(f"market_value={position_snapshot.market_value if position_snapshot.market_value is not None else 'none'}")
+		print(f"cost_basis={position_snapshot.cost_basis if position_snapshot.cost_basis is not None else 'none'}")
+		print(f"unrealized_pl={position_snapshot.unrealized_pl if position_snapshot.unrealized_pl is not None else 'none'}")
+		print(f"unrealized_plpc={position_snapshot.unrealized_plpc if position_snapshot.unrealized_plpc is not None else 'none'}")
+	else:
+		print(f"symbol={symbol}")
+		print("No position snapshot is available locally.")
+
+	print()
+	print("Demo Trade Dashboard")
+	print("--------------------")
+	if result.trades:
+		for trade in result.trades:
+			print(f"- source_hypothesis_id={trade.source_hypothesis_id if trade.source_hypothesis_id else 'none'}")
+			print(f"  demo_trade_candidate_id={trade.demo_trade_candidate_id if trade.demo_trade_candidate_id else 'none'}")
+			print(f"  order_intent_id={trade.order_intent_id if trade.order_intent_id else 'none'}")
+			print(f"  broker_order_id={trade.broker_order_id if trade.broker_order_id else 'none'}")
+			print(f"  status={trade.status}")
+			print(f"  current_rating={trade.current_rating}")
+			print(f"  side={trade.side}")
+			print(f"  filled_qty={trade.filled_qty if trade.filled_qty is not None else 'none'}")
+			print(f"  filled_avg_price={trade.filled_avg_price if trade.filled_avg_price is not None else 'none'}")
+			print(f"  current_price={trade.current_price if trade.current_price is not None else 'none'}")
+			print(f"  entry_value={trade.entry_value if trade.entry_value is not None else 'none'}")
+			print(f"  current_value={trade.current_value if trade.current_value is not None else 'none'}")
+			print(f"  unrealized_pl={trade.unrealized_pl if trade.unrealized_pl is not None else 'none'}")
+			print(f"  unrealized_plpc={trade.unrealized_plpc if trade.unrealized_plpc is not None else 'none'}")
+			print(f"  demo_only={trade.demo_only}")
+	else:
+		print("No demo trade performance snapshots are available locally.")
+
+	print()
+	print("Hypothesis Summary")
+	print("------------------")
+	if result.hypotheses:
+		for summary in result.hypotheses:
+			print(f"- source_hypothesis_id={summary.source_hypothesis_id if summary.source_hypothesis_id else 'none'}")
+			print(f"  trades={summary.trades}")
+			print(f"  total_entry_value={summary.total_entry_value}")
+			print(f"  total_current_value={summary.total_current_value}")
+			print(f"  total_unrealized_pl={summary.total_unrealized_pl}")
+			print(f"  total_unrealized_plpc={summary.total_unrealized_plpc}")
+			print(f"  current_rating={summary.current_rating}")
+			print(f"  promotion_status={summary.promotion_status}")
+			print(f"  note={summary.note}")
+	else:
+		print("No hypotheses have demo trade performance data locally.")
+
+	print()
+	print("Reminder:")
+	print("Dashboard is read-only and uses local snapshots. No broker calls were made. No orders were submitted, cancelled, replaced, or closed.")
+
+	return result
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -3409,6 +3499,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_trade_performance_dashboard_parser = subparsers.add_parser(
+		"demo-trade-performance-dashboard",
+		help="Show a read-only demo trade performance dashboard for one symbol.",
+	)
+	demo_trade_performance_dashboard_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -3622,6 +3723,10 @@ def main(argv=None):
 
 	if args.mode == "demo-trade-performance-snapshot":
 		run_manual_demo_trade_performance_snapshot(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-trade-performance-dashboard":
+		run_manual_demo_trade_performance_dashboard(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
