@@ -18,6 +18,7 @@ from research.demo_order_intent import DemoOrderIntentStatus
 from research.demo_broker_order_status import DemoBrokerOrderStatus
 from research.demo_position_snapshot import DemoPositionSnapshot
 from research.demo_trade_performance_snapshot import DemoTradePerformanceSnapshot
+from research.demo_trade_evaluation import DemoTradeEvaluation
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
 from research.demo_trade_queue import DemoTradeQueueItem
@@ -1095,6 +1096,123 @@ class Storage:
                 )
 
         return snapshots
+
+    def save_demo_trade_evaluation(
+        self,
+        evaluation,
+    ):
+        """Append one demo trade evaluation to the JSONL store."""
+
+        path = self.base / "demo_trade_evaluations.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "demo_trade_evaluation_id": evaluation.demo_trade_evaluation_id,
+                        "symbol": evaluation.symbol,
+                        "performance_snapshot_id": evaluation.performance_snapshot_id,
+                        "order_intent_id": evaluation.order_intent_id,
+                        "broker_order_id": evaluation.broker_order_id,
+                        "broker_order_record_id": evaluation.broker_order_record_id,
+                        "queue_item_id": evaluation.queue_item_id,
+                        "demo_trade_candidate_id": evaluation.demo_trade_candidate_id,
+                        "source_hypothesis_id": evaluation.source_hypothesis_id,
+                        "evaluated_at": evaluation.evaluated_at.isoformat(),
+                        "entry_reference_time": (
+                            evaluation.entry_reference_time.isoformat()
+                            if evaluation.entry_reference_time is not None
+                            else None
+                        ),
+                        "trading_days_elapsed": evaluation.trading_days_elapsed,
+                        "evaluation_window_trading_days": evaluation.evaluation_window_trading_days,
+                        "evaluation_window_complete": evaluation.evaluation_window_complete,
+                        "current_rating": evaluation.current_rating,
+                        "evaluation_status": evaluation.evaluation_status,
+                        "recommended_action": evaluation.recommended_action,
+                        "side": evaluation.side,
+                        "filled_qty": evaluation.filled_qty,
+                        "filled_avg_price": evaluation.filled_avg_price,
+                        "current_price": evaluation.current_price,
+                        "entry_value": evaluation.entry_value,
+                        "current_value": evaluation.current_value,
+                        "unrealized_pl": evaluation.unrealized_pl,
+                        "unrealized_plpc": evaluation.unrealized_plpc,
+                        "max_loss_per_trade": evaluation.max_loss_per_trade,
+                        "risk_breached": evaluation.risk_breached,
+                        "demo_only": evaluation.demo_only,
+                        "created_by": evaluation.created_by,
+                    }
+                )
+            )
+            f.write("\n")
+
+    def load_demo_trade_evaluations(
+        self,
+        symbol=None,
+    ):
+        """Load demo trade evaluations, optionally filtered by symbol."""
+
+        path = self.base / "demo_trade_evaluations.jsonl"
+        if not path.exists():
+            return []
+
+        evaluations = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+
+                raw_evaluation = json.loads(stripped)
+                evaluation_symbol = raw_evaluation.get("symbol", "")
+                if symbol is not None and evaluation_symbol != symbol:
+                    continue
+
+                evaluations.append(
+                    DemoTradeEvaluation(
+                        demo_trade_evaluation_id=raw_evaluation.get("demo_trade_evaluation_id", ""),
+                        symbol=evaluation_symbol,
+                        performance_snapshot_id=raw_evaluation.get("performance_snapshot_id", ""),
+                        order_intent_id=raw_evaluation.get("order_intent_id", ""),
+                        broker_order_id=raw_evaluation.get("broker_order_id", ""),
+                        broker_order_record_id=raw_evaluation.get("broker_order_record_id", ""),
+                        queue_item_id=raw_evaluation.get("queue_item_id", ""),
+                        demo_trade_candidate_id=raw_evaluation.get("demo_trade_candidate_id", ""),
+                        source_hypothesis_id=raw_evaluation.get("source_hypothesis_id", ""),
+                        evaluated_at=self._parse_timestamp(raw_evaluation.get("evaluated_at")),
+                        entry_reference_time=(
+                            self._parse_timestamp(raw_evaluation.get("entry_reference_time"))
+                            if raw_evaluation.get("entry_reference_time")
+                            else None
+                        ),
+                        trading_days_elapsed=int(raw_evaluation.get("trading_days_elapsed", 0)),
+                        evaluation_window_trading_days=int(
+                            raw_evaluation.get("evaluation_window_trading_days", 0)
+                        ),
+                        evaluation_window_complete=bool(
+                            raw_evaluation.get("evaluation_window_complete", False)
+                        ),
+                        current_rating=raw_evaluation.get("current_rating", "unknown"),
+                        evaluation_status=raw_evaluation.get("evaluation_status", "unknown"),
+                        recommended_action=raw_evaluation.get("recommended_action", "manual_review"),
+                        side=raw_evaluation.get("side", "none"),
+                        filled_qty=raw_evaluation.get("filled_qty"),
+                        filled_avg_price=raw_evaluation.get("filled_avg_price"),
+                        current_price=raw_evaluation.get("current_price"),
+                        entry_value=raw_evaluation.get("entry_value"),
+                        current_value=raw_evaluation.get("current_value"),
+                        unrealized_pl=raw_evaluation.get("unrealized_pl"),
+                        unrealized_plpc=raw_evaluation.get("unrealized_plpc"),
+                        max_loss_per_trade=raw_evaluation.get("max_loss_per_trade", 0.0),
+                        risk_breached=bool(raw_evaluation.get("risk_breached", False)),
+                        demo_only=bool(raw_evaluation.get("demo_only", True)),
+                        created_by=raw_evaluation.get("created_by", "sentinel"),
+                    )
+                )
+
+        return evaluations
 
     def load_demo_order_intents(
         self,

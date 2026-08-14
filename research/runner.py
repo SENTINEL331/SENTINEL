@@ -18,6 +18,7 @@ from research.demo_broker_order_status import sync_demo_broker_order_statuses
 from research.demo_position_snapshot import sync_demo_position_snapshot
 from research.demo_trade_performance_snapshot import build_demo_trade_performance_snapshots
 from research.demo_trade_performance_dashboard import build_demo_trade_performance_dashboard
+from research.demo_trade_evaluation import EVALUATION_STATUS_ORDER, build_demo_trade_evaluations
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -3139,6 +3140,73 @@ def run_manual_demo_trade_performance_dashboard(
 	return result
 
 
+def run_manual_demo_trade_evaluation(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	evaluation_fn=build_demo_trade_evaluations,
+):
+	"""Append deterministic demo trade evaluations from stored records only."""
+
+	storage = storage or Storage()
+	result = evaluation_fn(symbol=symbol, storage=storage)
+
+	print()
+	print("=" * 50)
+	print(f"Manual Demo Trade Evaluation: {symbol}")
+	print("=" * 50)
+	print()
+	print(f"Records Modified : {'yes' if result.records_modified else 'no'}")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print(f"Performance Snapshots Loaded : {result.performance_snapshots_loaded}")
+	print(f"Evaluations Created : {result.evaluations_created}")
+	print(f"Skipped Existing : {result.skipped_existing}")
+	print(f"Skipped Ineligible : {result.skipped_ineligible}")
+	print(f"Failed Evaluations : {result.failed_evaluations}")
+
+	print()
+	print("Demo Trade Evaluations")
+	print("----------------------")
+	if result.evaluations:
+		for evaluation in result.evaluations:
+			print(f"- demo_trade_evaluation_id={evaluation.demo_trade_evaluation_id}")
+			print(f"  source_hypothesis_id={evaluation.source_hypothesis_id if evaluation.source_hypothesis_id else 'none'}")
+			print(f"  demo_trade_candidate_id={evaluation.demo_trade_candidate_id if evaluation.demo_trade_candidate_id else 'none'}")
+			print(f"  order_intent_id={evaluation.order_intent_id if evaluation.order_intent_id else 'none'}")
+			print(f"  broker_order_id={evaluation.broker_order_id if evaluation.broker_order_id else 'none'}")
+			print(f"  performance_snapshot_id={evaluation.performance_snapshot_id}")
+			print(f"  trading_days_elapsed={evaluation.trading_days_elapsed}")
+			print(f"  evaluation_window_complete={evaluation.evaluation_window_complete}")
+			print(f"  current_rating={evaluation.current_rating}")
+			print(f"  evaluation_status={evaluation.evaluation_status}")
+			print(f"  recommended_action={evaluation.recommended_action}")
+			print(f"  unrealized_pl={evaluation.unrealized_pl if evaluation.unrealized_pl is not None else 'none'}")
+			print(f"  unrealized_plpc={evaluation.unrealized_plpc if evaluation.unrealized_plpc is not None else 'none'}")
+			print(f"  risk_breached={evaluation.risk_breached}")
+			print(f"  demo_only={evaluation.demo_only}")
+	else:
+		print("No new demo trade evaluations were created.")
+
+	print()
+	print("Summary")
+	print("-------")
+	for status in EVALUATION_STATUS_ORDER:
+		print(f"{status}={result.status_counts.get(status, 0)}")
+
+	print()
+	print("Reminder:")
+	if result.evaluations_created > 0:
+		print("Demo trade evaluations were appended locally. This is not promotion and not an exit order. No broker calls were made. No orders were submitted, cancelled, replaced, or closed.")
+	else:
+		print("No new demo trade evaluations were created. Existing evaluations were left unchanged. This is not promotion and not an exit order. No broker calls were made. No orders were submitted, cancelled, replaced, or closed.")
+
+	return result
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -3510,6 +3578,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_trade_evaluation_parser = subparsers.add_parser(
+		"demo-trade-evaluation",
+		help="Append deterministic local evaluations for open demo trades.",
+	)
+	demo_trade_evaluation_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -3727,6 +3806,10 @@ def main(argv=None):
 
 	if args.mode == "demo-trade-performance-dashboard":
 		run_manual_demo_trade_performance_dashboard(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-trade-evaluation":
+		run_manual_demo_trade_evaluation(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
