@@ -42,6 +42,12 @@ from research.demo_ai_review_trigger import (
 	TRIGGER_ORDER,
 	build_demo_ai_review_trigger,
 )
+from research.demo_daily_ai_review import (
+	build_review_context,
+	fingerprint_context,
+	new_review_from_payload,
+	parse_demo_daily_ai_review,
+)
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -3666,6 +3672,127 @@ def run_manual_demo_ai_review_trigger(
 	return result
 
 
+def run_manual_demo_daily_ai_review(
+	symbol=DEFAULT_SYMBOL,
+	confirm_ai_call=False,
+	storage=None,
+	ai_client=None,
+):
+	"""Run one confirmation-gated advisory AI review over local demo state."""
+
+	storage = storage or Storage()
+	status_dashboard = build_demo_status_dashboard(symbol=symbol, storage=storage)
+	exit_readiness = build_demo_exit_readiness(symbol=symbol, storage=storage)
+	trigger = build_demo_ai_review_trigger(symbol=symbol, storage=storage)
+	dashboard_context, exit_context, trigger_context = build_review_context(
+		status_dashboard=status_dashboard,
+		exit_readiness=exit_readiness,
+		trigger=trigger,
+	)
+	dashboard_fingerprint = fingerprint_context(dashboard_context)
+	trigger_fingerprint = fingerprint_context(trigger_context)
+	existing_reviews = storage.load_demo_daily_ai_reviews(symbol=symbol)
+	duplicate = any(
+		review.source_dashboard_fingerprint == dashboard_fingerprint
+		and review.source_trigger_fingerprint == trigger_fingerprint
+		for review in existing_reviews
+	)
+
+	review = None
+	ai_calls_made = 0
+	records_modified = False
+	skipped_existing = 0
+	error = None
+	if duplicate:
+		skipped_existing = 1
+	elif confirm_ai_call:
+		try:
+			if ai_client is None:
+				from ai.client import AIClient
+
+				ai_client = AIClient()
+			response = ai_client.demo_daily_ai_review(
+				symbol=symbol,
+				dashboard=json.dumps(dashboard_context, sort_keys=True, default=str),
+				exit_readiness=json.dumps(exit_context, sort_keys=True, default=str),
+				trigger=json.dumps(trigger_context, sort_keys=True, default=str),
+			)
+			ai_calls_made = 1
+			payload = parse_demo_daily_ai_review(response)
+			review = new_review_from_payload(
+				symbol=symbol,
+				dashboard_fingerprint=dashboard_fingerprint,
+				trigger_fingerprint=trigger_fingerprint,
+				ai_model=str(getattr(ai_client, "model", "unknown")),
+				payload=payload,
+			)
+			records_modified = bool(storage.save_demo_daily_ai_review(review))
+			if not records_modified:
+				skipped_existing = 1
+				review = None
+		except Exception as exc:
+			error = str(exc)
+	else:
+		error = "confirmation is required"
+
+	print()
+	print(f"Manual Demo Daily AI Review: {symbol}")
+	print()
+	print(f"Records Modified : {'yes' if records_modified else 'no'}")
+	print(f"AI Calls Allowed : {'yes' if confirm_ai_call and not duplicate else 'no'}")
+	print(f"AI Calls Made : {ai_calls_made}")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Promotion Actions Taken : 0")
+	if not confirm_ai_call and not duplicate:
+		print()
+		print("AI review requires --confirm-ai-call.")
+		print("No credits were spent.")
+	if duplicate:
+		print()
+		print("Skipped Existing : 1")
+	if error and (confirm_ai_call or duplicate):
+		print()
+		print(f"Review Error : {error}")
+
+	print()
+	print("Daily AI Review")
+	print("---------------")
+	if review is not None:
+		print(f"overall_assessment={review.overall_assessment}")
+		print(f"what_changed_or_matters_today={review.what_changed_or_matters_today}")
+		print(f"demo_trade_assessment={review.demo_trade_assessment}")
+		print(f"exit_assessment={review.exit_assessment}")
+		print(f"promotion_assessment={review.promotion_assessment}")
+		print(f"current_opportunity_assessment={review.current_opportunity_assessment}")
+		print(f"deeper_ai_review_needed={'yes' if review.deeper_ai_review_needed else 'no'}")
+		print(f"reason={review.reason}")
+		print(f"confidence={review.confidence}")
+	else:
+		print("No daily AI review was created.")
+
+	print()
+	print("Daily Reviews Created : " + ("1" if review is not None else "0"))
+	print(f"Skipped Existing : {skipped_existing}")
+	print()
+	print("Reminder:")
+	print("Daily AI review is advisory only. No broker, market data, order, close, live trading, or promotion actions were performed.")
+
+	return {
+		"symbol": symbol,
+		"records_modified": records_modified,
+		"ai_calls_made": ai_calls_made,
+		"daily_reviews_created": 1 if review is not None else 0,
+		"skipped_existing": skipped_existing,
+		"review": review,
+		"error": error,
+	}
+
+
 def run_manual_demo_monitoring_cycle(
 	symbol=DEFAULT_SYMBOL,
 	storage=None,
@@ -4375,6 +4502,22 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_daily_ai_review_parser = subparsers.add_parser(
+		"demo-daily-ai-review",
+		help="Run one confirmation-gated advisory AI review of local demo state.",
+	)
+	demo_daily_ai_review_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+	demo_daily_ai_review_parser.add_argument(
+		"--confirm-ai-call",
+		action="store_true",
+		help="Explicitly allow one advisory AI call if this local state is not already reviewed.",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -4628,6 +4771,13 @@ def main(argv=None):
 
 	if args.mode == "demo-ai-review-trigger":
 		run_manual_demo_ai_review_trigger(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-daily-ai-review":
+		run_manual_demo_daily_ai_review(
+			symbol=args.symbol,
+			confirm_ai_call=bool(args.confirm_ai_call),
+		)
 		return 0
 
 	if args.mode == "research-cycle":

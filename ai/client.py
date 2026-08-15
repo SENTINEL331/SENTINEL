@@ -15,6 +15,7 @@ from ai.prompts import (
     HYPOTHESIS_REVIEW_PROMPT,
     HYPOTHESIS_REVISION_PROPOSAL_PROMPT,
     DEMO_TRADE_CANDIDATE_PROMPT,
+    DEMO_DAILY_AI_REVIEW_PROMPT,
 )
 
 
@@ -255,3 +256,14 @@ class AIClient:
             SYSTEM_PROMPT,
             prompt,
         )
+
+    def demo_daily_ai_review(self, symbol, dashboard, exit_readiness, trigger):
+        """Request one advisory daily demo review as strict JSON."""
+
+        prompt = DEMO_DAILY_AI_REVIEW_PROMPT.format(
+            symbol=symbol,
+            dashboard=dashboard,
+            exit_readiness=exit_readiness,
+            trigger=trigger,
+        )
+        return self.chat(SYSTEM_PROMPT, prompt)

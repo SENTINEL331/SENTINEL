@@ -20,6 +20,7 @@ from research.demo_position_snapshot import DemoPositionSnapshot
 from research.demo_trade_performance_snapshot import DemoTradePerformanceSnapshot
 from research.demo_trade_evaluation import DemoTradeEvaluation
 from research.demo_hypothesis_performance_summary import DemoHypothesisPerformanceSummary
+from research.demo_daily_ai_review import DemoDailyAIReview
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
 from research.demo_trade_queue import DemoTradeQueueItem
@@ -43,6 +44,90 @@ class Storage:
     def __init__(self):
 
         self.base = Path(__file__).parent / "memory"
+
+    def save_demo_daily_ai_review(self, review):
+        """Append one daily demo AI review, suppressing exact fingerprint duplicates."""
+
+        path = self.base / "demo_daily_ai_reviews.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existing = self.load_demo_daily_ai_reviews(symbol=review.symbol)
+        if any(
+            item.source_dashboard_fingerprint == review.source_dashboard_fingerprint
+            and item.source_trigger_fingerprint == review.source_trigger_fingerprint
+            for item in existing
+        ):
+            return False
+
+        payload = {
+            "demo_daily_ai_review_id": review.demo_daily_ai_review_id,
+            "symbol": review.symbol,
+            "reviewed_at": review.reviewed_at.isoformat(),
+            "source_dashboard_fingerprint": review.source_dashboard_fingerprint,
+            "source_trigger_fingerprint": review.source_trigger_fingerprint,
+            "ai_model": review.ai_model,
+            "ai_review_type": review.ai_review_type,
+            "ai_calls_made": review.ai_calls_made,
+            "overall_assessment": review.overall_assessment,
+            "what_changed_or_matters_today": review.what_changed_or_matters_today,
+            "demo_trade_assessment": review.demo_trade_assessment,
+            "exit_assessment": review.exit_assessment,
+            "promotion_assessment": review.promotion_assessment,
+            "current_opportunity_assessment": review.current_opportunity_assessment,
+            "risk_notes": review.risk_notes,
+            "recommended_human_attention": review.recommended_human_attention,
+            "deeper_ai_review_needed": review.deeper_ai_review_needed,
+            "reason": review.reason,
+            "confidence": review.confidence,
+            "safety_note": review.safety_note,
+            "demo_only": review.demo_only,
+            "created_by": review.created_by,
+        }
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload))
+            f.write("\n")
+        return True
+
+    def load_demo_daily_ai_reviews(self, symbol=None):
+        """Load append-only daily demo AI reviews, optionally filtered by symbol."""
+
+        path = self.base / "demo_daily_ai_reviews.jsonl"
+        if not path.exists():
+            return []
+        reviews = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                if symbol is not None and item.get("symbol", "") != symbol:
+                    continue
+                reviews.append(
+                    DemoDailyAIReview(
+                        demo_daily_ai_review_id=item["demo_daily_ai_review_id"],
+                        symbol=item.get("symbol", symbol or ""),
+                        reviewed_at=self._parse_timestamp(item.get("reviewed_at")),
+                        source_dashboard_fingerprint=item.get("source_dashboard_fingerprint", ""),
+                        source_trigger_fingerprint=item.get("source_trigger_fingerprint", ""),
+                        ai_model=item.get("ai_model", ""),
+                        ai_review_type=item.get("ai_review_type", "daily_light_demo_review"),
+                        ai_calls_made=int(item.get("ai_calls_made", 0)),
+                        overall_assessment=item.get("overall_assessment", ""),
+                        what_changed_or_matters_today=item.get("what_changed_or_matters_today", ""),
+                        demo_trade_assessment=item.get("demo_trade_assessment", ""),
+                        exit_assessment=item.get("exit_assessment", ""),
+                        promotion_assessment=item.get("promotion_assessment", ""),
+                        current_opportunity_assessment=item.get("current_opportunity_assessment", ""),
+                        risk_notes=item.get("risk_notes", ""),
+                        recommended_human_attention=item.get("recommended_human_attention", ""),
+                        deeper_ai_review_needed=bool(item.get("deeper_ai_review_needed", False)),
+                        reason=item.get("reason", ""),
+                        confidence=item.get("confidence", "low"),
+                        safety_note=item.get("safety_note", ""),
+                        demo_only=bool(item.get("demo_only", True)),
+                        created_by=item.get("created_by", "sentinel"),
+                    )
+                )
+        return reviews
 
     def _parse_timestamp(self, value):
         if isinstance(value, datetime):

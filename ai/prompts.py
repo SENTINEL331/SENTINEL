@@ -403,3 +403,26 @@ Return this exact structure:
     ]
 }}
 """
+
+
+DEMO_DAILY_AI_REVIEW_PROMPT = """
+Review this deterministic local demo monitoring context for {symbol}.
+
+This is advisory commentary only. Do not issue commands, create trades, close trades,
+promote hypotheses, mutate records, or claim that any action was performed.
+Return VALID JSON ONLY with exactly these fields:
+overall_assessment, what_changed_or_matters_today, demo_trade_assessment,
+exit_assessment, promotion_assessment, current_opportunity_assessment, risk_notes,
+recommended_human_attention, deeper_ai_review_needed, reason, confidence.
+deeper_ai_review_needed must be true or false. confidence must be low, medium, or high.
+Use only the supplied context and do not invent evidence.
+
+Status dashboard:
+{dashboard}
+
+Exit readiness:
+{exit_readiness}
+
+Deterministic AI review trigger:
+{trigger}
+"""
