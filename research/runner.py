@@ -3351,6 +3351,130 @@ def run_manual_demo_promotion_board(
 	return result
 
 
+def run_manual_demo_monitoring_cycle(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	status_sync_fn=sync_demo_broker_order_statuses,
+	snapshot_sync_fn=sync_demo_position_snapshot,
+	performance_snapshot_fn=build_demo_trade_performance_snapshots,
+	dashboard_fn=build_demo_trade_performance_dashboard,
+	evaluation_fn=build_demo_trade_evaluations,
+	summary_fn=build_demo_hypothesis_performance_summaries,
+	board_fn=build_demo_promotion_board,
+):
+	"""Run the existing safe demo monitoring and evaluation steps in order."""
+
+	storage = storage or Storage()
+	steps = []
+
+	def run_step(name, function, **kwargs):
+		try:
+			result = function(symbol=symbol, storage=storage, **kwargs)
+			explicit_failure = False
+			for field in (
+				"failed_sync",
+				"failed_snapshot",
+				"failed_calculations",
+				"failed_evaluations",
+				"failed_summaries",
+			):
+				failure_count = getattr(result, field, 0)
+				if isinstance(failure_count, (int, float)) and failure_count > 0:
+					explicit_failure = True
+					break
+			refused = getattr(result, "refused_reason", None)
+			steps.append({
+				"name": name,
+				"status": "failed" if explicit_failure else "completed",
+				"result": result,
+				"error": refused,
+			})
+			return result
+		except Exception as exc:
+			steps.append({"name": name, "status": "failed", "result": None, "error": str(exc)})
+			return None
+
+	status_result = run_step("broker_order_status_sync", status_sync_fn)
+	position_result = run_step("position_snapshot", snapshot_sync_fn)
+	performance_result = run_step("trade_performance_snapshot", performance_snapshot_fn)
+	dashboard_result = run_step("trade_performance_dashboard", dashboard_fn)
+	evaluation_result = run_step("trade_evaluation", evaluation_fn)
+	summary_result = run_step("hypothesis_performance_summary", summary_fn)
+	board_result = run_step("promotion_board", board_fn)
+
+	def value(result, name, default=0):
+		return getattr(result, name, default) if result is not None else default
+
+	records_modified = any(
+		bool(value(step["result"], "records_modified", False))
+		for step in steps
+	)
+	warnings = any(step["status"] == "failed" for step in steps)
+	cycle_status = "completed_with_warnings" if warnings else "completed"
+
+	print()
+	print(f"Manual Demo Monitoring Cycle: {symbol}")
+	print()
+	print(f"Records Modified : {'yes' if records_modified else 'no'}")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : yes")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+
+	print()
+	print("Steps")
+	print("-----")
+	for step in steps:
+		step_result = step["result"]
+		print(f"- {step['name']}: {step['status']}")
+		print(f"  records_modified={'yes' if value(step_result, 'records_modified', False) else 'no'}")
+		if step["name"] == "broker_order_status_sync":
+			print(f"  synced={value(step_result, 'status_synced')}")
+			print(f"  failed={value(step_result, 'failed_sync')}")
+		elif step["name"] == "position_snapshot":
+			print(f"  position_found={'yes' if value(step_result, 'position_found', False) else 'no'}")
+			print(f"  snapshots_created={value(step_result, 'snapshots_created')}")
+		elif step["name"] == "trade_performance_snapshot":
+			print(f"  snapshots_created={value(step_result, 'performance_snapshots_created')}")
+		elif step["name"] == "trade_performance_dashboard":
+			print(f"  latest_trades_displayed={value(step_result, 'latest_trades_displayed')}")
+		elif step["name"] == "trade_evaluation":
+			print(f"  evaluations_created={value(step_result, 'evaluations_created')}")
+			print(f"  skipped_existing={value(step_result, 'skipped_existing')}")
+		elif step["name"] == "hypothesis_performance_summary":
+			print(f"  summaries_created={value(step_result, 'summaries_created')}")
+			print(f"  skipped_existing={value(step_result, 'skipped_existing')}")
+		elif step["name"] == "promotion_board":
+			print(f"  board_items_displayed={value(step_result, 'board_items_displayed')}")
+			print("  promotion_actions_taken=0")
+		if step["error"]:
+			print(f"  error={step['error']}")
+
+	print()
+	print("Cycle Summary")
+	print("-------------")
+	print(f"broker_status_synced={value(status_result, 'status_synced')}")
+	print(f"position_snapshots_created={value(position_result, 'snapshots_created')}")
+	print(f"performance_snapshots_created={value(performance_result, 'performance_snapshots_created')}")
+	print(f"evaluations_created={value(evaluation_result, 'evaluations_created')}")
+	print(f"hypothesis_summaries_created={value(summary_result, 'summaries_created')}")
+	print(f"board_items_displayed={value(board_result, 'board_items_displayed')}")
+	print(f"cycle_status={cycle_status}")
+
+	print()
+	print("Reminder:")
+	print("Demo monitoring cycle completed using safe read/snapshot/evaluation steps. No orders were submitted, cancelled, replaced, or closed. No promotion was performed.")
+
+	return {
+		"symbol": symbol,
+		"records_modified": records_modified,
+		"cycle_status": cycle_status,
+		"steps": tuple(steps),
+	}
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -3755,6 +3879,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_monitoring_cycle_parser = subparsers.add_parser(
+		"demo-monitoring-cycle",
+		help="Run the safe demo monitoring and evaluation cycle for one symbol.",
+	)
+	demo_monitoring_cycle_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -3984,6 +4119,10 @@ def main(argv=None):
 
 	if args.mode == "demo-promotion-board":
 		run_manual_demo_promotion_board(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-monitoring-cycle":
+		run_manual_demo_monitoring_cycle(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
