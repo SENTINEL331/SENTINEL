@@ -3,6 +3,7 @@ import io
 import json
 import sys
 from contextlib import redirect_stdout
+from datetime import datetime, timezone
 
 from config import settings
 
@@ -3793,6 +3794,80 @@ def run_manual_demo_daily_ai_review(
 	}
 
 
+def run_manual_demo_daily_ai_reviews(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	limit=10,
+):
+	"""Display stored daily demo AI reviews without creating or calling anything."""
+
+	storage = storage or Storage()
+	reviews = list(storage.load_demo_daily_ai_reviews(symbol=symbol) or [])
+	reviews.sort(
+		key=lambda review: getattr(review, "reviewed_at", datetime.min.replace(tzinfo=timezone.utc)),
+		reverse=True,
+	)
+	displayed_reviews = reviews[:limit]
+
+	print()
+	print(f"Manual Demo Daily AI Reviews: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("AI Calls Made : 0")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Promotion Actions Taken : 0")
+	print(f"Daily Reviews Loaded : {len(reviews)}")
+	print(f"Daily Reviews Displayed : {len(displayed_reviews)}")
+
+	print()
+	print("Daily AI Review History")
+	print("-----------------------")
+	if displayed_reviews:
+		for review in displayed_reviews:
+			print(f"- review_id={review.demo_daily_ai_review_id}")
+			print(f"  reviewed_at={review.reviewed_at.isoformat()}")
+			print(f"  ai_model={review.ai_model}")
+			print(f"  ai_review_type={review.ai_review_type}")
+			print(f"  overall_assessment={review.overall_assessment}")
+			print(f"  demo_trade_assessment={review.demo_trade_assessment}")
+			print(f"  exit_assessment={review.exit_assessment}")
+			print(f"  promotion_assessment={review.promotion_assessment}")
+			print(f"  current_opportunity_assessment={review.current_opportunity_assessment}")
+			print(f"  deeper_ai_review_needed={'yes' if review.deeper_ai_review_needed else 'no'}")
+			print(f"  reason={review.reason}")
+			print(f"  confidence={review.confidence}")
+			print(f"  demo_only={review.demo_only}")
+	else:
+		print("No stored daily AI reviews are available.")
+
+	latest_review = displayed_reviews[0] if displayed_reviews else None
+	deeper_count = sum(bool(review.deeper_ai_review_needed) for review in reviews)
+	print()
+	print("Summary")
+	print("-------")
+	print(f"latest_review_at={latest_review.reviewed_at.isoformat() if latest_review else 'none'}")
+	print(f"reviews_loaded={len(reviews)}")
+	print(f"deeper_ai_review_needed_count={deeper_count}")
+	print(f"latest_reason={latest_review.reason if latest_review else 'none'}")
+
+	print()
+	print("Reminder:")
+	print("Daily AI review history is read-only. No AI, broker, market data, order, close, live trading, or promotion actions were performed.")
+
+	return {
+		"symbol": symbol,
+		"reviews_loaded": len(reviews),
+		"reviews_displayed": len(displayed_reviews),
+		"reviews": tuple(displayed_reviews),
+	}
+
+
 def run_manual_demo_monitoring_cycle(
 	symbol=DEFAULT_SYMBOL,
 	storage=None,
@@ -4607,6 +4682,17 @@ def _build_arg_parser():
 		help="Explicitly allow one advisory AI call if this local state is not already reviewed.",
 	)
 
+	demo_daily_ai_reviews_parser = subparsers.add_parser(
+		"demo-daily-ai-reviews",
+		help="Show stored daily demo AI reviews for one symbol without calling AI.",
+	)
+	demo_daily_ai_reviews_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -4871,6 +4957,10 @@ def main(argv=None):
 			symbol=args.symbol,
 			confirm_ai_call=bool(args.confirm_ai_call),
 		)
+		return 0
+
+	if args.mode == "demo-daily-ai-reviews":
+		run_manual_demo_daily_ai_reviews(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
