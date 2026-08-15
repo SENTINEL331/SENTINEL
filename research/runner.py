@@ -23,6 +23,10 @@ from research.demo_hypothesis_performance_summary import (
 	SUMMARY_RATING_ORDER,
 	build_demo_hypothesis_performance_summaries,
 )
+from research.demo_promotion_board import (
+	BOARD_RECOMMENDATION_ORDER,
+	build_demo_promotion_board,
+)
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -3288,6 +3292,65 @@ def run_manual_demo_hypothesis_performance_summary(
 	return result
 
 
+def run_manual_demo_promotion_board(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	board_fn=build_demo_promotion_board,
+):
+	"""Show deterministic read-only recommendations from latest local demo summaries."""
+
+	storage = storage or Storage()
+	result = board_fn(symbol=symbol, storage=storage)
+
+	print()
+	print(f"Manual Demo Promotion Board: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print(f"Hypothesis Summaries Loaded : {result.hypothesis_summaries_loaded}")
+	print(f"Board Items Displayed : {result.board_items_displayed}")
+	print("Promotion Actions Taken : 0")
+
+	print()
+	print("Demo Promotion Board")
+	print("--------------------")
+	if result.board_items:
+		for item in result.board_items:
+			print(f"- source_hypothesis_id={item.source_hypothesis_id}")
+			print(f"  latest_summary_id={item.latest_summary_id}")
+			print(f"  trades_evaluated={item.trades_evaluated}")
+			print(f"  evaluation_window_complete_count={item.evaluation_window_complete_count}")
+			print(f"  current_summary_rating={item.current_summary_rating}")
+			print(f"  promotion_readiness={item.promotion_readiness}")
+			print(f"  board_recommendation={item.board_recommendation}")
+			print(f"  board_reason={','.join(item.board_reason)}")
+			print(f"  total_unrealized_pl={item.total_unrealized_pl if item.total_unrealized_pl is not None else 'none'}")
+			print(f"  total_unrealized_plpc={item.total_unrealized_plpc if item.total_unrealized_plpc is not None else 'none'}")
+			print(f"  risk_breach_rate={item.risk_breach_rate if item.risk_breach_rate is not None else 'none'}")
+			print(f"  completion_rate={item.completion_rate if item.completion_rate is not None else 'none'}")
+			print(f"  action={item.action}")
+			print(f"  note={item.note}")
+	else:
+		print("No demo hypothesis summaries are available locally.")
+
+	print()
+	print("Summary")
+	print("-------")
+	for recommendation in BOARD_RECOMMENDATION_ORDER:
+		print(f"{recommendation}={result.recommendation_counts.get(recommendation, 0)}")
+
+	print()
+	print("Reminder:")
+	print("Demo promotion board is read-only. No promotion was performed. No broker calls were made. No orders were submitted, cancelled, replaced, or closed.")
+
+	return result
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -3681,6 +3744,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_promotion_board_parser = subparsers.add_parser(
+		"demo-promotion-board",
+		help="Show a read-only demo promotion board for one symbol.",
+	)
+	demo_promotion_board_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -3906,6 +3980,10 @@ def main(argv=None):
 
 	if args.mode == "demo-hypothesis-performance-summary":
 		run_manual_demo_hypothesis_performance_summary(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-promotion-board":
+		run_manual_demo_promotion_board(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
