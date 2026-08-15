@@ -30,6 +30,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
         def status_dashboard(**kwargs):
             calls.append(("dashboard", kwargs["symbol"], kwargs["storage"]))
             print("Manual Demo Status Dashboard: NVDA")
+            print("  exit_readiness=needs_more_time")
             return _dashboard_result()
 
         with patch("builtins.print") as mock_print:
@@ -50,6 +51,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("Position Close Allowed : no")
         mock_print.assert_any_call("Promotion Actions Taken : 0")
         mock_print.assert_any_call("  current_no_new_entry=2")
+        mock_print.assert_any_call("  exit_readiness=needs_more_time")
         mock_print.assert_any_call("orders_submitted=0")
         mock_print.assert_any_call("orders_cancelled=0")
         mock_print.assert_any_call("positions_closed=0")

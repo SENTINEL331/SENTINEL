@@ -3478,6 +3478,9 @@ def run_manual_demo_status_dashboard(
 			print(f"  board_recommendation={trade.board_recommendation}")
 			print(f"  current_opportunity_rating={trade.current_opportunity_rating}")
 			print(f"  current_opportunity_action={trade.current_opportunity_action}")
+			print(f"  exit_readiness={trade.exit_readiness}")
+			print(f"  exit_reason={trade.exit_reason}")
+			print(f"  exit_action={trade.exit_action}")
 			print(f"  demo_only={trade.demo_only}")
 	else:
 		print("No local demo trade performance snapshots are available.")
@@ -3506,7 +3509,19 @@ def run_manual_demo_status_dashboard(
 	print(f"total_current_value={result.total_current_value}")
 	print(f"total_unrealized_pl={result.total_unrealized_pl}")
 	print(f"total_unrealized_plpc={result.total_unrealized_plpc}")
-	for name in ("not_ready", "monitor", "review_later", "blocked", "attractive_now", "current_no_new_entry"):
+	for name in (
+		"not_ready",
+		"monitor",
+		"review_later",
+		"blocked",
+		"attractive_now",
+		"current_no_new_entry",
+		"exit_hold",
+		"exit_needs_more_time",
+		"exit_candidate",
+		"risk_exit_candidate",
+		"exit_unknown",
+	):
 		print(f"{name}={result.rating_counts.get(name, 0)}")
 
 	print()

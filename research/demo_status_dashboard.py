@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from research.demo_current_opportunity_rating import (
     build_demo_current_opportunity_ratings,
 )
+from research.demo_exit_readiness import classify_demo_exit_readiness
 from research.demo_promotion_board import build_demo_promotion_board
 from research.demo_trade_performance_dashboard import build_demo_trade_performance_dashboard
 
@@ -30,6 +31,9 @@ class DemoStatusTradeRow:
     current_opportunity_action: str
     demo_only: bool = True
     status: str = "unknown"
+    exit_readiness: str = "unknown"
+    exit_reason: str = "missing_or_unrecognized_exit_data"
+    exit_action: str = "manual_review"
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +115,10 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
     opportunity = build_demo_current_opportunity_ratings(symbol=symbol, storage=storage)
 
     board_by_hypothesis = {item.source_hypothesis_id: item for item in board.board_items}
+    summary_risk_by_hypothesis = {
+        item.source_hypothesis_id: item.board_recommendation == "blocked"
+        for item in board.board_items
+    }
     opportunity_by_key = {}
     opportunity_by_hypothesis = {}
     for item in opportunity.ratings:
@@ -136,6 +144,13 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
             trade.source_hypothesis_id
         )
         board_item = board_by_hypothesis.get(trade.source_hypothesis_id)
+        exit_readiness, exit_reason, exit_action = classify_demo_exit_readiness(
+            trade=trade,
+            evaluation=evaluation,
+            summary_risk_breach=summary_risk_by_hypothesis.get(
+                trade.source_hypothesis_id, False
+            ),
+        )
         trades.append(
             DemoStatusTradeRow(
                 source_hypothesis_id=trade.source_hypothesis_id,
@@ -192,6 +207,9 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
                 ),
                 demo_only=trade.demo_only,
                 status=trade.status,
+                exit_readiness=exit_readiness,
+                exit_reason=exit_reason,
+                exit_action=exit_action,
             )
         )
 
@@ -230,6 +248,26 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
             rating_counts["attractive_now"] += 1
         if item.action == "no_new_entry":
             rating_counts["current_no_new_entry"] += 1
+
+    exit_counts = {
+        "exit_hold": 0,
+        "exit_needs_more_time": 0,
+        "exit_candidate": 0,
+        "risk_exit_candidate": 0,
+        "exit_unknown": 0,
+    }
+    for trade in trades:
+        if trade.exit_readiness == "hold":
+            exit_counts["exit_hold"] += 1
+        elif trade.exit_readiness == "needs_more_time":
+            exit_counts["exit_needs_more_time"] += 1
+        elif trade.exit_readiness == "exit_candidate":
+            exit_counts["exit_candidate"] += 1
+        elif trade.exit_readiness == "risk_exit_candidate":
+            exit_counts["risk_exit_candidate"] += 1
+        elif trade.exit_readiness == "unknown":
+            exit_counts["exit_unknown"] += 1
+    rating_counts.update(exit_counts)
 
     return DemoStatusDashboardResult(
         symbol=symbol,

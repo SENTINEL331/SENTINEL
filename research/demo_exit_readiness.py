@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from research.demo_current_opportunity_rating import build_demo_current_opportunity_ratings
-from research.demo_status_dashboard import _latest_evaluations, build_demo_status_dashboard
 
 
 EXIT_HOLD = "hold"
@@ -64,12 +63,18 @@ def _number(value):
         return None
 
 
-def _classify(*, trade, evaluation, summary_risk_breach: bool):
+def classify_demo_exit_readiness(*, trade, evaluation, summary_risk_breach: bool):
     is_open = str(getattr(trade, "status", "") or "").casefold() == "open"
     if not is_open:
         return EXIT_NO_POSITION, "no_open_demo_trade", "no_action"
 
-    entry_unrealized_plpc = _number(trade.entry_unrealized_plpc)
+    entry_unrealized_plpc = _number(
+        getattr(
+            trade,
+            "entry_unrealized_plpc",
+            getattr(trade, "unrealized_plpc", None),
+        )
+    )
     risk_breached = bool(getattr(evaluation, "risk_breached", False)) if evaluation else False
     risk_breached = risk_breached or summary_risk_breach
     if risk_breached or (
@@ -107,6 +112,8 @@ def build_demo_exit_readiness(*, symbol: str, storage) -> DemoExitReadinessResul
     if not symbol:
         raise ValueError("symbol is required")
 
+    from research.demo_status_dashboard import _latest_evaluations, build_demo_status_dashboard
+
     status_dashboard = build_demo_status_dashboard(symbol=symbol, storage=storage)
     evaluations = list(storage.load_demo_trade_evaluations(symbol=symbol) or [])
     latest_evaluations = _latest_evaluations(evaluations)
@@ -133,7 +140,7 @@ def build_demo_exit_readiness(*, symbol: str, storage) -> DemoExitReadinessResul
         opportunity = opportunity_by_key.get(key) or opportunity_by_hypothesis.get(
             trade.source_hypothesis_id
         )
-        readiness, reason, action = _classify(
+        readiness, reason, action = classify_demo_exit_readiness(
             trade=trade,
             evaluation=evaluation,
             summary_risk_breach=summary_risk_by_hypothesis.get(
