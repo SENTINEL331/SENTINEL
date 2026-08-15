@@ -31,6 +31,7 @@ from research.demo_current_opportunity_rating import (
 	OPPORTUNITY_RATING_ORDER,
 	build_demo_current_opportunity_ratings,
 )
+from research.demo_status_dashboard import build_demo_status_dashboard
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -3413,6 +3414,102 @@ def run_manual_demo_current_opportunity_rating(
 	return result
 
 
+def run_manual_demo_status_dashboard(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	dashboard_fn=build_demo_status_dashboard,
+):
+	"""Show the latest local demo state without writes, calls, or actions."""
+
+	storage = storage or Storage()
+	result = dashboard_fn(symbol=symbol, storage=storage)
+
+	print()
+	print(f"Manual Demo Status Dashboard: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Promotion Actions Taken : 0")
+
+	print()
+	print("Position")
+	print("--------")
+	position = result.position_snapshot
+	print(f"symbol={symbol}")
+	if position is None:
+		print("qty=none")
+		print("market_value=none")
+		print("cost_basis=none")
+		print("unrealized_pl=none")
+		print("unrealized_plpc=none")
+	else:
+		for field in ("qty", "market_value", "cost_basis", "unrealized_pl", "unrealized_plpc"):
+			value = getattr(position, field, None)
+			print(f"{field}={value if value is not None else 'none'}")
+
+	print()
+	print("Demo Trade Status")
+	print("-----------------")
+	if result.trades:
+		for trade in result.trades:
+			print(f"- source_hypothesis_id={trade.source_hypothesis_id}")
+			print(f"  demo_trade_candidate_id={trade.demo_trade_candidate_id}")
+			print(f"  order_intent_id={trade.order_intent_id}")
+			print(f"  broker_order_id={trade.broker_order_id}")
+			print(f"  entry_price={trade.entry_price if trade.entry_price is not None else 'none'}")
+			print(f"  current_price={trade.current_price if trade.current_price is not None else 'none'}")
+			print(f"  entry_performance_rating={trade.entry_performance_rating}")
+			print(f"  entry_unrealized_plpc={trade.entry_unrealized_plpc if trade.entry_unrealized_plpc is not None else 'none'}")
+			print(f"  trade_evaluation_status={trade.trade_evaluation_status}")
+			print(f"  trade_recommended_action={trade.trade_recommended_action}")
+			print(f"  hypothesis_summary_rating={trade.hypothesis_summary_rating}")
+			print(f"  board_recommendation={trade.board_recommendation}")
+			print(f"  current_opportunity_rating={trade.current_opportunity_rating}")
+			print(f"  current_opportunity_action={trade.current_opportunity_action}")
+			print(f"  demo_only={trade.demo_only}")
+	else:
+		print("No local demo trade performance snapshots are available.")
+
+	print()
+	print("Hypothesis Board Summary")
+	print("------------------------")
+	if result.hypotheses:
+		for hypothesis in result.hypotheses:
+			print(f"- source_hypothesis_id={hypothesis.source_hypothesis_id}")
+			print(f"  trades_evaluated={hypothesis.trades_evaluated}")
+			print(f"  current_summary_rating={hypothesis.current_summary_rating}")
+			print(f"  promotion_readiness={hypothesis.promotion_readiness}")
+			print(f"  board_recommendation={hypothesis.board_recommendation}")
+			print(f"  board_reason={','.join(hypothesis.board_reason)}")
+			print(f"  current_opportunity_rating={hypothesis.current_opportunity_rating}")
+			print(f"  action={hypothesis.action}")
+	else:
+		print("No local hypothesis performance summaries are available.")
+
+	print()
+	print("Overall Summary")
+	print("---------------")
+	print(f"open_demo_trades={result.open_demo_trades}")
+	print(f"total_entry_value={result.total_entry_value}")
+	print(f"total_current_value={result.total_current_value}")
+	print(f"total_unrealized_pl={result.total_unrealized_pl}")
+	print(f"total_unrealized_plpc={result.total_unrealized_plpc}")
+	for name in ("not_ready", "monitor", "review_later", "blocked", "attractive_now", "current_no_new_entry"):
+		print(f"{name}={result.rating_counts.get(name, 0)}")
+
+	print()
+	print("Reminder:")
+	print("Demo status dashboard is read-only and uses local snapshots. No market data, broker, AI, order, close, or promotion actions were performed.")
+
+	return result
+
+
 def run_manual_demo_monitoring_cycle(
 	symbol=DEFAULT_SYMBOL,
 	storage=None,
@@ -3963,6 +4060,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_status_dashboard_parser = subparsers.add_parser(
+		"demo-status-dashboard",
+		help="Show the read-only latest local demo status dashboard for one symbol.",
+	)
+	demo_status_dashboard_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -4200,6 +4308,10 @@ def main(argv=None):
 
 	if args.mode == "demo-current-opportunity-rating":
 		run_manual_demo_current_opportunity_rating(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-status-dashboard":
+		run_manual_demo_status_dashboard(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
