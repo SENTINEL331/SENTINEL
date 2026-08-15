@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from research.runner import _build_arg_parser, run_manual_demo_daily_operator
 
@@ -100,6 +100,91 @@ class DemoDailyOperatorTests(unittest.TestCase):
         self.assertFalse(result["dashboard_displayed"])
         mock_print.assert_any_call("- demo_status_dashboard: failed")
         mock_print.assert_any_call("  error=dashboard unavailable")
+
+    def _successful_cycle(self):
+        return {"cycle_status": "completed", "records_modified": False}
+
+    def _successful_dashboard(self):
+        return _dashboard_result()
+
+    def test_default_daily_operator_does_not_call_ai_review(self):
+        ai_review = Mock()
+        with patch("builtins.print") as mock_print:
+            result = run_manual_demo_daily_operator(
+                symbol="NVDA",
+                storage=object(),
+                monitoring_cycle_fn=Mock(return_value=self._successful_cycle()),
+                status_dashboard_fn=Mock(return_value=self._successful_dashboard()),
+                daily_ai_review_fn=ai_review,
+            )
+
+        ai_review.assert_not_called()
+        self.assertFalse(result["ai_review_requested"])
+        self.assertEqual(0, result["ai_calls_made"])
+        mock_print.assert_any_call("ai_review_requested=no")
+        mock_print.assert_any_call("ai_calls_made=0")
+
+    def test_ai_review_without_confirmation_delegates_without_ai_call(self):
+        ai_review = Mock(
+            return_value={
+                "records_modified": False,
+                "ai_calls_made": 0,
+                "daily_reviews_created": 0,
+                "skipped_existing": 0,
+                "review": None,
+                "error": "confirmation is required",
+            }
+        )
+        with patch("builtins.print") as mock_print:
+            result = run_manual_demo_daily_operator(
+                symbol="NVDA",
+                storage=object(),
+                monitoring_cycle_fn=Mock(return_value=self._successful_cycle()),
+                status_dashboard_fn=Mock(return_value=self._successful_dashboard()),
+                ai_review_requested=True,
+                confirm_ai_call=False,
+                daily_ai_review_fn=ai_review,
+            )
+
+        ai_review.assert_called_once_with(
+            symbol="NVDA", storage=ANY, confirm_ai_call=False
+        )
+        self.assertEqual("completed_with_warnings", result["operator_status"])
+        self.assertEqual(0, result["ai_calls_made"])
+        mock_print.assert_any_call("ai_review_requested=yes")
+        mock_print.assert_any_call("ai_review_confirmed=no")
+        mock_print.assert_any_call("ai_calls_made=0")
+
+    def test_confirmed_ai_review_delegates_and_reports_duplicate(self):
+        ai_review = Mock(
+            return_value={
+                "records_modified": False,
+                "ai_calls_made": 0,
+                "daily_reviews_created": 0,
+                "skipped_existing": 1,
+                "review": None,
+                "error": None,
+            }
+        )
+        with patch("builtins.print") as mock_print:
+            result = run_manual_demo_daily_operator(
+                symbol="NVDA",
+                storage=object(),
+                monitoring_cycle_fn=Mock(return_value=self._successful_cycle()),
+                status_dashboard_fn=Mock(return_value=self._successful_dashboard()),
+                ai_review_requested=True,
+                confirm_ai_call=True,
+                daily_ai_review_fn=ai_review,
+            )
+
+        ai_review.assert_called_once_with(
+            symbol="NVDA", storage=ANY, confirm_ai_call=True
+        )
+        self.assertEqual("completed", result["operator_status"])
+        self.assertEqual(0, result["ai_calls_made"])
+        self.assertEqual(1, result["skipped_existing"])
+        mock_print.assert_any_call("ai_review_confirmed=yes")
+        mock_print.assert_any_call("skipped_existing=1")
 
 
 if __name__ == "__main__":

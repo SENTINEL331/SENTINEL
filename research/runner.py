@@ -3692,7 +3692,7 @@ def run_manual_demo_daily_ai_review(
 	dashboard_fingerprint = fingerprint_context(dashboard_context)
 	trigger_fingerprint = fingerprint_context(trigger_context)
 	existing_reviews = storage.load_demo_daily_ai_reviews(symbol=symbol)
-	duplicate = any(
+	duplicate = confirm_ai_call and any(
 		review.source_dashboard_fingerprint == dashboard_fingerprint
 		and review.source_trigger_fingerprint == trigger_fingerprint
 		for review in existing_reviews
@@ -3922,6 +3922,9 @@ def run_manual_demo_daily_operator(
 	storage=None,
 	monitoring_cycle_fn=run_manual_demo_monitoring_cycle,
 	status_dashboard_fn=run_manual_demo_status_dashboard,
+	ai_review_requested=False,
+	confirm_ai_call=False,
+	daily_ai_review_fn=run_manual_demo_daily_ai_review,
 ):
 	"""Run the safe monitoring cycle, then display the latest local demo status."""
 
@@ -3944,6 +3947,20 @@ def run_manual_demo_daily_operator(
 		except Exception as exc:
 			dashboard_error = str(exc)
 
+	ai_review_result = None
+	ai_review_error = None
+	ai_review_output = io.StringIO()
+	if ai_review_requested:
+		with redirect_stdout(ai_review_output):
+			try:
+				ai_review_result = daily_ai_review_fn(
+					symbol=symbol,
+					storage=storage,
+					confirm_ai_call=confirm_ai_call,
+				)
+			except Exception as exc:
+				ai_review_error = str(exc)
+
 	cycle_status = (
 		cycle_result.get("cycle_status", "failed")
 		if isinstance(cycle_result, dict)
@@ -3963,12 +3980,20 @@ def run_manual_demo_daily_operator(
 		operator_status = "completed_with_warnings"
 	if cycle_status == "failed" and not dashboard_displayed:
 		operator_status = "failed"
+	if ai_review_error or (
+		isinstance(ai_review_result, dict) and ai_review_result.get("error")
+	):
+		operator_status = "completed_with_warnings"
+	operator_records_modified = cycle_records_modified or bool(
+		isinstance(ai_review_result, dict)
+		and ai_review_result.get("records_modified", False)
+	)
 
 	print()
 	print(f"Manual Demo Daily Operator: {symbol}")
 	print()
-	print(f"Records Modified : {'yes' if cycle_records_modified else 'no'}")
-	print("AI Calls Allowed : no")
+	print(f"Records Modified : {'yes' if operator_records_modified else 'no'}")
+	print(f"AI Calls Allowed : {'yes' if ai_review_requested and confirm_ai_call else 'no'}")
 	print("Broker Calls Allowed : yes")
 	print("Market Data Calls Allowed : no")
 	print("Order Placement Allowed : no")
@@ -4006,12 +4031,61 @@ def run_manual_demo_daily_operator(
 		print()
 		print(dashboard_output.getvalue(), end="")
 
+	ai_calls_made = 0
+	daily_reviews_created = 0
+	skipped_existing = 0
+	deeper_ai_review_needed = "no"
+	ai_review_reason = "not_requested"
+	if isinstance(ai_review_result, dict):
+		ai_calls_made = ai_review_result.get("ai_calls_made", 0)
+		daily_reviews_created = ai_review_result.get("daily_reviews_created", 0)
+		skipped_existing = ai_review_result.get("skipped_existing", 0)
+		review = ai_review_result.get("review")
+		if review is not None:
+			deeper_ai_review_needed = "yes" if review.deeper_ai_review_needed else "no"
+			ai_review_reason = review.reason
+		elif not confirm_ai_call:
+			ai_review_reason = "confirmation_required"
+		elif skipped_existing:
+			ai_review_reason = "duplicate_latest_state"
+	if ai_review_error:
+		ai_review_reason = "ai_review_error"
+
+	print()
+	print("AI Review")
+	print("---------")
+	print(f"ai_review_requested={'yes' if ai_review_requested else 'no'}")
+	print(f"ai_review_confirmed={'yes' if ai_review_requested and confirm_ai_call else 'no'}")
+	print(
+		"ai_review_completed="
+		+ (
+			"yes"
+			if isinstance(ai_review_result, dict)
+			and not ai_review_error
+			and not ai_review_result.get("error")
+			else "no"
+		)
+	)
+	print(f"ai_calls_made={ai_calls_made}")
+	print(f"daily_reviews_created={daily_reviews_created}")
+	print(f"skipped_existing={skipped_existing}")
+	print(f"deeper_ai_review_needed={deeper_ai_review_needed}")
+	print(f"ai_review_reason={ai_review_reason}")
+	if ai_review_error:
+		print(f"error={ai_review_error}")
+	if ai_review_requested and ai_review_output.getvalue():
+		print()
+		print(ai_review_output.getvalue(), end="")
+
 	print()
 	print("Operator Summary")
 	print("----------------")
 	print(f"operator_status={operator_status}")
 	print(f"monitoring_cycle_status={cycle_status}")
 	print(f"dashboard_displayed={'yes' if dashboard_displayed else 'no'}")
+	print(f"ai_review_requested={'yes' if ai_review_requested else 'no'}")
+	print(f"ai_calls_made={ai_calls_made}")
+	print(f"daily_ai_reviews_created={daily_reviews_created}")
 	print("orders_submitted=0")
 	print("orders_cancelled=0")
 	print("positions_closed=0")
@@ -4023,10 +4097,15 @@ def run_manual_demo_daily_operator(
 
 	return {
 		"symbol": symbol,
-		"records_modified": cycle_records_modified,
+		"records_modified": operator_records_modified,
 		"operator_status": operator_status,
 		"monitoring_cycle_status": cycle_status,
 		"dashboard_displayed": dashboard_displayed,
+		"ai_review_requested": ai_review_requested,
+		"ai_review_confirmed": ai_review_requested and confirm_ai_call,
+		"ai_calls_made": ai_calls_made,
+		"daily_reviews_created": daily_reviews_created,
+		"skipped_existing": skipped_existing,
 		"cycle_result": cycle_result,
 		"dashboard_result": dashboard_result,
 	}
@@ -4479,6 +4558,16 @@ def _build_arg_parser():
 		default=DEFAULT_SYMBOL,
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
+	demo_daily_operator_parser.add_argument(
+		"--ai-review",
+		action="store_true",
+		help="Request the advisory daily AI review after monitoring; confirmation is still required.",
+	)
+	demo_daily_operator_parser.add_argument(
+		"--confirm-ai-call",
+		action="store_true",
+		help="Explicitly allow one advisory AI call when --ai-review is also present.",
+	)
 
 	demo_exit_readiness_parser = subparsers.add_parser(
 		"demo-exit-readiness",
@@ -4762,7 +4851,11 @@ def main(argv=None):
 		return 0
 
 	if args.mode == "demo-daily-operator":
-		run_manual_demo_daily_operator(symbol=args.symbol)
+		run_manual_demo_daily_operator(
+			symbol=args.symbol,
+			ai_review_requested=bool(args.ai_review),
+			confirm_ai_call=bool(args.confirm_ai_call),
+		)
 		return 0
 
 	if args.mode == "demo-exit-readiness":
