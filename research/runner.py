@@ -34,6 +34,10 @@ from research.demo_current_opportunity_rating import (
 	build_demo_current_opportunity_ratings,
 )
 from research.demo_status_dashboard import build_demo_status_dashboard
+from research.demo_exit_readiness import (
+	EXIT_READINESS_ORDER,
+	build_demo_exit_readiness,
+)
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -3512,6 +3516,66 @@ def run_manual_demo_status_dashboard(
 	return result
 
 
+def run_manual_demo_exit_readiness(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	readiness_fn=build_demo_exit_readiness,
+):
+	"""Show deterministic exit readiness without creating exits or changing records."""
+
+	storage = storage or Storage()
+	result = readiness_fn(symbol=symbol, storage=storage)
+
+	print()
+	print(f"Manual Demo Exit Readiness: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Exit Orders Created : 0")
+	print("Positions Closed : 0")
+
+	print()
+	print("Exit Readiness")
+	print("--------------")
+	if result.items:
+		for item in result.items:
+			print(f"- source_hypothesis_id={item.source_hypothesis_id}")
+			print(f"  demo_trade_candidate_id={item.demo_trade_candidate_id}")
+			print(f"  order_intent_id={item.order_intent_id}")
+			print(f"  broker_order_id={item.broker_order_id}")
+			print(f"  entry_price={item.entry_price if item.entry_price is not None else 'none'}")
+			print(f"  current_price={item.current_price if item.current_price is not None else 'none'}")
+			print(f"  entry_unrealized_plpc={item.entry_unrealized_plpc if item.entry_unrealized_plpc is not None else 'none'}")
+			print(f"  trade_evaluation_status={item.trade_evaluation_status}")
+			print(f"  evaluation_window_complete={item.evaluation_window_complete if item.evaluation_window_complete is not None else 'none'}")
+			print(f"  risk_breached={item.risk_breached}")
+			print(f"  current_opportunity_rating={item.current_opportunity_rating}")
+			print(f"  exit_readiness={item.exit_readiness}")
+			print(f"  exit_reason={item.exit_reason}")
+			print(f"  action={item.action}")
+			print(f"  note={item.note}")
+	else:
+		print("No local demo trade performance snapshots are available.")
+
+	print()
+	print("Summary")
+	print("-------")
+	for label in EXIT_READINESS_ORDER:
+		print(f"{label}={result.readiness_counts.get(label, 0)}")
+
+	print()
+	print("Reminder:")
+	print("Demo exit readiness is read-only. No exit orders were created. No orders were submitted, cancelled, replaced, or closed. No broker calls were made.")
+
+	return result
+
+
 def run_manual_demo_monitoring_cycle(
 	symbol=DEFAULT_SYMBOL,
 	storage=None,
@@ -4199,6 +4263,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_exit_readiness_parser = subparsers.add_parser(
+		"demo-exit-readiness",
+		help="Show read-only exit readiness for open demo trades.",
+	)
+	demo_exit_readiness_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -4444,6 +4519,10 @@ def main(argv=None):
 
 	if args.mode == "demo-daily-operator":
 		run_manual_demo_daily_operator(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-exit-readiness":
+		run_manual_demo_exit_readiness(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":

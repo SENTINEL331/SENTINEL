@@ -29,6 +29,7 @@ class DemoStatusTradeRow:
     current_opportunity_rating: str
     current_opportunity_action: str
     demo_only: bool = True
+    status: str = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +191,7 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
                     opportunity_item.action if opportunity_item is not None else "no_new_entry"
                 ),
                 demo_only=trade.demo_only,
+                status=trade.status,
             )
         )
 
