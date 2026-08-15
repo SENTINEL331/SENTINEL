@@ -3536,6 +3536,35 @@ def run_manual_demo_status_dashboard(
 		print(f"{name}={result.rating_counts.get(name, 0)}")
 
 	print()
+	print("Latest Daily AI Review")
+	print("----------------------")
+	latest_review = getattr(result, "latest_daily_ai_review", None)
+	if latest_review is None:
+		print("No stored daily AI review found.")
+	else:
+		print(f"latest_ai_review_id={latest_review.demo_daily_ai_review_id}")
+		print(f"latest_ai_review_at={latest_review.reviewed_at.isoformat()}")
+		print(f"ai_model={latest_review.ai_model}")
+		print(f"overall_assessment={latest_review.overall_assessment}")
+		print(f"deeper_ai_review_needed={'yes' if latest_review.deeper_ai_review_needed else 'no'}")
+		print(f"latest_ai_reason={latest_review.reason}")
+		print(f"confidence={latest_review.confidence}")
+		print("note=Stored advisory AI review only. No AI call was made by this dashboard.")
+
+	print()
+	print("AI Review Summary")
+	print("-----------------")
+	print(f"latest_ai_review_available={'yes' if latest_review is not None else 'no'}")
+	print(
+		"deeper_ai_review_needed="
+		+ (
+			"yes" if latest_review is not None and latest_review.deeper_ai_review_needed
+			else "no" if latest_review is not None
+			else "unknown"
+		)
+	)
+
+	print()
 	print("Reminder:")
 	print("Demo status dashboard is read-only and uses local snapshots. No market data, broker, AI, order, close, or promotion actions were performed.")
 

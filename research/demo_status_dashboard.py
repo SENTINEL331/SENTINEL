@@ -61,6 +61,7 @@ class DemoStatusDashboardResult:
     total_unrealized_pl: float = 0.0
     total_unrealized_plpc: float = 0.0
     rating_counts: dict[str, int] = field(default_factory=dict)
+    latest_daily_ai_review: object | None = None
 
 
 def _timestamp(item, name: str) -> datetime:
@@ -99,6 +100,25 @@ def _latest_evaluations(evaluations):
     return latest
 
 
+def _latest_daily_ai_review(storage, symbol):
+    loader = getattr(storage, "load_demo_daily_ai_reviews", None)
+    if not callable(loader):
+        return None
+    try:
+        reviews = list(loader(symbol=symbol) or [])
+    except TypeError:
+        return None
+    if not reviews:
+        return None
+    return max(
+        reviews,
+        key=lambda review: (
+            _timestamp(review, "reviewed_at"),
+            str(getattr(review, "demo_daily_ai_review_id", "")),
+        ),
+    )
+
+
 def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardResult:
     """Compose latest local demo state without writes, network calls, or actions."""
 
@@ -113,6 +133,7 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
     latest_evaluations = _latest_evaluations(evaluations)
     board = build_demo_promotion_board(symbol=symbol, storage=storage)
     opportunity = build_demo_current_opportunity_ratings(symbol=symbol, storage=storage)
+    latest_daily_ai_review = _latest_daily_ai_review(storage, symbol)
 
     board_by_hypothesis = {item.source_hypothesis_id: item for item in board.board_items}
     summary_risk_by_hypothesis = {
@@ -292,4 +313,5 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
             else 0.0
         ),
         rating_counts=rating_counts,
+        latest_daily_ai_review=latest_daily_ai_review,
     )

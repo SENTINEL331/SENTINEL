@@ -79,7 +79,7 @@ def _summary(**overrides):
     return SimpleNamespace(**values)
 
 
-def _storage(*, snapshots=(), positions=(), evaluations=(), summaries=()):
+def _storage(*, snapshots=(), positions=(), evaluations=(), summaries=(), reviews=()):
     storage = Mock()
     storage.load_demo_trade_performance_snapshots.return_value = list(snapshots)
     storage.load_demo_position_snapshots.return_value = list(positions)
@@ -87,6 +87,7 @@ def _storage(*, snapshots=(), positions=(), evaluations=(), summaries=()):
     storage.load_demo_hypothesis_performance_summaries.return_value = list(summaries)
     storage.load_demo_trade_candidates.return_value = []
     storage.load_demo_order_intents.return_value = []
+    storage.load_demo_daily_ai_reviews.return_value = list(reviews)
     return storage
 
 
@@ -134,6 +135,36 @@ class DemoStatusDashboardTests(unittest.TestCase):
         self.assertEqual(1, result.open_demo_trades)
         self.assertEqual(200.0, result.total_entry_value)
         self.assertEqual(200.4, result.total_current_value)
+
+    def test_includes_latest_stored_daily_ai_review(self):
+        older = SimpleNamespace(
+            demo_daily_ai_review_id="old-review",
+            reviewed_at=datetime(2026, 8, 14, tzinfo=timezone.utc),
+            ai_model="old-model",
+            overall_assessment="Old",
+            deeper_ai_review_needed=True,
+            reason="old_reason",
+            confidence="low",
+        )
+        latest = SimpleNamespace(
+            demo_daily_ai_review_id="latest-review",
+            reviewed_at=datetime(2026, 8, 15, tzinfo=timezone.utc),
+            ai_model="latest-model",
+            overall_assessment="Continue monitoring.",
+            deeper_ai_review_needed=False,
+            reason="evaluation_window_incomplete",
+            confidence="high",
+        )
+        result = build_demo_status_dashboard(
+            symbol="NVDA",
+            storage=_storage(reviews=[older, latest]),
+        )
+
+        self.assertIs(latest, result.latest_daily_ai_review)
+
+    def test_handles_no_stored_daily_ai_review(self):
+        result = build_demo_status_dashboard(symbol="NVDA", storage=_storage())
+        self.assertIsNone(result.latest_daily_ai_review)
 
     def test_is_read_only_and_makes_no_network_calls(self):
         storage = _storage()
