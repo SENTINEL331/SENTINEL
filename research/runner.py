@@ -1,6 +1,8 @@
 ﻿import argparse
+import io
 import json
 import sys
+from contextlib import redirect_stdout
 
 from config import settings
 
@@ -3634,6 +3636,121 @@ def run_manual_demo_monitoring_cycle(
 	}
 
 
+def run_manual_demo_daily_operator(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	monitoring_cycle_fn=run_manual_demo_monitoring_cycle,
+	status_dashboard_fn=run_manual_demo_status_dashboard,
+):
+	"""Run the safe monitoring cycle, then display the latest local demo status."""
+
+	storage = storage or Storage()
+	cycle_result = None
+	cycle_error = None
+	cycle_output = io.StringIO()
+	with redirect_stdout(cycle_output):
+		try:
+			cycle_result = monitoring_cycle_fn(symbol=symbol, storage=storage)
+		except Exception as exc:
+			cycle_error = str(exc)
+
+	dashboard_result = None
+	dashboard_error = None
+	dashboard_output = io.StringIO()
+	with redirect_stdout(dashboard_output):
+		try:
+			dashboard_result = status_dashboard_fn(symbol=symbol, storage=storage)
+		except Exception as exc:
+			dashboard_error = str(exc)
+
+	cycle_status = (
+		cycle_result.get("cycle_status", "failed")
+		if isinstance(cycle_result, dict)
+		else "failed"
+	)
+	cycle_records_modified = bool(
+		cycle_result.get("records_modified", False)
+		if isinstance(cycle_result, dict)
+		else False
+	)
+	if cycle_error:
+		cycle_status = "failed"
+
+	dashboard_displayed = dashboard_result is not None and dashboard_error is None
+	operator_status = "completed"
+	if cycle_status != "completed" or not dashboard_displayed:
+		operator_status = "completed_with_warnings"
+	if cycle_status == "failed" and not dashboard_displayed:
+		operator_status = "failed"
+
+	print()
+	print(f"Manual Demo Daily Operator: {symbol}")
+	print()
+	print(f"Records Modified : {'yes' if cycle_records_modified else 'no'}")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : yes")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Promotion Actions Taken : 0")
+
+	print()
+	print("Operator Steps")
+	print("--------------")
+	print(f"- demo_monitoring_cycle: {'failed' if cycle_error else 'completed'}")
+	print(f"  cycle_status={cycle_status}")
+	print(f"  records_modified={'yes' if cycle_records_modified else 'no'}")
+	if cycle_error:
+		print(f"  error={cycle_error}")
+
+	open_demo_trades = 0
+	current_no_new_entry = 0
+	if dashboard_result is not None:
+		open_demo_trades = getattr(dashboard_result, "open_demo_trades", 0)
+		current_no_new_entry = getattr(
+			dashboard_result,
+			"rating_counts",
+			{},
+		).get("current_no_new_entry", 0)
+	print(f"- demo_status_dashboard: {'completed' if dashboard_displayed else 'failed'}")
+	print("  records_modified=no")
+	print(f"  open_demo_trades={open_demo_trades}")
+	print(f"  current_no_new_entry={current_no_new_entry}")
+	if dashboard_error:
+		print(f"  error={dashboard_error}")
+
+	if dashboard_displayed:
+		print()
+		print(dashboard_output.getvalue(), end="")
+
+	print()
+	print("Operator Summary")
+	print("----------------")
+	print(f"operator_status={operator_status}")
+	print(f"monitoring_cycle_status={cycle_status}")
+	print(f"dashboard_displayed={'yes' if dashboard_displayed else 'no'}")
+	print("orders_submitted=0")
+	print("orders_cancelled=0")
+	print("positions_closed=0")
+	print("promotions_performed=0")
+
+	print()
+	print("Reminder:")
+	print("Demo daily operator completed using safe monitoring and dashboard steps. No orders were submitted, cancelled, replaced, or closed. No promotion was performed. Live trading remains disabled.")
+
+	return {
+		"symbol": symbol,
+		"records_modified": cycle_records_modified,
+		"operator_status": operator_status,
+		"monitoring_cycle_status": cycle_status,
+		"dashboard_displayed": dashboard_displayed,
+		"cycle_result": cycle_result,
+		"dashboard_result": dashboard_result,
+	}
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -4071,6 +4188,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_daily_operator_parser = subparsers.add_parser(
+		"demo-daily-operator",
+		help="Run the safe demo monitoring cycle and status dashboard for one symbol.",
+	)
+	demo_daily_operator_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -4312,6 +4440,10 @@ def main(argv=None):
 
 	if args.mode == "demo-status-dashboard":
 		run_manual_demo_status_dashboard(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-daily-operator":
+		run_manual_demo_daily_operator(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
