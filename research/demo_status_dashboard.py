@@ -34,6 +34,10 @@ class DemoStatusTradeRow:
     exit_readiness: str = "unknown"
     exit_reason: str = "missing_or_unrecognized_exit_data"
     exit_action: str = "manual_review"
+    trading_days_elapsed: int | None = None
+    evaluation_window_trading_days: int | None = None
+    evaluation_days_remaining: int | None = None
+    evaluation_window_complete: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,6 +235,32 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
                 exit_readiness=exit_readiness,
                 exit_reason=exit_reason,
                 exit_action=exit_action,
+                trading_days_elapsed=(
+                    getattr(evaluation, "trading_days_elapsed", None)
+                    if evaluation is not None
+                    else None
+                ),
+                evaluation_window_trading_days=(
+                    getattr(evaluation, "evaluation_window_trading_days", None)
+                    if evaluation is not None
+                    else None
+                ),
+                evaluation_days_remaining=(
+                    max(
+                        int(getattr(evaluation, "evaluation_window_trading_days", 0))
+                        - int(getattr(evaluation, "trading_days_elapsed", 0)),
+                        0,
+                    )
+                    if evaluation is not None
+                    and getattr(evaluation, "evaluation_window_trading_days", None) is not None
+                    and getattr(evaluation, "trading_days_elapsed", None) is not None
+                    else None
+                ),
+                evaluation_window_complete=(
+                    getattr(evaluation, "evaluation_window_complete", None)
+                    if evaluation is not None
+                    else None
+                ),
             )
         )
 
@@ -289,6 +319,26 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
         elif trade.exit_readiness == "unknown":
             exit_counts["exit_unknown"] += 1
     rating_counts.update(exit_counts)
+
+    completed_evaluation_windows = sum(
+        trade.evaluation_window_complete is True for trade in trades
+    )
+    incomplete_evaluation_windows = sum(
+        trade.evaluation_window_complete is False for trade in trades
+    )
+    remaining_days = [
+        trade.evaluation_days_remaining
+        for trade in trades
+        if trade.evaluation_days_remaining is not None
+    ]
+    rating_counts.update(
+        {
+            "completed_evaluation_windows": completed_evaluation_windows,
+            "incomplete_evaluation_windows": incomplete_evaluation_windows,
+            "min_evaluation_days_remaining": min(remaining_days) if remaining_days else None,
+            "max_evaluation_days_remaining": max(remaining_days) if remaining_days else None,
+        }
+    )
 
     return DemoStatusDashboardResult(
         symbol=symbol,

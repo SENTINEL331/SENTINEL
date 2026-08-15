@@ -58,6 +58,9 @@ def _evaluation(**overrides):
         "evaluated_at": datetime(2026, 8, 13, 14, 0, tzinfo=timezone.utc),
         "evaluation_status": "needs_more_time",
         "recommended_action": "continue_monitoring",
+        "trading_days_elapsed": 2,
+        "evaluation_window_trading_days": 5,
+        "evaluation_window_complete": False,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -132,6 +135,14 @@ class DemoStatusDashboardTests(unittest.TestCase):
         self.assertEqual(1, result.rating_counts["exit_needs_more_time"])
         self.assertEqual(0, result.rating_counts["exit_candidate"])
         self.assertEqual(0, result.rating_counts["risk_exit_candidate"])
+        self.assertEqual(2, result.trades[0].trading_days_elapsed)
+        self.assertEqual(5, result.trades[0].evaluation_window_trading_days)
+        self.assertEqual(3, result.trades[0].evaluation_days_remaining)
+        self.assertFalse(result.trades[0].evaluation_window_complete)
+        self.assertEqual(0, result.rating_counts["completed_evaluation_windows"])
+        self.assertEqual(1, result.rating_counts["incomplete_evaluation_windows"])
+        self.assertEqual(3, result.rating_counts["min_evaluation_days_remaining"])
+        self.assertEqual(3, result.rating_counts["max_evaluation_days_remaining"])
         self.assertEqual(1, result.open_demo_trades)
         self.assertEqual(200.0, result.total_entry_value)
         self.assertEqual(200.4, result.total_current_value)

@@ -3492,6 +3492,10 @@ def run_manual_demo_status_dashboard(
 			print(f"  exit_readiness={trade.exit_readiness}")
 			print(f"  exit_reason={trade.exit_reason}")
 			print(f"  exit_action={trade.exit_action}")
+			print(f"  trading_days_elapsed={trade.trading_days_elapsed if trade.trading_days_elapsed is not None else 'none'}")
+			print(f"  evaluation_window_trading_days={trade.evaluation_window_trading_days if trade.evaluation_window_trading_days is not None else 'none'}")
+			print(f"  evaluation_days_remaining={trade.evaluation_days_remaining if trade.evaluation_days_remaining is not None else 'none'}")
+			print(f"  evaluation_window_complete={trade.evaluation_window_complete if trade.evaluation_window_complete is not None else 'none'}")
 			print(f"  demo_only={trade.demo_only}")
 	else:
 		print("No local demo trade performance snapshots are available.")
@@ -3532,6 +3536,10 @@ def run_manual_demo_status_dashboard(
 		"exit_candidate",
 		"risk_exit_candidate",
 		"exit_unknown",
+		"completed_evaluation_windows",
+		"incomplete_evaluation_windows",
+		"min_evaluation_days_remaining",
+		"max_evaluation_days_remaining",
 	):
 		print(f"{name}={result.rating_counts.get(name, 0)}")
 
