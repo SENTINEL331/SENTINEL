@@ -38,6 +38,10 @@ from research.demo_exit_readiness import (
 	EXIT_READINESS_ORDER,
 	build_demo_exit_readiness,
 )
+from research.demo_ai_review_trigger import (
+	TRIGGER_ORDER,
+	build_demo_ai_review_trigger,
+)
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -3591,6 +3595,77 @@ def run_manual_demo_exit_readiness(
 	return result
 
 
+def run_manual_demo_ai_review_trigger(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	trigger_fn=build_demo_ai_review_trigger,
+):
+	"""Decide whether demo AI review is warranted without calling AI."""
+
+	storage = storage or Storage()
+	result = trigger_fn(symbol=symbol, storage=storage)
+
+	print()
+	print(f"Manual Demo AI Review Trigger: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("AI Calls Made : 0")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Promotion Actions Taken : 0")
+
+	print()
+	print("AI Review Trigger")
+	print("-----------------")
+	print(f"symbol={result.symbol}")
+	print(f"ai_review_needed={'yes' if result.ai_review_needed else 'no'}")
+	print(f"primary_trigger={result.primary_trigger}")
+	print(f"recommended_action={result.recommended_action}")
+	print(f"reason={result.reason}")
+	print(f"review_scope={result.review_scope}")
+	print(f"credits_spend_recommended={'yes' if result.credits_spend_recommended else 'no'}")
+
+	print()
+	print("Trigger Details")
+	print("---------------")
+	print(f"open_demo_trades={result.open_demo_trades}")
+	print(f"evaluations_loaded={result.evaluations_loaded}")
+	print(f"completed_evaluation_windows={result.completed_evaluation_windows}")
+	print(f"risk_breaches={result.risk_breaches}")
+	print(f"exit_candidates={result.exit_candidates}")
+	print(f"risk_exit_candidates={result.risk_exit_candidates}")
+	print(f"promotion_review_candidates={result.promotion_review_candidates}")
+	print(f"disagreement_candidates={result.disagreement_candidates}")
+
+	print()
+	print("Per Hypothesis")
+	print("--------------")
+	if result.items:
+		for item in result.items:
+			print(f"- source_hypothesis_id={item.source_hypothesis_id}")
+			print(f"  trade_evaluation_status={item.trade_evaluation_status}")
+			print(f"  evaluation_window_complete={item.evaluation_window_complete if item.evaluation_window_complete is not None else 'none'}")
+			print(f"  board_recommendation={item.board_recommendation}")
+			print(f"  current_opportunity_rating={item.current_opportunity_rating}")
+			print(f"  exit_readiness={item.exit_readiness}")
+			print(f"  ai_review_needed={'yes' if item.ai_review_needed else 'no'}")
+			print(f"  trigger={item.trigger}")
+			print(f"  reason={item.reason}")
+	else:
+		print("No local demo review data is available.")
+
+	print()
+	print("Reminder:")
+	print("Demo AI review trigger is read-only and does not call AI. No credits were spent by this command. No broker, market data, order, close, or promotion actions were performed.")
+
+	return result
+
+
 def run_manual_demo_monitoring_cycle(
 	symbol=DEFAULT_SYMBOL,
 	storage=None,
@@ -4289,6 +4364,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_ai_review_trigger_parser = subparsers.add_parser(
+		"demo-ai-review-trigger",
+		help="Decide whether local demo evidence warrants AI review without calling AI.",
+	)
+	demo_ai_review_trigger_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -4538,6 +4624,10 @@ def main(argv=None):
 
 	if args.mode == "demo-exit-readiness":
 		run_manual_demo_exit_readiness(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-ai-review-trigger":
+		run_manual_demo_ai_review_trigger(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
