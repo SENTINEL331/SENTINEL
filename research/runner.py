@@ -27,6 +27,10 @@ from research.demo_promotion_board import (
 	BOARD_RECOMMENDATION_ORDER,
 	build_demo_promotion_board,
 )
+from research.demo_current_opportunity_rating import (
+	OPPORTUNITY_RATING_ORDER,
+	build_demo_current_opportunity_ratings,
+)
 from research.demo_trade_candidate import validate_demo_trade_candidate
 from research.demo_broker_readiness import evaluate_demo_broker_readiness
 from research.demo_order_intent_add import DemoOrderIntentAddService
@@ -3351,6 +3355,64 @@ def run_manual_demo_promotion_board(
 	return result
 
 
+def run_manual_demo_current_opportunity_rating(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	rating_fn=build_demo_current_opportunity_ratings,
+):
+	"""Show deterministic current opportunity ratings from local demo snapshots only."""
+
+	storage = storage or Storage()
+	result = rating_fn(symbol=symbol, storage=storage)
+
+	print()
+	print(f"Manual Demo Current Opportunity Rating: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print(f"Ratings Displayed : {result.ratings_displayed}")
+
+	print()
+	print("Current Opportunity Ratings")
+	print("---------------------------")
+	if result.ratings:
+		for rating in result.ratings:
+			print(f"- source_hypothesis_id={rating.source_hypothesis_id}")
+			print(f"  demo_trade_candidate_id={rating.demo_trade_candidate_id}")
+			print(f"  order_intent_id={rating.order_intent_id}")
+			print(f"  broker_order_id={rating.broker_order_id}")
+			print(f"  latest_current_price={rating.latest_current_price if rating.latest_current_price is not None else 'none'}")
+			print(f"  entry_price={rating.entry_price if rating.entry_price is not None else 'none'}")
+			print(f"  entry_performance_rating={rating.entry_performance_rating}")
+			print(f"  entry_unrealized_plpc={rating.entry_unrealized_plpc if rating.entry_unrealized_plpc is not None else 'none'}")
+			print(f"  board_recommendation={rating.board_recommendation}")
+			print(f"  hypothesis_summary_rating={rating.hypothesis_summary_rating}")
+			print(f"  current_opportunity_rating={rating.current_opportunity_rating}")
+			print(f"  opportunity_reason={rating.opportunity_reason}")
+			print(f"  action={rating.action}")
+			print(f"  note={rating.note}")
+	else:
+		print("No local demo trade performance snapshots are available.")
+
+	print()
+	print("Summary")
+	print("-------")
+	for rating_name in OPPORTUNITY_RATING_ORDER:
+		print(f"{rating_name}={result.rating_counts.get(rating_name, 0)}")
+
+	print()
+	print("Reminder:")
+	print("Current opportunity rating is read-only and uses local snapshots. No market data, broker, AI, order, close, or promotion actions were performed.")
+
+	return result
+
+
 def run_manual_demo_monitoring_cycle(
 	symbol=DEFAULT_SYMBOL,
 	storage=None,
@@ -3890,6 +3952,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_current_opportunity_rating_parser = subparsers.add_parser(
+		"demo-current-opportunity-rating",
+		help="Show read-only current opportunity ratings for one symbol.",
+	)
+	demo_current_opportunity_rating_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -4123,6 +4196,10 @@ def main(argv=None):
 
 	if args.mode == "demo-monitoring-cycle":
 		run_manual_demo_monitoring_cycle(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-current-opportunity-rating":
+		run_manual_demo_current_opportunity_rating(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
