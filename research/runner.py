@@ -4215,6 +4215,71 @@ def run_manual_demo_daily_operator(
 	}
 
 
+def run_manual_demo_operator_runbook(symbol=DEFAULT_SYMBOL):
+	"""Print recommended demo operator commands without executing any command."""
+
+	print()
+	print(f"Manual Demo Operator Runbook: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("AI Calls Made : 0")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Promotion Actions Taken : 0")
+
+	print()
+	print("Daily Commands")
+	print("--------------")
+	print("1. Safe daily monitoring, no AI:")
+	print(f"   python -m research.runner demo-daily-operator {symbol}")
+	print()
+	print("2. Safe daily monitoring with advisory AI review:")
+	print(f"   python -m research.runner demo-daily-operator {symbol} --ai-review --confirm-ai-call")
+	print()
+	print("3. View stored AI reviews without spending credits:")
+	print(f"   python -m research.runner demo-daily-ai-reviews {symbol}")
+	print()
+	print("4. View status dashboard only:")
+	print(f"   python -m research.runner demo-status-dashboard {symbol}")
+	print()
+	print("5. View exit readiness only:")
+	print(f"   python -m research.runner demo-exit-readiness {symbol}")
+	print()
+	print("6. View AI review trigger only:")
+	print(f"   python -m research.runner demo-ai-review-trigger {symbol}")
+
+	print()
+	print("Safety Notes")
+	print("------------")
+	print("- Daily operator may call the paper broker only for read-only status/position snapshots.")
+	print("- Daily operator does not submit, cancel, replace, or close orders.")
+	print("- AI review is advisory only.")
+	print("- AI review requires --confirm-ai-call.")
+	print("- Live trading remains disabled.")
+	print("- Promotion is not performed by these commands.")
+	print("- Runtime records under ai/memory/ are not committed.")
+
+	print()
+	print("Recommended Normal Use")
+	print("----------------------")
+	print("Most days:")
+	print(f"python -m research.runner demo-daily-operator {symbol}")
+	print()
+	print("When you want one advisory AI review:")
+	print(f"python -m research.runner demo-daily-operator {symbol} --ai-review --confirm-ai-call")
+
+	print()
+	print("Reminder:")
+	print("Demo operator runbook is read-only. No AI, broker, market data, order, close, live trading, or promotion actions were performed.")
+
+	return {"symbol": symbol, "records_modified": False}
+
+
 def _build_arg_parser():
 	"""Build command-line parser for manual research runners."""
 
@@ -4722,6 +4787,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_operator_runbook_parser = subparsers.add_parser(
+		"demo-operator-runbook",
+		help="Print the read-only daily demo operator runbook for one symbol.",
+	)
+	demo_operator_runbook_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -4990,6 +5066,10 @@ def main(argv=None):
 
 	if args.mode == "demo-daily-ai-reviews":
 		run_manual_demo_daily_ai_reviews(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-operator-runbook":
+		run_manual_demo_operator_runbook(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":
