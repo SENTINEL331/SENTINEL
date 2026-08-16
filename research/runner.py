@@ -4250,12 +4250,21 @@ def _print_latest_ai_review_after_operator(*, ai_review_requested, confirm_ai_ca
 	ai_calls_made = ai_review_result.get("ai_calls_made", 0) if isinstance(ai_review_result, dict) else 0
 	daily_reviews_created = ai_review_result.get("daily_reviews_created", 0) if isinstance(ai_review_result, dict) else 0
 	skipped_existing = ai_review_result.get("skipped_existing", 0) if isinstance(ai_review_result, dict) else 0
+	reviewed_at = getattr(review, "reviewed_at", None)
+	if hasattr(reviewed_at, "isoformat"):
+		latest_ai_review_at = reviewed_at.isoformat()
+	elif isinstance(reviewed_at, str) and len(reviewed_at) > 10 and reviewed_at[10] == " ":
+		latest_ai_review_at = reviewed_at[:10] + "T" + reviewed_at[11:]
+	elif isinstance(reviewed_at, str):
+		latest_ai_review_at = reviewed_at
+	else:
+		latest_ai_review_at = "none"
 
 	print()
 	print("Latest AI Review After Operator")
 	print("-------------------------------")
 	print(f"latest_ai_review_id={getattr(review, 'demo_daily_ai_review_id', 'none')}")
-	print(f"latest_ai_review_at={getattr(review, 'reviewed_at', 'none')}")
+	print(f"latest_ai_review_at={latest_ai_review_at}")
 	print(f"ai_review_source={source}")
 	print(f"ai_calls_made={ai_calls_made}")
 	print(f"daily_reviews_created={daily_reviews_created}")

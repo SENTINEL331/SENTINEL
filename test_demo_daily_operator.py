@@ -216,7 +216,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
     def test_confirmed_ai_review_delegates_and_reports_duplicate(self):
         existing_review = SimpleNamespace(
             demo_daily_ai_review_id="ddair-existing",
-            reviewed_at="2026-08-16T12:00:00+00:00",
+            reviewed_at="2026-08-16 12:00:00+00:00",
             deeper_ai_review_needed=False,
             reason="evaluation_window_incomplete",
         )
@@ -254,6 +254,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("ai_review_action=duplicate_latest_state")
         mock_print.assert_any_call("Latest AI Review After Operator")
         mock_print.assert_any_call("latest_ai_review_id=ddair-existing")
+        mock_print.assert_any_call("latest_ai_review_at=2026-08-16T12:00:00+00:00")
         mock_print.assert_any_call("ai_review_source=existing_latest_state")
 
     def test_confirmed_ai_review_summary_reports_reviewed_when_created(self):
