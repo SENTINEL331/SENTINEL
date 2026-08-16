@@ -4,6 +4,7 @@ import json
 import sys
 from contextlib import redirect_stdout
 from datetime import datetime, timezone
+from pathlib import Path
 
 from config import settings
 
@@ -43,6 +44,7 @@ from research.demo_ai_review_trigger import (
 	TRIGGER_ORDER,
 	build_demo_ai_review_trigger,
 )
+from research.demo_system_health import build_demo_system_health
 from research.demo_daily_ai_review import (
 	build_review_context,
 	fingerprint_context,
@@ -3579,6 +3581,89 @@ def run_manual_demo_status_dashboard(
 	return result
 
 
+def run_manual_demo_system_health(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	health_fn=build_demo_system_health,
+):
+	"""Show deterministic read-only health for local demo configuration and state."""
+
+	storage = storage or Storage()
+	result = health_fn(
+		symbol=symbol,
+		storage=storage,
+		demo_broker=settings.DEMO_BROKER,
+		demo_broker_mode=settings.DEMO_BROKER_MODE,
+		alpaca_base_url=settings.ALPACA_BASE_URL,
+		alpaca_api_key=settings.ALPACA_API_KEY,
+		alpaca_secret_key=settings.ALPACA_SECRET_KEY,
+		repository_path=Path.cwd(),
+	)
+
+	print()
+	print(f"Manual Demo System Health: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("AI Calls Made : 0")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Promotion Actions Taken : 0")
+
+	print()
+	print("System Health")
+	print("-------------")
+	print(f"overall_health={result.overall_health}")
+	print(f"required_checks_passed={'yes' if result.required_checks_passed else 'no'}")
+	print(f"warnings={','.join(result.warnings) if result.warnings else 'none'}")
+	print(f"blocked_checks={','.join(result.blocked_checks) if result.blocked_checks else 'none'}")
+
+	sections = (
+		("Safety Checks", (
+			"live_mode_disabled", "demo_broker_mode_paper", "order_placement_disabled",
+			"order_cancellation_disabled", "position_close_disabled", "promotion_disabled",
+			"ai_calls_disabled", "broker_calls_disabled",
+		)),
+		("Configuration Checks", (
+			"demo_broker_present", "alpaca_base_url_present", "alpaca_base_url_paper",
+			"alpaca_api_key_present", "alpaca_secret_key_present",
+		)),
+		("Local State Checks", (
+			"latest_position_snapshot", "latest_performance_snapshots", "latest_trade_evaluations",
+			"latest_hypothesis_summaries", "promotion_board_available",
+			"current_opportunity_available", "exit_readiness_available", "latest_daily_ai_review",
+		)),
+		("Command Checks", (
+			"demo_daily_operator_command", "demo_status_dashboard_command",
+		)),
+		("Repository Checks", ("env_not_git_tracked", "ai_memory_not_git_tracked")),
+	)
+	for title, check_names in sections:
+		print()
+		print(title)
+		print("-" * len(title))
+		for check_name in check_names:
+			print(f"- {check_name}: {result.checks[check_name]}")
+
+	print()
+	print("Recommended Next Command")
+	print("------------------------")
+	print(f"python -m research.runner demo-daily-operator {symbol}")
+	print()
+	print("Optional AI Review Command")
+	print("--------------------------")
+	print(f"python -m research.runner demo-daily-operator {symbol} --ai-review --confirm-ai-call")
+	print()
+	print("Reminder:")
+	print("Demo system health is read-only. No AI, broker, market data, order, close, live trading, or promotion actions were performed.")
+
+	return result
+
+
 def run_manual_demo_exit_readiness(
 	symbol=DEFAULT_SYMBOL,
 	storage=None,
@@ -4725,6 +4810,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_system_health_parser = subparsers.add_parser(
+		"demo-system-health",
+		help="Check deterministic read-only safety and local state health for one symbol.",
+	)
+	demo_system_health_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	demo_daily_operator_parser = subparsers.add_parser(
 		"demo-daily-operator",
 		help="Run the safe demo monitoring cycle and status dashboard for one symbol.",
@@ -5047,6 +5143,10 @@ def main(argv=None):
 
 	if args.mode == "demo-status-dashboard":
 		run_manual_demo_status_dashboard(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-system-health":
+		run_manual_demo_system_health(symbol=args.symbol)
 		return 0
 
 	if args.mode == "demo-daily-operator":
