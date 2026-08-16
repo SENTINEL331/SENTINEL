@@ -175,6 +175,8 @@ class DemoDailyOperatorTests(unittest.TestCase):
         self.assertEqual(0, result["ai_calls_made"])
         mock_print.assert_any_call("ai_review_requested=no")
         mock_print.assert_any_call("ai_calls_made=0")
+        printed_messages = [call.args[0] for call in mock_print.call_args_list if call.args]
+        self.assertNotIn("Latest AI Review After Operator", printed_messages)
 
     def test_ai_review_without_confirmation_delegates_without_ai_call(self):
         ai_review = Mock(
@@ -208,8 +210,16 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("ai_review_confirmed=no")
         mock_print.assert_any_call("ai_calls_made=0")
         mock_print.assert_any_call("ai_review_action=confirmation_required")
+        mock_print.assert_any_call("Latest AI Review After Operator")
+        mock_print.assert_any_call("ai_review_source=confirmation_required")
 
     def test_confirmed_ai_review_delegates_and_reports_duplicate(self):
+        existing_review = SimpleNamespace(
+            demo_daily_ai_review_id="ddair-existing",
+            reviewed_at="2026-08-16T12:00:00+00:00",
+            deeper_ai_review_needed=False,
+            reason="evaluation_window_incomplete",
+        )
         ai_review = Mock(
             return_value={
                 "records_modified": False,
@@ -217,6 +227,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 "daily_reviews_created": 0,
                 "skipped_existing": 1,
                 "review": None,
+                "existing_latest_review": existing_review,
                 "error": None,
             }
         )
@@ -241,6 +252,9 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("ai_review_confirmed=yes")
         mock_print.assert_any_call("skipped_existing=1")
         mock_print.assert_any_call("ai_review_action=duplicate_latest_state")
+        mock_print.assert_any_call("Latest AI Review After Operator")
+        mock_print.assert_any_call("latest_ai_review_id=ddair-existing")
+        mock_print.assert_any_call("ai_review_source=existing_latest_state")
 
     def test_confirmed_ai_review_summary_reports_reviewed_when_created(self):
         ai_review = Mock(
@@ -270,6 +284,8 @@ class DemoDailyOperatorTests(unittest.TestCase):
 
         self.assertEqual(1, result["daily_reviews_created"])
         mock_print.assert_any_call("ai_review_action=reviewed")
+        mock_print.assert_any_call("Latest AI Review After Operator")
+        mock_print.assert_any_call("ai_review_source=created_this_run")
 
     def test_confirmed_ai_review_without_result_reports_no_ai_call_made(self):
         ai_review = Mock(

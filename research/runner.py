@@ -3815,11 +3815,16 @@ def run_manual_demo_daily_ai_review(
 	dashboard_fingerprint = fingerprint_context(dashboard_context)
 	trigger_fingerprint = fingerprint_context(trigger_context)
 	existing_reviews = storage.load_demo_daily_ai_reviews(symbol=symbol)
-	duplicate = confirm_ai_call and any(
-		review.source_dashboard_fingerprint == dashboard_fingerprint
-		and review.source_trigger_fingerprint == trigger_fingerprint
-		for review in existing_reviews
+	existing_latest_review = next(
+		(
+			review
+			for review in existing_reviews
+			if review.source_dashboard_fingerprint == dashboard_fingerprint
+			and review.source_trigger_fingerprint == trigger_fingerprint
+		),
+		None,
 	)
+	duplicate = confirm_ai_call and existing_latest_review is not None
 
 	review = None
 	ai_calls_made = 0
@@ -3912,6 +3917,7 @@ def run_manual_demo_daily_ai_review(
 		"daily_reviews_created": 1 if review is not None else 0,
 		"skipped_existing": skipped_existing,
 		"review": review,
+		"existing_latest_review": existing_latest_review,
 		"error": error,
 	}
 
@@ -4223,6 +4229,47 @@ def _print_daily_decision_summary(summary):
 		print(f"{name}={summary[name]}")
 
 
+def _print_latest_ai_review_after_operator(*, ai_review_requested, confirm_ai_call, ai_review_result):
+	"""Print the existing AI review outcome without reading storage or making calls."""
+
+	if not ai_review_requested:
+		return None, "not_requested"
+
+	review = None
+	source = "none"
+	if isinstance(ai_review_result, dict):
+		review = ai_review_result.get("review")
+		if review is not None:
+			source = "created_this_run"
+		elif ai_review_result.get("skipped_existing"):
+			review = ai_review_result.get("existing_latest_review")
+			source = "existing_latest_state" if review is not None else "none"
+	if not confirm_ai_call and source == "none":
+		source = "confirmation_required"
+
+	ai_calls_made = ai_review_result.get("ai_calls_made", 0) if isinstance(ai_review_result, dict) else 0
+	daily_reviews_created = ai_review_result.get("daily_reviews_created", 0) if isinstance(ai_review_result, dict) else 0
+	skipped_existing = ai_review_result.get("skipped_existing", 0) if isinstance(ai_review_result, dict) else 0
+
+	print()
+	print("Latest AI Review After Operator")
+	print("-------------------------------")
+	print(f"latest_ai_review_id={getattr(review, 'demo_daily_ai_review_id', 'none')}")
+	print(f"latest_ai_review_at={getattr(review, 'reviewed_at', 'none')}")
+	print(f"ai_review_source={source}")
+	print(f"ai_calls_made={ai_calls_made}")
+	print(f"daily_reviews_created={daily_reviews_created}")
+	print(f"skipped_existing={skipped_existing}")
+	print(
+		"deeper_ai_review_needed="
+		+ ("yes" if getattr(review, "deeper_ai_review_needed", False) else "no")
+	)
+	print(f"latest_ai_reason={getattr(review, 'reason', 'none')}")
+	print("note=This is the latest advisory AI review after the operator completed.")
+
+	return review, source
+
+
 def run_manual_demo_daily_operator(
 	symbol=DEFAULT_SYMBOL,
 	storage=None,
@@ -4467,6 +4514,11 @@ def run_manual_demo_daily_operator(
 	if ai_review_requested and ai_review_output.getvalue():
 		print()
 		print(ai_review_output.getvalue(), end="")
+	latest_ai_review, latest_ai_review_source = _print_latest_ai_review_after_operator(
+		ai_review_requested=ai_review_requested,
+		confirm_ai_call=confirm_ai_call,
+		ai_review_result=ai_review_result,
+	)
 
 	print()
 	print("Operator Summary")
@@ -4502,6 +4554,8 @@ def run_manual_demo_daily_operator(
 		"ai_calls_made": ai_calls_made,
 		"daily_reviews_created": daily_reviews_created,
 		"skipped_existing": skipped_existing,
+		"latest_ai_review": latest_ai_review,
+		"latest_ai_review_source": latest_ai_review_source,
 		"cycle_result": cycle_result,
 		"dashboard_result": dashboard_result,
 	}

@@ -119,6 +119,7 @@ class DemoDailyAIReviewTests(unittest.TestCase):
         ai_client.demo_daily_ai_review.assert_not_called()
         storage.save_demo_daily_ai_review.assert_not_called()
         self.assertEqual(1, result["skipped_existing"])
+        self.assertIs(duplicate, result["existing_latest_review"])
 
     def test_parser_accepts_strict_json_and_rejects_invalid_json(self):
         parsed = parse_demo_daily_ai_review(_payload())
