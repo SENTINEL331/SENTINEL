@@ -4172,8 +4172,10 @@ def _daily_decision_summary(*, health_result, dashboard_result, ai_review_reques
 		ai_review_action = "confirmation_required"
 	elif isinstance(ai_review_result, dict) and ai_review_result.get("skipped_existing"):
 		ai_review_action = "duplicate_latest_state"
-	elif isinstance(ai_review_result, dict) and not ai_review_result.get("error"):
+	elif isinstance(ai_review_result, dict) and ai_review_result.get("daily_reviews_created", 0) > 0:
 		ai_review_action = "reviewed"
+	elif isinstance(ai_review_result, dict) and not ai_review_result.get("error"):
+		ai_review_action = "no_ai_call_made"
 	else:
 		ai_review_action = "unknown"
 

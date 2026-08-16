@@ -207,6 +207,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("ai_review_requested=yes")
         mock_print.assert_any_call("ai_review_confirmed=no")
         mock_print.assert_any_call("ai_calls_made=0")
+        mock_print.assert_any_call("ai_review_action=confirmation_required")
 
     def test_confirmed_ai_review_delegates_and_reports_duplicate(self):
         ai_review = Mock(
@@ -239,6 +240,61 @@ class DemoDailyOperatorTests(unittest.TestCase):
         self.assertEqual(1, result["skipped_existing"])
         mock_print.assert_any_call("ai_review_confirmed=yes")
         mock_print.assert_any_call("skipped_existing=1")
+        mock_print.assert_any_call("ai_review_action=duplicate_latest_state")
+
+    def test_confirmed_ai_review_summary_reports_reviewed_when_created(self):
+        ai_review = Mock(
+            return_value={
+                "records_modified": True,
+                "ai_calls_made": 1,
+                "daily_reviews_created": 1,
+                "skipped_existing": 0,
+                "review": SimpleNamespace(
+                    deeper_ai_review_needed=False,
+                    reason="evaluation_window_incomplete",
+                ),
+                "error": None,
+            }
+        )
+        with patch("builtins.print") as mock_print:
+            result = run_manual_demo_daily_operator(
+                symbol="NVDA",
+                storage=object(),
+                monitoring_cycle_fn=Mock(return_value=self._successful_cycle()),
+                status_dashboard_fn=Mock(return_value=self._successful_dashboard()),
+                ai_review_requested=True,
+                confirm_ai_call=True,
+                daily_ai_review_fn=ai_review,
+                health_fn=Mock(return_value=_healthy_system_health()),
+            )
+
+        self.assertEqual(1, result["daily_reviews_created"])
+        mock_print.assert_any_call("ai_review_action=reviewed")
+
+    def test_confirmed_ai_review_without_result_reports_no_ai_call_made(self):
+        ai_review = Mock(
+            return_value={
+                "records_modified": False,
+                "ai_calls_made": 0,
+                "daily_reviews_created": 0,
+                "skipped_existing": 0,
+                "review": None,
+                "error": None,
+            }
+        )
+        with patch("builtins.print") as mock_print:
+            run_manual_demo_daily_operator(
+                symbol="NVDA",
+                storage=object(),
+                monitoring_cycle_fn=Mock(return_value=self._successful_cycle()),
+                status_dashboard_fn=Mock(return_value=self._successful_dashboard()),
+                ai_review_requested=True,
+                confirm_ai_call=True,
+                daily_ai_review_fn=ai_review,
+                health_fn=Mock(return_value=_healthy_system_health()),
+            )
+
+        mock_print.assert_any_call("ai_review_action=no_ai_call_made")
 
     def test_blocked_health_prevents_monitoring_and_dashboard(self):
         health = SimpleNamespace(
