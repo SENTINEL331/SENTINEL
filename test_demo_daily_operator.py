@@ -7,8 +7,22 @@ from research.runner import _build_arg_parser, run_manual_demo_daily_operator
 
 def _dashboard_result():
     return SimpleNamespace(
-        open_demo_trades=2,
-        rating_counts={"current_no_new_entry": 2},
+        open_demo_trades=4,
+        total_unrealized_plpc=0.0125,
+        trades=(
+            SimpleNamespace(
+                trading_days_elapsed=1,
+                evaluation_window_trading_days=5,
+            ),
+        ),
+        rating_counts={
+            "current_no_new_entry": 4,
+            "attractive_now": 0,
+            "exit_needs_more_time": 4,
+            "exit_candidate": 0,
+            "risk_exit_candidate": 0,
+            "max_evaluation_days_remaining": 4,
+        },
     )
 
 
@@ -53,7 +67,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 storage=storage,
                 monitoring_cycle_fn=monitoring_cycle,
                 status_dashboard_fn=status_dashboard,
-				health_fn=Mock(return_value=_healthy_system_health()),
+                health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         self.assertEqual(["cycle", "dashboard"], [name for name, _, _ in calls])
@@ -65,12 +79,22 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("System Health")
         mock_print.assert_any_call("overall_health=healthy")
         mock_print.assert_any_call("system_blocked=no")
+        mock_print.assert_any_call("Daily Decision Summary")
+        mock_print.assert_any_call("system_health=healthy")
+        mock_print.assert_any_call("open_demo_trades=4")
+        mock_print.assert_any_call("evaluation_progress=1/5 trading_days")
+        mock_print.assert_any_call("evaluation_days_remaining=4")
+        mock_print.assert_any_call("exit_action=continue_monitoring")
+        mock_print.assert_any_call("new_entry_action=no_new_entry")
+        mock_print.assert_any_call("promotion_action=no_promotion")
+        mock_print.assert_any_call("ai_review_action=not_requested")
+        mock_print.assert_any_call("operator_decision=continue_monitoring")
         mock_print.assert_any_call("Broker Calls Allowed : yes")
         mock_print.assert_any_call("Order Placement Allowed : no")
         mock_print.assert_any_call("Order Cancellation Allowed : no")
         mock_print.assert_any_call("Position Close Allowed : no")
         mock_print.assert_any_call("Promotion Actions Taken : 0")
-        mock_print.assert_any_call("  current_no_new_entry=2")
+        mock_print.assert_any_call("  current_no_new_entry=4")
         mock_print.assert_any_call("  exit_readiness=needs_more_time")
         mock_print.assert_any_call("  evaluation_window_trading_days=5")
         mock_print.assert_any_call("  evaluation_days_remaining=3")
@@ -99,7 +123,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 storage=object(),
                 monitoring_cycle_fn=monitoring_cycle,
                 status_dashboard_fn=status_dashboard,
-				health_fn=Mock(return_value=_healthy_system_health()),
+                health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         self.assertEqual(["cycle", "dashboard"], calls)
@@ -120,7 +144,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 storage=object(),
                 monitoring_cycle_fn=monitoring_cycle,
                 status_dashboard_fn=status_dashboard,
-				health_fn=Mock(return_value=_healthy_system_health()),
+                health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         self.assertEqual("completed_with_warnings", result["operator_status"])
@@ -143,7 +167,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 monitoring_cycle_fn=Mock(return_value=self._successful_cycle()),
                 status_dashboard_fn=Mock(return_value=self._successful_dashboard()),
                 daily_ai_review_fn=ai_review,
-				health_fn=Mock(return_value=_healthy_system_health()),
+                health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         ai_review.assert_not_called()
@@ -172,7 +196,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 ai_review_requested=True,
                 confirm_ai_call=False,
                 daily_ai_review_fn=ai_review,
-				health_fn=Mock(return_value=_healthy_system_health()),
+                health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         ai_review.assert_called_once_with(
@@ -204,7 +228,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 ai_review_requested=True,
                 confirm_ai_call=True,
                 daily_ai_review_fn=ai_review,
-				health_fn=Mock(return_value=_healthy_system_health()),
+                health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         ai_review.assert_called_once_with(
@@ -246,6 +270,8 @@ class DemoDailyOperatorTests(unittest.TestCase):
         self.assertTrue(result["system_blocked"])
         self.assertEqual(0, result["ai_calls_made"])
         mock_print.assert_any_call("blocked_checks=demo_broker_mode_paper")
+        mock_print.assert_any_call("Daily Decision Summary")
+        mock_print.assert_any_call("operator_decision=blocked")
         mock_print.assert_any_call("Blocked Reason : demo_broker_mode_paper")
         mock_print.assert_any_call("system_blocked=yes")
 

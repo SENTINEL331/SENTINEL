@@ -4114,6 +4114,113 @@ def run_manual_demo_monitoring_cycle(
 	}
 
 
+def _daily_decision_summary(*, health_result, dashboard_result, ai_review_requested, confirm_ai_call, ai_review_result):
+	"""Derive compact operator guidance from existing local health and dashboard results."""
+
+	if health_result.overall_health == "blocked":
+		return {
+			"system_health": "blocked",
+			"open_demo_trades": "unknown",
+			"total_unrealized_plpc": "unknown",
+			"evaluation_progress": "unknown",
+			"evaluation_days_remaining": "unknown",
+			"exit_action": "unknown",
+			"new_entry_action": "unknown",
+			"promotion_action": "no_promotion",
+			"ai_review_action": "not_requested",
+			"operator_decision": "blocked",
+		}
+
+	rating_counts = getattr(dashboard_result, "rating_counts", {}) or {}
+	trades = tuple(getattr(dashboard_result, "trades", ()) or ())
+	progress = [
+		(
+			getattr(trade, "trading_days_elapsed", None),
+			getattr(trade, "evaluation_window_trading_days", None),
+		)
+		for trade in trades
+		if getattr(trade, "trading_days_elapsed", None) is not None
+		and getattr(trade, "evaluation_window_trading_days", None) is not None
+	]
+	if progress:
+		evaluation_progress = f"{min(item[0] for item in progress)}/{max(item[1] for item in progress)} trading_days"
+	else:
+		evaluation_progress = "unknown"
+
+	remaining_days = rating_counts.get("max_evaluation_days_remaining")
+	if remaining_days is None:
+		remaining_days = "unknown"
+	if rating_counts.get("risk_exit_candidate", 0) > 0:
+		exit_action = "risk_exit_candidate"
+	elif rating_counts.get("exit_candidate", 0) > 0:
+		exit_action = "exit_candidate"
+	elif rating_counts.get("exit_needs_more_time", 0) > 0:
+		exit_action = "continue_monitoring"
+	else:
+		exit_action = "unknown"
+
+	if rating_counts.get("attractive_now", 0) > 0:
+		new_entry_action = "consider_new_entry"
+	elif rating_counts.get("current_no_new_entry", 0) > 0:
+		new_entry_action = "no_new_entry"
+	else:
+		new_entry_action = "unknown"
+
+	if not ai_review_requested:
+		ai_review_action = "not_requested"
+	elif not confirm_ai_call:
+		ai_review_action = "confirmation_required"
+	elif isinstance(ai_review_result, dict) and ai_review_result.get("skipped_existing"):
+		ai_review_action = "duplicate_latest_state"
+	elif isinstance(ai_review_result, dict) and not ai_review_result.get("error"):
+		ai_review_action = "reviewed"
+	else:
+		ai_review_action = "unknown"
+
+	if exit_action == "risk_exit_candidate":
+		operator_decision = "review_risk_exit"
+	elif exit_action == "exit_candidate":
+		operator_decision = "review_exit"
+	else:
+		operator_decision = "continue_monitoring"
+
+	return {
+		"system_health": health_result.overall_health,
+		"open_demo_trades": getattr(dashboard_result, "open_demo_trades", "unknown"),
+		"total_unrealized_plpc": getattr(dashboard_result, "total_unrealized_plpc", "unknown"),
+		"evaluation_progress": evaluation_progress,
+		"evaluation_days_remaining": remaining_days,
+		"exit_action": exit_action,
+		"new_entry_action": new_entry_action,
+		"promotion_action": (
+			"promotion_action_pending"
+			if rating_counts.get("promotion_actions_taken", 0) > 0
+			else "no_promotion"
+		),
+		"ai_review_action": ai_review_action,
+		"operator_decision": operator_decision,
+	}
+
+
+def _print_daily_decision_summary(summary):
+	print()
+	print("Daily Decision Summary")
+	print("----------------------")
+	for name in (
+		"system_health",
+		"open_demo_trades",
+		"total_unrealized_plpc",
+		"evaluation_progress",
+		"evaluation_days_remaining",
+		"exit_action",
+		"new_entry_action",
+		"promotion_action",
+		"ai_review_action",
+		"operator_decision",
+	):
+		print(f"{name}={summary[name]}")
+
+
 def run_manual_demo_daily_operator(
 	symbol=DEFAULT_SYMBOL,
 	storage=None,
@@ -4150,6 +4257,14 @@ def run_manual_demo_daily_operator(
 	print(f"blocked_checks={','.join(health_result.blocked_checks) if health_result.blocked_checks else 'none'}")
 
 	if system_blocked:
+		decision_summary = _daily_decision_summary(
+			health_result=health_result,
+			dashboard_result=None,
+			ai_review_requested=False,
+			confirm_ai_call=False,
+			ai_review_result=None,
+		)
+		_print_daily_decision_summary(decision_summary)
 		print()
 		print("Records Modified : no")
 		print("AI Calls Allowed : no")
@@ -4185,6 +4300,7 @@ def run_manual_demo_daily_operator(
 			"operator_status": "blocked",
 			"system_health": health_result.overall_health,
 			"system_blocked": True,
+			"daily_decision_summary": decision_summary,
 			"monitoring_cycle_status": "not_run",
 			"dashboard_displayed": False,
 			"ai_review_requested": False,
@@ -4255,6 +4371,13 @@ def run_manual_demo_daily_operator(
 		isinstance(ai_review_result, dict)
 		and ai_review_result.get("records_modified", False)
 	)
+	decision_summary = _daily_decision_summary(
+		health_result=health_result,
+		dashboard_result=dashboard_result,
+		ai_review_requested=ai_review_requested,
+		confirm_ai_call=confirm_ai_call,
+		ai_review_result=ai_review_result,
+	)
 
 	print()
 	print(f"Records Modified : {'yes' if operator_records_modified else 'no'}")
@@ -4266,6 +4389,7 @@ def run_manual_demo_daily_operator(
 	print("Position Close Allowed : no")
 	print("Live Mode Allowed : no")
 	print("Promotion Actions Taken : 0")
+	_print_daily_decision_summary(decision_summary)
 
 	print()
 	print("Operator Steps")
@@ -4368,6 +4492,7 @@ def run_manual_demo_daily_operator(
 		"operator_status": operator_status,
 		"system_health": health_result.overall_health,
 		"system_blocked": False,
+		"daily_decision_summary": decision_summary,
 		"monitoring_cycle_status": cycle_status,
 		"dashboard_displayed": dashboard_displayed,
 		"ai_review_requested": ai_review_requested,
