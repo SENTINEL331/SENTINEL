@@ -12,6 +12,15 @@ def _dashboard_result():
     )
 
 
+def _healthy_system_health():
+    return SimpleNamespace(
+        overall_health="healthy",
+        required_checks_passed=True,
+        warnings=(),
+        blocked_checks=(),
+    )
+
+
 class DemoDailyOperatorTests(unittest.TestCase):
     def test_cli_help_includes_daily_operator(self):
         self.assertIn("demo-daily-operator", _build_arg_parser().format_help())
@@ -44,12 +53,18 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 storage=storage,
                 monitoring_cycle_fn=monitoring_cycle,
                 status_dashboard_fn=status_dashboard,
+				health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         self.assertEqual(["cycle", "dashboard"], [name for name, _, _ in calls])
         self.assertTrue(all(call_storage is storage for _, _, call_storage in calls))
         self.assertEqual("completed", result["operator_status"])
+        self.assertEqual("healthy", result["system_health"])
+        self.assertFalse(result["system_blocked"])
         self.assertTrue(result["dashboard_displayed"])
+        mock_print.assert_any_call("System Health")
+        mock_print.assert_any_call("overall_health=healthy")
+        mock_print.assert_any_call("system_blocked=no")
         mock_print.assert_any_call("Broker Calls Allowed : yes")
         mock_print.assert_any_call("Order Placement Allowed : no")
         mock_print.assert_any_call("Order Cancellation Allowed : no")
@@ -84,6 +99,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 storage=object(),
                 monitoring_cycle_fn=monitoring_cycle,
                 status_dashboard_fn=status_dashboard,
+				health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         self.assertEqual(["cycle", "dashboard"], calls)
@@ -104,6 +120,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 storage=object(),
                 monitoring_cycle_fn=monitoring_cycle,
                 status_dashboard_fn=status_dashboard,
+				health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         self.assertEqual("completed_with_warnings", result["operator_status"])
@@ -126,6 +143,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 monitoring_cycle_fn=Mock(return_value=self._successful_cycle()),
                 status_dashboard_fn=Mock(return_value=self._successful_dashboard()),
                 daily_ai_review_fn=ai_review,
+				health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         ai_review.assert_not_called()
@@ -154,6 +172,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 ai_review_requested=True,
                 confirm_ai_call=False,
                 daily_ai_review_fn=ai_review,
+				health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         ai_review.assert_called_once_with(
@@ -185,6 +204,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 ai_review_requested=True,
                 confirm_ai_call=True,
                 daily_ai_review_fn=ai_review,
+				health_fn=Mock(return_value=_healthy_system_health()),
             )
 
         ai_review.assert_called_once_with(
@@ -195,6 +215,39 @@ class DemoDailyOperatorTests(unittest.TestCase):
         self.assertEqual(1, result["skipped_existing"])
         mock_print.assert_any_call("ai_review_confirmed=yes")
         mock_print.assert_any_call("skipped_existing=1")
+
+    def test_blocked_health_prevents_monitoring_and_dashboard(self):
+        health = SimpleNamespace(
+            overall_health="blocked",
+            required_checks_passed=False,
+            warnings=(),
+            blocked_checks=("demo_broker_mode_paper",),
+        )
+        monitoring_cycle = Mock()
+        status_dashboard = Mock()
+        ai_review = Mock()
+
+        with patch("builtins.print") as mock_print:
+            result = run_manual_demo_daily_operator(
+                symbol="NVDA",
+                storage=object(),
+                monitoring_cycle_fn=monitoring_cycle,
+                status_dashboard_fn=status_dashboard,
+                ai_review_requested=True,
+                confirm_ai_call=True,
+                daily_ai_review_fn=ai_review,
+                health_fn=Mock(return_value=health),
+            )
+
+        monitoring_cycle.assert_not_called()
+        status_dashboard.assert_not_called()
+        ai_review.assert_not_called()
+        self.assertEqual("blocked", result["operator_status"])
+        self.assertTrue(result["system_blocked"])
+        self.assertEqual(0, result["ai_calls_made"])
+        mock_print.assert_any_call("blocked_checks=demo_broker_mode_paper")
+        mock_print.assert_any_call("Blocked Reason : demo_broker_mode_paper")
+        mock_print.assert_any_call("system_blocked=yes")
 
 
 if __name__ == "__main__":

@@ -4122,10 +4122,80 @@ def run_manual_demo_daily_operator(
 	ai_review_requested=False,
 	confirm_ai_call=False,
 	daily_ai_review_fn=run_manual_demo_daily_ai_review,
+	health_fn=build_demo_system_health,
 ):
 	"""Run the safe monitoring cycle, then display the latest local demo status."""
 
 	storage = storage or Storage()
+	health_result = health_fn(
+		symbol=symbol,
+		storage=storage,
+		demo_broker=settings.DEMO_BROKER,
+		demo_broker_mode=settings.DEMO_BROKER_MODE,
+		alpaca_base_url=settings.ALPACA_BASE_URL,
+		alpaca_api_key=settings.ALPACA_API_KEY,
+		alpaca_secret_key=settings.ALPACA_SECRET_KEY,
+		repository_path=Path.cwd(),
+	)
+	system_blocked = health_result.overall_health == "blocked"
+
+	print()
+	print(f"Manual Demo Daily Operator: {symbol}")
+	print()
+	print("System Health")
+	print("-------------")
+	print(f"overall_health={health_result.overall_health}")
+	print(f"required_checks_passed={'yes' if health_result.required_checks_passed else 'no'}")
+	print(f"warnings={','.join(health_result.warnings) if health_result.warnings else 'none'}")
+	print(f"blocked_checks={','.join(health_result.blocked_checks) if health_result.blocked_checks else 'none'}")
+
+	if system_blocked:
+		print()
+		print("Records Modified : no")
+		print("AI Calls Allowed : no")
+		print("Broker Calls Allowed : no")
+		print("Market Data Calls Allowed : no")
+		print("Order Placement Allowed : no")
+		print("Order Cancellation Allowed : no")
+		print("Position Close Allowed : no")
+		print("Live Mode Allowed : no")
+		print("Promotion Actions Taken : 0")
+		print(f"Blocked Reason : {','.join(health_result.blocked_checks)}")
+		print()
+		print("Operator Summary")
+		print("----------------")
+		print("operator_status=blocked")
+		print(f"system_health={health_result.overall_health}")
+		print("system_blocked=yes")
+		print("monitoring_cycle_status=not_run")
+		print("dashboard_displayed=no")
+		print("ai_review_requested=no")
+		print("ai_calls_made=0")
+		print("daily_ai_reviews_created=0")
+		print("orders_submitted=0")
+		print("orders_cancelled=0")
+		print("positions_closed=0")
+		print("promotions_performed=0")
+		print()
+		print("Reminder:")
+		print("Demo daily operator was blocked by system health. No AI, broker, market data, order, close, live trading, or promotion actions were performed.")
+		return {
+			"symbol": symbol,
+			"records_modified": False,
+			"operator_status": "blocked",
+			"system_health": health_result.overall_health,
+			"system_blocked": True,
+			"monitoring_cycle_status": "not_run",
+			"dashboard_displayed": False,
+			"ai_review_requested": False,
+			"ai_review_confirmed": False,
+			"ai_calls_made": 0,
+			"daily_reviews_created": 0,
+			"skipped_existing": 0,
+			"cycle_result": None,
+			"dashboard_result": None,
+		}
+
 	cycle_result = None
 	cycle_error = None
 	cycle_output = io.StringIO()
@@ -4186,8 +4256,6 @@ def run_manual_demo_daily_operator(
 		and ai_review_result.get("records_modified", False)
 	)
 
-	print()
-	print(f"Manual Demo Daily Operator: {symbol}")
 	print()
 	print(f"Records Modified : {'yes' if operator_records_modified else 'no'}")
 	print(f"AI Calls Allowed : {'yes' if ai_review_requested and confirm_ai_call else 'no'}")
@@ -4278,6 +4346,8 @@ def run_manual_demo_daily_operator(
 	print("Operator Summary")
 	print("----------------")
 	print(f"operator_status={operator_status}")
+	print(f"system_health={health_result.overall_health}")
+	print("system_blocked=no")
 	print(f"monitoring_cycle_status={cycle_status}")
 	print(f"dashboard_displayed={'yes' if dashboard_displayed else 'no'}")
 	print(f"ai_review_requested={'yes' if ai_review_requested else 'no'}")
@@ -4296,6 +4366,8 @@ def run_manual_demo_daily_operator(
 		"symbol": symbol,
 		"records_modified": operator_records_modified,
 		"operator_status": operator_status,
+		"system_health": health_result.overall_health,
+		"system_blocked": False,
 		"monitoring_cycle_status": cycle_status,
 		"dashboard_displayed": dashboard_displayed,
 		"ai_review_requested": ai_review_requested,
