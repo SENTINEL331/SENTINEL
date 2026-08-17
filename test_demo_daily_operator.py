@@ -3,7 +3,11 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import ANY, Mock, patch
 
-from research.runner import _build_arg_parser, run_manual_demo_daily_operator
+from research.runner import (
+    _build_arg_parser,
+    _operator_decision_packet,
+    run_manual_demo_daily_operator,
+)
 
 
 def _dashboard_result():
@@ -14,8 +18,12 @@ def _dashboard_result():
             SimpleNamespace(
                 trading_days_elapsed=1,
                 evaluation_window_trading_days=5,
+				evaluation_window_complete=False,
+				entry_performance_rating="positive_open",
             ),
         ),
+		position_snapshot=SimpleNamespace(status="open"),
+		hypotheses=(),
         rating_counts={
             "current_no_new_entry": 4,
             "attractive_now": 0,
@@ -126,6 +134,11 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("orders_cancelled=0")
         mock_print.assert_any_call("positions_closed=0")
         mock_print.assert_any_call("promotions_performed=0")
+        mock_print.assert_any_call("Operator Decision Packet")
+        mock_print.assert_any_call("decision=request_fresh_ai_review")
+        mock_print.assert_any_call("demo_trade_state=positive_open")
+        mock_print.assert_any_call("evaluation_state=incomplete")
+        mock_print.assert_any_call("blocked_actions=orders,cancellations,position_closes,promotions,live_trading")
 
     def test_monitoring_failure_still_runs_dashboard_with_warning(self):
         calls = []
@@ -196,6 +209,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
         self.assertEqual(0, result["ai_calls_made"])
         mock_print.assert_any_call("ai_review_requested=no")
         mock_print.assert_any_call("ai_calls_made=0")
+        mock_print.assert_any_call("ai_review_suggested_action=request_fresh_ai_review")
         printed_messages = [call.args[0] for call in mock_print.call_args_list if call.args]
         self.assertNotIn("Latest AI Review After Operator", printed_messages)
 
@@ -237,11 +251,12 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call(
             "ai_review_suggested_action_after_operator=request_fresh_ai_review"
         )
+        mock_print.assert_any_call("ai_review_suggested_action=request_fresh_ai_review")
 
     def test_confirmed_ai_review_delegates_and_reports_duplicate(self):
         existing_review = SimpleNamespace(
             demo_daily_ai_review_id="ddair-existing",
-            reviewed_at="2026-08-16 12:00:00+00:00",
+            reviewed_at=datetime.now(timezone.utc),
             deeper_ai_review_needed=False,
             reason="evaluation_window_incomplete",
         )
@@ -279,8 +294,10 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("ai_review_action=duplicate_latest_state")
         mock_print.assert_any_call("Latest AI Review After Operator")
         mock_print.assert_any_call("latest_ai_review_id=ddair-existing")
-        mock_print.assert_any_call("latest_ai_review_at=2026-08-16T12:00:00+00:00")
         mock_print.assert_any_call("ai_review_source=existing_latest_state")
+        mock_print.assert_any_call("ai_review_freshness_after_operator=current")
+        mock_print.assert_any_call("ai_review_suggested_action_after_operator=none")
+        mock_print.assert_any_call("ai_review_suggested_action=none")
 
     def test_confirmed_ai_review_summary_reports_reviewed_when_created(self):
         ai_review = Mock(
@@ -316,6 +333,9 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("AI Review Freshness After Operator")
         mock_print.assert_any_call("ai_review_freshness_after_operator=current")
         mock_print.assert_any_call("ai_review_suggested_action_after_operator=none")
+        mock_print.assert_any_call("decision=continue_monitoring")
+        mock_print.assert_any_call("ai_review_suggested_action=none")
+        mock_print.assert_any_call("human_next_step=run_again_next_trading_day")
 
     def test_confirmed_ai_review_without_result_reports_no_ai_call_made(self):
         ai_review = Mock(
@@ -341,6 +361,65 @@ class DemoDailyOperatorTests(unittest.TestCase):
             )
 
         mock_print.assert_any_call("ai_review_action=no_ai_call_made")
+
+    def test_operator_decision_packet_prioritizes_exit_then_promotion_then_ai(self):
+        health = _healthy_system_health()
+        summary = {
+            "staleness_status": "fresh",
+            "evaluation_progress": "2/5 trading_days",
+            "evaluation_days_remaining": 3,
+            "exit_action": "exit_candidate",
+            "new_entry_action": "no_new_entry",
+            "ai_review_action": "not_requested",
+            "ai_review_freshness": "behind_latest_snapshot",
+            "ai_review_suggested_action": "request_fresh_ai_review",
+        }
+        dashboard = _dashboard_result()
+        dashboard.hypotheses = (
+            SimpleNamespace(board_recommendation="review_later", promotion_readiness="not_ready"),
+        )
+        exit_packet = _operator_decision_packet(
+            health_result=health, dashboard_result=dashboard, decision_summary=summary
+        )
+        self.assertEqual("review_exit_candidate", exit_packet["decision"])
+
+        summary["exit_action"] = "continue_monitoring"
+        promotion_packet = _operator_decision_packet(
+            health_result=health, dashboard_result=dashboard, decision_summary=summary
+        )
+        self.assertEqual("review_promotion_candidate", promotion_packet["decision"])
+
+        dashboard.hypotheses = ()
+        ai_packet = _operator_decision_packet(
+            health_result=health, dashboard_result=dashboard, decision_summary=summary
+        )
+        self.assertEqual("request_fresh_ai_review", ai_packet["decision"])
+
+        summary["ai_review_freshness"] = "current"
+        summary["ai_review_suggested_action"] = "none"
+        continue_packet = _operator_decision_packet(
+            health_result=health, dashboard_result=dashboard, decision_summary=summary
+        )
+        self.assertEqual("continue_monitoring", continue_packet["decision"])
+        self.assertEqual("run_again_next_trading_day", continue_packet["human_next_step"])
+
+    def test_operator_decision_packet_blocks_unhealthy_or_stale_state(self):
+        summary = {
+            "staleness_status": "stale",
+            "evaluation_progress": "unknown",
+            "evaluation_days_remaining": "unknown",
+            "exit_action": "continue_monitoring",
+            "new_entry_action": "no_new_entry",
+            "ai_review_action": "not_requested",
+            "ai_review_freshness": "current",
+            "ai_review_suggested_action": "none",
+        }
+        packet = _operator_decision_packet(
+            health_result=_healthy_system_health(),
+            dashboard_result=_dashboard_result(),
+            decision_summary=summary,
+        )
+        self.assertEqual("blocked", packet["decision"])
 
     def test_blocked_health_prevents_monitoring_and_dashboard(self):
         health = SimpleNamespace(

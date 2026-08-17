@@ -4307,6 +4307,146 @@ def _print_daily_decision_summary(summary):
 		print(f"{name}={summary[name]}")
 
 
+def _operator_decision_packet(*, health_result, dashboard_result, decision_summary):
+	"""Summarize existing operator results without requesting any new work."""
+
+	trades = tuple(getattr(dashboard_result, "trades", ()) or ())
+	hypotheses = tuple(getattr(dashboard_result, "hypotheses", ()) or ())
+	position = getattr(dashboard_result, "position_snapshot", None)
+	position_status = str(getattr(position, "status", "") or "").casefold()
+	if position_status == "open":
+		position_state = "open_demo_position"
+	elif position_status == "no_position":
+		position_state = "no_position"
+	else:
+		position_state = "unknown"
+
+	trade_ratings = {
+		str(getattr(trade, "entry_performance_rating", "") or "")
+		for trade in trades
+	}
+	if not trade_ratings or "unknown" in trade_ratings:
+		demo_trade_state = "unknown"
+	elif trade_ratings <= {"positive_open"}:
+		demo_trade_state = "positive_open"
+	elif trade_ratings <= {"flat_open"}:
+		demo_trade_state = "flat_open"
+	elif trade_ratings <= {"weak_open", "risk_breach"}:
+		demo_trade_state = "negative_open"
+	else:
+		demo_trade_state = "mixed"
+
+	evaluation_windows = {
+		getattr(trade, "evaluation_window_complete", None) for trade in trades
+	}
+	if not evaluation_windows or None in evaluation_windows:
+		evaluation_state = "unknown"
+	elif evaluation_windows == {True}:
+		evaluation_state = "complete"
+	elif evaluation_windows == {False}:
+		evaluation_state = "incomplete"
+	else:
+		evaluation_state = "mixed"
+
+	exit_action = decision_summary["exit_action"]
+	packet_exit_action = (
+		"review_exit"
+		if exit_action in {"risk_exit_candidate", "exit_candidate"}
+		else "continue_monitoring"
+		if exit_action == "continue_monitoring"
+		else "unknown"
+	)
+	new_entry_action = decision_summary["new_entry_action"]
+	packet_new_entry_action = (
+		"review_new_entry"
+		if new_entry_action == "consider_new_entry"
+		else "no_new_entry"
+		if new_entry_action == "no_new_entry"
+		else "unknown"
+	)
+	promotion_candidate = any(
+		getattr(item, "board_recommendation", "") in {"promotion_ready", "review_promotion", "review_later"}
+		or getattr(item, "promotion_readiness", "") in {"promotion_ready", "review_promotion"}
+		for item in hypotheses
+	)
+	promotion_action = "review_promotion" if promotion_candidate else "no_promotion"
+
+	freshness_state = decision_summary["staleness_status"]
+	healthy = (
+		health_result.overall_health == "healthy"
+		and bool(getattr(health_result, "required_checks_passed", False))
+	)
+	confirmed_ai_review = decision_summary["ai_review_action"] in {
+		"reviewed",
+		"duplicate_latest_state",
+	}
+	if not healthy or freshness_state in {"stale", "unknown"}:
+		decision = "blocked"
+		decision_reason = "system_health_or_required_snapshot_freshness_blocked"
+		human_next_step = "resolve_system_health_or_refresh_required_snapshots"
+	elif packet_exit_action == "review_exit":
+		decision = "review_exit_candidate"
+		decision_reason = "exit_candidate_requires_human_review"
+		human_next_step = "review_exit_candidate_without_submitting_order"
+	elif promotion_candidate:
+		decision = "review_promotion_candidate"
+		decision_reason = "promotion_candidate_requires_human_review"
+		human_next_step = "review_promotion_candidate_without_promoting"
+	elif (
+		decision_summary["ai_review_freshness"] == "behind_latest_snapshot"
+		and not confirmed_ai_review
+	):
+		decision = "request_fresh_ai_review"
+		decision_reason = "latest_monitoring_snapshot_newer_than_ai_review"
+		human_next_step = "optionally_run_confirmed_ai_review"
+	else:
+		decision = "continue_monitoring"
+		decision_reason = "monitoring_state_requires_no_action"
+		human_next_step = "run_again_next_trading_day"
+
+	return {
+		"decision": decision,
+		"decision_reason": decision_reason,
+		"position_state": position_state,
+		"demo_trade_state": demo_trade_state,
+		"evaluation_state": evaluation_state,
+		"evaluation_progress": decision_summary["evaluation_progress"],
+		"evaluation_days_remaining": decision_summary["evaluation_days_remaining"],
+		"exit_action": packet_exit_action,
+		"new_entry_action": packet_new_entry_action,
+		"promotion_action": promotion_action,
+		"ai_review_action": decision_summary["ai_review_action"],
+		"ai_review_suggested_action": decision_summary["ai_review_suggested_action"],
+		"freshness_state": freshness_state,
+		"human_next_step": human_next_step,
+		"blocked_actions": "orders,cancellations,position_closes,promotions,live_trading",
+	}
+
+
+def _print_operator_decision_packet(packet):
+	print()
+	print("Operator Decision Packet")
+	print("------------------------")
+	for name in (
+		"decision",
+		"decision_reason",
+		"position_state",
+		"demo_trade_state",
+		"evaluation_state",
+		"evaluation_progress",
+		"evaluation_days_remaining",
+		"exit_action",
+		"new_entry_action",
+		"promotion_action",
+		"ai_review_action",
+		"ai_review_suggested_action",
+		"freshness_state",
+		"human_next_step",
+		"blocked_actions",
+	):
+		print(f"{name}={packet[name]}")
+
+
 def _print_latest_ai_review_after_operator(*, ai_review_requested, confirm_ai_call, ai_review_result):
 	"""Print the existing AI review outcome without reading storage or making calls."""
 
@@ -4431,6 +4571,12 @@ def run_manual_demo_daily_operator(
 			ai_review_result=None,
 		)
 		_print_daily_decision_summary(decision_summary)
+		decision_packet = _operator_decision_packet(
+			health_result=health_result,
+			dashboard_result=None,
+			decision_summary=decision_summary,
+		)
+		_print_operator_decision_packet(decision_packet)
 		print()
 		print("Records Modified : no")
 		print("AI Calls Allowed : no")
@@ -4467,6 +4613,7 @@ def run_manual_demo_daily_operator(
 			"system_health": health_result.overall_health,
 			"system_blocked": True,
 			"daily_decision_summary": decision_summary,
+			"operator_decision_packet": decision_packet,
 			"monitoring_cycle_status": "not_run",
 			"dashboard_displayed": False,
 			"ai_review_requested": False,
@@ -4645,6 +4792,26 @@ def run_manual_demo_daily_operator(
 				or getattr(dashboard_result, "latest_daily_ai_review", None)
 			),
 		)
+	packet_summary = dict(decision_summary)
+	if post_operator_ai_review_freshness is not None:
+		packet_summary.update(
+			{
+				"ai_review_freshness": post_operator_ai_review_freshness[
+					"ai_review_freshness"
+				],
+				"ai_review_suggested_action": post_operator_ai_review_freshness[
+					"ai_review_suggested_action"
+				],
+				"ai_review_action_reason": post_operator_ai_review_freshness[
+					"ai_review_action_reason"
+				],
+			}
+		)
+	decision_packet = _operator_decision_packet(
+		health_result=health_result,
+		dashboard_result=dashboard_result,
+		decision_summary=packet_summary,
+	)
 
 	print()
 	print("Operator Summary")
@@ -4661,6 +4828,7 @@ def run_manual_demo_daily_operator(
 	print("orders_cancelled=0")
 	print("positions_closed=0")
 	print("promotions_performed=0")
+	_print_operator_decision_packet(decision_packet)
 
 	print()
 	print("Reminder:")
@@ -4673,6 +4841,7 @@ def run_manual_demo_daily_operator(
 		"system_health": health_result.overall_health,
 		"system_blocked": False,
 		"daily_decision_summary": decision_summary,
+		"operator_decision_packet": decision_packet,
 		"monitoring_cycle_status": cycle_status,
 		"dashboard_displayed": dashboard_displayed,
 		"ai_review_requested": ai_review_requested,
