@@ -5,6 +5,7 @@ from unittest.mock import ANY, Mock, patch
 
 from research.runner import (
     _build_arg_parser,
+    _operator_action_ledger,
     _operator_decision_packet,
     run_manual_demo_daily_operator,
 )
@@ -139,6 +140,18 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("demo_trade_state=positive_open")
         mock_print.assert_any_call("evaluation_state=incomplete")
         mock_print.assert_any_call("blocked_actions=orders,cancellations,position_closes,promotions,live_trading")
+        mock_print.assert_any_call("Action Ledger")
+        mock_print.assert_any_call("monitoring=performed")
+        mock_print.assert_any_call("monitoring_reason=safe_read_snapshot_evaluation_cycle_completed")
+        mock_print.assert_any_call("ai_review=not_requested")
+        mock_print.assert_any_call("exit=blocked_by_incomplete_evaluation_window")
+        mock_print.assert_any_call("new_entry=blocked_by_current_opportunity_not_ready")
+        mock_print.assert_any_call("promotion=blocked_by_no_completed_evaluation_window")
+        mock_print.assert_any_call("orders=blocked_by_demo_operator_policy")
+        mock_print.assert_any_call("cancellations=blocked_by_demo_operator_policy")
+        mock_print.assert_any_call("position_closes=blocked_by_demo_operator_policy")
+        mock_print.assert_any_call("live_trading=blocked_by_policy")
+        mock_print.assert_any_call("ledger_status=complete")
 
     def test_monitoring_failure_still_runs_dashboard_with_warning(self):
         calls = []
@@ -245,6 +258,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("ai_review_confirmed=no")
         mock_print.assert_any_call("ai_calls_made=0")
         mock_print.assert_any_call("ai_review_action=confirmation_required")
+        mock_print.assert_any_call("ai_review=confirmation_required")
         mock_print.assert_any_call("Latest AI Review After Operator")
         mock_print.assert_any_call("ai_review_source=confirmation_required")
         mock_print.assert_any_call("AI Review Freshness After Operator")
@@ -292,6 +306,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("ai_review_confirmed=yes")
         mock_print.assert_any_call("skipped_existing=1")
         mock_print.assert_any_call("ai_review_action=duplicate_latest_state")
+        mock_print.assert_any_call("ai_review=duplicate_latest_state")
         mock_print.assert_any_call("Latest AI Review After Operator")
         mock_print.assert_any_call("latest_ai_review_id=ddair-existing")
         mock_print.assert_any_call("ai_review_source=existing_latest_state")
@@ -328,6 +343,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
 
         self.assertEqual(1, result["daily_reviews_created"])
         mock_print.assert_any_call("ai_review_action=reviewed")
+        mock_print.assert_any_call("ai_review=reviewed")
         mock_print.assert_any_call("Latest AI Review After Operator")
         mock_print.assert_any_call("ai_review_source=created_this_run")
         mock_print.assert_any_call("AI Review Freshness After Operator")

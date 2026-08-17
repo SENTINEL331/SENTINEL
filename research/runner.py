@@ -4447,6 +4447,127 @@ def _print_operator_decision_packet(packet):
 		print(f"{name}={packet[name]}")
 
 
+def _operator_action_ledger(*, cycle_status, dashboard_result, decision_summary, decision_packet):
+	"""Record considered operator actions from already-computed local state."""
+
+	trades = tuple(getattr(dashboard_result, "trades", ()) or ())
+	hypotheses = tuple(getattr(dashboard_result, "hypotheses", ()) or ())
+	if cycle_status == "completed":
+		monitoring = "performed"
+		monitoring_reason = "safe_read_snapshot_evaluation_cycle_completed"
+	else:
+		monitoring = "unknown"
+		monitoring_reason = "safe_monitoring_cycle_not_completed"
+
+	ai_review = decision_packet["ai_review_action"]
+	ai_review_reason = {
+		"not_requested": "no_ai_review_requested",
+		"confirmation_required": "confirmation_required",
+		"reviewed": "confirmed_ai_review_created",
+		"duplicate_latest_state": "existing_latest_state_reused",
+	}.get(ai_review, "ai_review_status_unavailable")
+
+	if decision_packet["exit_action"] == "review_exit":
+		exit_result = "review_exit_candidate"
+		exit_reason = "exit_candidate_requires_human_review"
+	elif (
+		decision_packet["exit_action"] == "continue_monitoring"
+		and decision_packet["evaluation_state"] == "incomplete"
+	):
+		exit_result = "blocked_by_incomplete_evaluation_window"
+		exit_reason = "evaluation_window_incomplete"
+	elif decision_packet["decision"] == "blocked":
+		exit_result = "blocked_by_policy"
+		exit_reason = "operator_decision_blocked"
+	else:
+		exit_result = "unknown"
+		exit_reason = "exit_state_unavailable"
+
+	if decision_packet["new_entry_action"] == "review_new_entry":
+		new_entry = "review_new_entry"
+		new_entry_reason = "current_opportunity_requires_human_review"
+	elif decision_packet["new_entry_action"] == "no_new_entry":
+		new_entry = "blocked_by_current_opportunity_not_ready"
+		new_entry_reason = "current_opportunity_action_no_new_entry"
+	elif decision_packet["decision"] == "blocked":
+		new_entry = "blocked_by_policy"
+		new_entry_reason = "operator_decision_blocked"
+	else:
+		new_entry = "unknown"
+		new_entry_reason = "new_entry_state_unavailable"
+
+	board_reasons = {
+		reason
+		for hypothesis in hypotheses
+		for reason in (getattr(hypothesis, "board_reason", ()) or ())
+	}
+	if decision_packet["promotion_action"] == "review_promotion":
+		promotion = "review_promotion_candidate"
+		promotion_reason = "promotion_candidate_requires_human_review"
+	elif (
+		"no_completed_evaluation_window" in board_reasons
+		or decision_packet["evaluation_state"] == "incomplete"
+	):
+		promotion = "blocked_by_no_completed_evaluation_window"
+		promotion_reason = "no_completed_evaluation_window"
+	elif hypotheses:
+		promotion = "blocked_by_policy"
+		promotion_reason = "promotion_not_eligible_from_current_board"
+	else:
+		promotion = "unknown"
+		promotion_reason = "promotion_board_unavailable"
+
+	return {
+		"monitoring": monitoring,
+		"monitoring_reason": monitoring_reason,
+		"ai_review": ai_review,
+		"ai_review_reason": ai_review_reason,
+		"exit": exit_result,
+		"exit_reason": exit_reason,
+		"new_entry": new_entry,
+		"new_entry_reason": new_entry_reason,
+		"promotion": promotion,
+		"promotion_reason": promotion_reason,
+		"orders": "blocked_by_demo_operator_policy",
+		"orders_reason": "demo_operator_never_submits_orders",
+		"cancellations": "blocked_by_demo_operator_policy",
+		"cancellations_reason": "demo_operator_never_cancels_orders",
+		"position_closes": "blocked_by_demo_operator_policy",
+		"position_closes_reason": "demo_operator_never_closes_positions",
+		"live_trading": "blocked_by_policy",
+		"live_trading_reason": "live_trading_disabled",
+		"ledger_status": "complete",
+	}
+
+
+def _print_operator_action_ledger(ledger):
+	print()
+	print("Action Ledger")
+	print("-------------")
+	for name in (
+		"monitoring",
+		"monitoring_reason",
+		"ai_review",
+		"ai_review_reason",
+		"exit",
+		"exit_reason",
+		"new_entry",
+		"new_entry_reason",
+		"promotion",
+		"promotion_reason",
+		"orders",
+		"orders_reason",
+		"cancellations",
+		"cancellations_reason",
+		"position_closes",
+		"position_closes_reason",
+		"live_trading",
+		"live_trading_reason",
+		"ledger_status",
+	):
+		print(f"{name}={ledger[name]}")
+
+
 def _print_latest_ai_review_after_operator(*, ai_review_requested, confirm_ai_call, ai_review_result):
 	"""Print the existing AI review outcome without reading storage or making calls."""
 
@@ -4577,6 +4698,13 @@ def run_manual_demo_daily_operator(
 			decision_summary=decision_summary,
 		)
 		_print_operator_decision_packet(decision_packet)
+		action_ledger = _operator_action_ledger(
+			cycle_status="not_run",
+			dashboard_result=None,
+			decision_summary=decision_summary,
+			decision_packet=decision_packet,
+		)
+		_print_operator_action_ledger(action_ledger)
 		print()
 		print("Records Modified : no")
 		print("AI Calls Allowed : no")
@@ -4614,6 +4742,7 @@ def run_manual_demo_daily_operator(
 			"system_blocked": True,
 			"daily_decision_summary": decision_summary,
 			"operator_decision_packet": decision_packet,
+			"action_ledger": action_ledger,
 			"monitoring_cycle_status": "not_run",
 			"dashboard_displayed": False,
 			"ai_review_requested": False,
@@ -4812,6 +4941,12 @@ def run_manual_demo_daily_operator(
 		dashboard_result=dashboard_result,
 		decision_summary=packet_summary,
 	)
+	action_ledger = _operator_action_ledger(
+		cycle_status=cycle_status,
+		dashboard_result=dashboard_result,
+		decision_summary=packet_summary,
+		decision_packet=decision_packet,
+	)
 
 	print()
 	print("Operator Summary")
@@ -4829,6 +4964,7 @@ def run_manual_demo_daily_operator(
 	print("positions_closed=0")
 	print("promotions_performed=0")
 	_print_operator_decision_packet(decision_packet)
+	_print_operator_action_ledger(action_ledger)
 
 	print()
 	print("Reminder:")
@@ -4842,6 +4978,7 @@ def run_manual_demo_daily_operator(
 		"system_blocked": False,
 		"daily_decision_summary": decision_summary,
 		"operator_decision_packet": decision_packet,
+		"action_ledger": action_ledger,
 		"monitoring_cycle_status": cycle_status,
 		"dashboard_displayed": dashboard_displayed,
 		"ai_review_requested": ai_review_requested,
