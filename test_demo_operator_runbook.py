@@ -7,6 +7,7 @@ from research.runner import (
     _build_arg_parser,
     main,
     run_manual_demo_operator_runbook,
+        run_manual_demo_operator_latest,
     run_manual_demo_operator_runs,
 )
 
@@ -17,6 +18,7 @@ class DemoOperatorRunbookTests(unittest.TestCase):
 
     def test_cli_help_includes_operator_run_history(self):
         self.assertIn("demo-operator-runs", _build_arg_parser().format_help())
+        self.assertIn("demo-operator-latest", _build_arg_parser().format_help())
 
     def test_operator_run_history_parser_accepts_filters(self):
         args = _build_arg_parser().parse_args(
@@ -98,6 +100,16 @@ class DemoOperatorRunbookTests(unittest.TestCase):
             status=None,
 			run_id=None,
         )
+        mock_operator.assert_not_called()
+
+    def test_main_dispatches_only_operator_latest_brief(self):
+        with patch("research.runner.run_manual_demo_operator_latest") as mock_latest, patch(
+            "research.runner.run_manual_demo_daily_operator"
+        ) as mock_operator:
+            exit_code = main(["demo-operator-latest", "NVDA"])
+
+        self.assertEqual(0, exit_code)
+        mock_latest.assert_called_once_with(symbol="NVDA")
         mock_operator.assert_not_called()
 
     def test_makes_no_http_calls(self):

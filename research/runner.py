@@ -4737,6 +4737,98 @@ def run_manual_demo_operator_runs(
 	return records
 
 
+def run_manual_demo_operator_latest(symbol=DEFAULT_SYMBOL, storage=None):
+	"""Show the newest stored local demo operator run without side effects."""
+
+	storage = storage or Storage()
+	loader = getattr(storage, "load_demo_operator_run_records", None)
+	records = list(loader(symbol=symbol) or []) if callable(loader) else []
+	records.sort(
+		key=lambda record: getattr(record, "created_at", datetime.min.replace(tzinfo=timezone.utc)),
+		reverse=True,
+	)
+	return _print_demo_operator_latest_brief(symbol=symbol, record=records[0] if records else None)
+
+
+def _print_demo_operator_latest_brief(*, symbol, record):
+	"""Render the compact latest stored operator state without new work."""
+
+	def _value(name, default="unknown"):
+		return getattr(record, name, default) if record is not None else default
+
+	print()
+	print(f"Manual Demo Operator Latest Brief: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Promotion Actions Taken : 0")
+	if record is None:
+		print()
+		print("No operator runs found.")
+		return None
+
+	created_at = _value("created_at", None)
+	created_at = created_at.isoformat() if hasattr(created_at, "isoformat") else "unknown"
+	print()
+	print("Latest Operator Brief")
+	print("---------------------")
+	for name, value in (
+		("operator_run_id", _value("run_id")),
+		("created_at", created_at),
+		("decision", _value("decision")),
+		("decision_reason", _value("decision_reason")),
+		("operator_status", _value("operator_status")),
+		("system_health", _value("system_health")),
+		("position_state", _value("position_state")),
+		("demo_trade_state", _value("demo_trade_state")),
+		("evaluation_state", _value("evaluation_state")),
+		("evaluation_progress", _value("evaluation_progress")),
+		("evaluation_days_remaining", _value("evaluation_days_remaining")),
+		("exit_action", _value("exit_action")),
+		("new_entry_action", _value("new_entry_action")),
+		("promotion_action", _value("promotion_action")),
+		("ai_review_action", _value("ai_review_action")),
+		("ai_review_suggested_action", _value("ai_review_suggested_action")),
+		("human_next_step", _value("human_next_step")),
+	):
+		print(f"{name}={value}")
+	ledger = _value("action_ledger", {})
+	ledger = ledger if isinstance(ledger, dict) else {}
+	print()
+	print("Action Status")
+	print("-------------")
+	for name in (
+		"monitoring",
+		"ai_review",
+		"exit",
+		"new_entry",
+		"promotion",
+		"orders",
+		"cancellations",
+		"position_closes",
+		"live_trading",
+	):
+		print(f"{name}={ledger.get(name, 'unknown')}")
+	safety = _operator_run_history_metrics([record])
+	print()
+	print("Latest Safety")
+	print("-------------")
+	print(f"orders_submitted={_value('orders_submitted')}")
+	print(f"orders_cancelled={_value('orders_cancelled')}")
+	print(f"positions_closed={_value('positions_closed')}")
+	print(f"promotions_performed={_value('promotions_performed')}")
+	print(f"safety_verdict={safety['safety_verdict']}")
+	print(f"run_safety={safety['history_health']}")
+	print(f"demo_only={safety['latest_run_demo_only']}")
+	return record
+
+
 def _print_demo_operator_run_detail(*, symbol, record):
 	"""Render one stored operator audit record without mutating or fetching state."""
 
@@ -6222,6 +6314,17 @@ def _build_arg_parser():
 		help="Show one matching local operator run record in detail.",
 	)
 
+	demo_operator_latest_parser = subparsers.add_parser(
+		"demo-operator-latest",
+		help="Show the newest stored local demo operator brief for one symbol.",
+	)
+	demo_operator_latest_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -6509,6 +6612,10 @@ def main(argv=None):
 			status=args.status,
 			run_id=args.run_id,
 		)
+		return 0
+
+	if args.mode == "demo-operator-latest":
+		run_manual_demo_operator_latest(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":

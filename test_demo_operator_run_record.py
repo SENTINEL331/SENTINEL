@@ -12,6 +12,8 @@ from research.runner import (
 		_operator_run_decision_trend,
     _operator_run_history_metrics,
 		_print_demo_operator_run_detail,
+        _print_demo_operator_latest_brief,
+        run_manual_demo_operator_latest,
 		run_manual_demo_operator_runs,
 )
 
@@ -387,6 +389,79 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
         mock_print.assert_any_call("Manual Demo Operator Run Detail: NVDA")
         mock_print.assert_any_call("operator_run_id=dor-match")
         mock_print.assert_any_call("No matching operator run found.")
+
+    def test_latest_brief_renders_newest_record_and_ledger(self):
+        record = SimpleNamespace(
+            run_id="dor-latest",
+            symbol="NVDA",
+            created_at=datetime(2026, 8, 17, 12, tzinfo=timezone.utc),
+            decision="continue_monitoring",
+            decision_reason="monitoring_state_requires_no_action",
+            operator_status="completed",
+            system_health="healthy",
+            position_state="open_demo_position",
+            demo_trade_state="positive_open",
+            evaluation_state="incomplete",
+            evaluation_progress="2/5 trading_days",
+            evaluation_days_remaining=3,
+            exit_action="continue_monitoring",
+            new_entry_action="no_new_entry",
+            promotion_action="no_promotion",
+            ai_review_action="not_requested",
+            ai_review_suggested_action="none",
+            human_next_step="run_again_next_trading_day",
+            orders_submitted=0,
+            orders_cancelled=0,
+            positions_closed=0,
+            promotions_performed=0,
+            demo_only=True,
+            action_ledger={
+                "monitoring": "performed",
+                "ai_review": "not_requested",
+                "orders": "blocked_by_demo_operator_policy",
+                "live_trading": "blocked_by_policy",
+            },
+        )
+        with patch("builtins.print") as mock_print:
+            result = _print_demo_operator_latest_brief(symbol="NVDA", record=record)
+
+        self.assertIs(record, result)
+        mock_print.assert_any_call("Manual Demo Operator Latest Brief: NVDA")
+        mock_print.assert_any_call("Latest Operator Brief")
+        mock_print.assert_any_call("operator_run_id=dor-latest")
+        mock_print.assert_any_call("Action Status")
+        mock_print.assert_any_call("monitoring=performed")
+        mock_print.assert_any_call("orders=blocked_by_demo_operator_policy")
+        mock_print.assert_any_call("Latest Safety")
+        mock_print.assert_any_call("run_safety=clean")
+        mock_print.assert_any_call("safety_verdict=no_operator_safety_violations")
+
+    def test_latest_brief_loads_newest_record_and_handles_empty_history_read_only(self):
+        older = SimpleNamespace(run_id="dor-old", created_at=datetime(2026, 8, 17, 11, tzinfo=timezone.utc))
+        newer = SimpleNamespace(
+            run_id="dor-new",
+            created_at=datetime(2026, 8, 17, 12, tzinfo=timezone.utc),
+            demo_only=True,
+            orders_submitted=0,
+            orders_cancelled=0,
+            positions_closed=0,
+            promotions_performed=0,
+            action_ledger={},
+        )
+        storage = Mock()
+        storage.load_demo_operator_run_records.return_value = [older, newer]
+        with patch("builtins.print") as mock_print, patch("urllib.request.urlopen") as mock_urlopen:
+            result = run_manual_demo_operator_latest(symbol="NVDA", storage=storage)
+            storage.load_demo_operator_run_records.return_value = []
+            empty = run_manual_demo_operator_latest(symbol="NVDA", storage=storage)
+
+        self.assertIs(newer, result)
+        self.assertIsNone(empty)
+        self.assertEqual(2, storage.load_demo_operator_run_records.call_count)
+        self.assertTrue(all(call[0].startswith("load_") for call in storage.method_calls))
+        mock_urlopen.assert_not_called()
+        mock_print.assert_any_call("operator_run_id=dor-new")
+        mock_print.assert_any_call("No operator runs found.")
 
 
 if __name__ == "__main__":
