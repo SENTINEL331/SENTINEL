@@ -4660,6 +4660,28 @@ def run_manual_demo_operator_runs(symbol=DEFAULT_SYMBOL, storage=None):
 		"history_health_reason",
 	):
 		print(f"{name}={metrics[name]}")
+	print()
+	print("History Health Details")
+	print("----------------------")
+	for name in (
+		"history_health",
+		"history_health_reason",
+		"records_checked",
+		"demo_only_records",
+		"missing_demo_only_records",
+		"non_demo_only_records",
+		"records_with_order_actions",
+		"records_with_cancel_actions",
+		"records_with_position_close_actions",
+		"records_with_promotion_actions",
+		"latest_run_id",
+		"latest_run_created_at",
+		"latest_run_demo_only",
+		"latest_run_decision",
+		"latest_run_human_next_step",
+		"safety_verdict",
+	):
+		print(f"{name}={metrics[name]}")
 	return records
 
 
@@ -4686,6 +4708,19 @@ def _operator_run_history_metrics(records):
 			"latest_run_demo_only": "unknown",
 			"history_health": "unknown",
 			"history_health_reason": "no_operator_run_records_loaded",
+			"records_checked": 0,
+			"demo_only_records": 0,
+			"missing_demo_only_records": 0,
+			"non_demo_only_records": 0,
+			"records_with_order_actions": 0,
+			"records_with_cancel_actions": 0,
+			"records_with_position_close_actions": 0,
+			"records_with_promotion_actions": 0,
+			"latest_run_id": "none",
+			"latest_run_created_at": "none",
+			"latest_run_decision": "none",
+			"latest_run_human_next_step": "none",
+			"safety_verdict": "unknown",
 		}
 
 	def _safe_count(record, name):
@@ -4704,6 +4739,21 @@ def _operator_run_history_metrics(records):
 	}
 	demo_only_values = [getattr(record, "demo_only", None) for record in records]
 	latest_demo_only = getattr(latest, "demo_only", None)
+	demo_only_records = sum(value is True for value in demo_only_values)
+	missing_demo_only_records = sum(value not in {True, False} for value in demo_only_values)
+	non_demo_only_records = sum(value is False for value in demo_only_values)
+	records_with_order_actions = sum(
+		_safe_count(record, "orders_submitted") != 0 for record in records
+	)
+	records_with_cancel_actions = sum(
+		_safe_count(record, "orders_cancelled") != 0 for record in records
+	)
+	records_with_position_close_actions = sum(
+		_safe_count(record, "positions_closed") != 0 for record in records
+	)
+	records_with_promotion_actions = sum(
+		_safe_count(record, "promotions_performed") != 0 for record in records
+	)
 	if any(value is False for value in demo_only_values):
 		history_health = "blocked"
 		history_health_reason = "non_demo_operator_run_record_detected"
@@ -4716,6 +4766,18 @@ def _operator_run_history_metrics(records):
 	else:
 		history_health = "clean"
 		history_health_reason = "all_records_demo_only_with_zero_safety_actions"
+	safety_verdict = {
+		"clean": "no_operator_safety_violations",
+		"warning": "operator_safety_warning",
+		"blocked": "operator_safety_blocked",
+		"unknown": "unknown",
+	}[history_health]
+	latest_created_at = getattr(latest, "created_at", None)
+	latest_created_at = (
+		latest_created_at.isoformat()
+		if hasattr(latest_created_at, "isoformat")
+		else "unknown"
+	)
 
 	return {
 		"runs_loaded": len(records),
@@ -4753,6 +4815,19 @@ def _operator_run_history_metrics(records):
 		),
 		"history_health": history_health,
 		"history_health_reason": history_health_reason,
+		"records_checked": len(records),
+		"demo_only_records": demo_only_records,
+		"missing_demo_only_records": missing_demo_only_records,
+		"non_demo_only_records": non_demo_only_records,
+		"records_with_order_actions": records_with_order_actions,
+		"records_with_cancel_actions": records_with_cancel_actions,
+		"records_with_position_close_actions": records_with_position_close_actions,
+		"records_with_promotion_actions": records_with_promotion_actions,
+		"latest_run_id": getattr(latest, "run_id", "unknown"),
+		"latest_run_created_at": latest_created_at,
+		"latest_run_decision": getattr(latest, "decision", "unknown"),
+		"latest_run_human_next_step": getattr(latest, "human_next_step", "unknown"),
+		"safety_verdict": safety_verdict,
 	}
 
 

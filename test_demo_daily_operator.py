@@ -296,6 +296,18 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("latest_run_demo_only=unknown")
         mock_print.assert_any_call("history_health=warning")
         mock_print.assert_any_call("history_health_reason=demo_only_missing_or_unknown")
+        mock_print.assert_any_call("History Health Details")
+        mock_print.assert_any_call("records_checked=1")
+        mock_print.assert_any_call("demo_only_records=0")
+        mock_print.assert_any_call("missing_demo_only_records=1")
+        mock_print.assert_any_call("non_demo_only_records=0")
+        mock_print.assert_any_call("records_with_order_actions=0")
+        mock_print.assert_any_call("latest_run_id=dor-NVDA-001")
+        mock_print.assert_any_call("latest_run_created_at=2026-08-17T00:00:00+00:00")
+        mock_print.assert_any_call("latest_run_demo_only=unknown")
+        mock_print.assert_any_call("latest_run_decision=continue_monitoring")
+        mock_print.assert_any_call("latest_run_human_next_step=run_again_next_trading_day")
+        mock_print.assert_any_call("safety_verdict=operator_safety_warning")
 
     def test_ai_review_without_confirmation_delegates_without_ai_call(self):
         ai_review = Mock(

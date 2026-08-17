@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -74,6 +75,8 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
                 positions_closed=0,
                 promotions_performed=0,
                 demo_only=True,
+				run_id="dor-latest",
+				created_at=datetime(2026, 8, 17, tzinfo=timezone.utc),
             ),
             SimpleNamespace(
                 decision="request_fresh_ai_review",
@@ -113,10 +116,32 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
         self.assertEqual(0, metrics["orders_submitted_total"])
         self.assertEqual(True, metrics["latest_run_demo_only"])
         self.assertEqual("clean", metrics["history_health"])
+        self.assertEqual(3, metrics["records_checked"])
+        self.assertEqual(3, metrics["demo_only_records"])
+        self.assertEqual(0, metrics["missing_demo_only_records"])
+        self.assertEqual(0, metrics["non_demo_only_records"])
+        self.assertEqual(0, metrics["records_with_order_actions"])
+        self.assertEqual("dor-latest", metrics["latest_run_id"])
+        self.assertEqual("2026-08-17T00:00:00+00:00", metrics["latest_run_created_at"])
+        self.assertEqual("continue_monitoring", metrics["latest_run_decision"])
+        self.assertEqual("no_operator_safety_violations", metrics["safety_verdict"])
 
     def test_history_metrics_handles_warning_blocked_and_unknown_safely(self):
         warning = _operator_run_history_metrics(
             [SimpleNamespace(decision="unknown", human_next_step="unknown")]
+        )
+        non_demo = _operator_run_history_metrics(
+            [
+                SimpleNamespace(
+                    decision="unknown",
+                    human_next_step="unknown",
+                    demo_only=False,
+                    orders_submitted=0,
+                    orders_cancelled=0,
+                    positions_closed=0,
+                    promotions_performed=0,
+                )
+            ]
         )
         blocked = _operator_run_history_metrics(
             [
@@ -135,9 +160,17 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
 
         self.assertEqual("warning", warning["history_health"])
         self.assertEqual("unknown", warning["latest_run_demo_only"])
+        self.assertEqual(1, warning["missing_demo_only_records"])
+        self.assertEqual("operator_safety_warning", warning["safety_verdict"])
+        self.assertEqual("blocked", non_demo["history_health"])
+        self.assertEqual(1, non_demo["non_demo_only_records"])
+        self.assertEqual("operator_safety_blocked", non_demo["safety_verdict"])
         self.assertEqual("blocked", blocked["history_health"])
         self.assertEqual(1, blocked["orders_submitted_total"])
+        self.assertEqual(1, blocked["records_with_order_actions"])
         self.assertEqual("unknown", unknown["history_health"])
+        self.assertEqual(0, unknown["records_checked"])
+        self.assertEqual("unknown", unknown["safety_verdict"])
 
 
 if __name__ == "__main__":
