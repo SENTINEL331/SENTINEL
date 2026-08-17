@@ -39,6 +39,7 @@ from research.demo_status_dashboard import (
 	build_ai_review_freshness,
 	build_demo_status_dashboard,
 )
+from research.demo_operator_run_record import new_demo_operator_run_record
 from research.demo_exit_readiness import (
 	EXIT_READINESS_ORDER,
 	build_demo_exit_readiness,
@@ -4568,6 +4569,81 @@ def _print_operator_action_ledger(ledger):
 		print(f"{name}={ledger[name]}")
 
 
+def _append_demo_operator_run_record(*, storage, symbol, operator_status, system_health,
+							system_blocked, monitoring_cycle_status, dashboard_displayed,
+							ai_review_requested, ai_review_confirmed, ai_calls_made,
+							daily_ai_reviews_created, decision_packet, action_ledger):
+	"""Append finalized local operator state when the configured storage supports it."""
+
+	record = new_demo_operator_run_record(
+		symbol=symbol,
+		operator_status=operator_status,
+		system_health=system_health,
+		system_blocked=system_blocked,
+		monitoring_cycle_status=monitoring_cycle_status,
+		dashboard_displayed=dashboard_displayed,
+		ai_review_requested=ai_review_requested,
+		ai_review_confirmed=ai_review_confirmed,
+		ai_calls_made=ai_calls_made,
+		daily_ai_reviews_created=daily_ai_reviews_created,
+		decision_packet=decision_packet,
+		action_ledger=action_ledger,
+	)
+	saver = getattr(storage, "save_demo_operator_run_record", None)
+	return record, bool(saver(record)) if callable(saver) else False
+
+
+def run_manual_demo_operator_runs(symbol=DEFAULT_SYMBOL, storage=None):
+	"""Show stored demo operator audit records without calls or mutations."""
+
+	storage = storage or Storage()
+	loader = getattr(storage, "load_demo_operator_run_records", None)
+	records = list(loader(symbol=symbol) or []) if callable(loader) else []
+	records.sort(
+		key=lambda record: getattr(record, "created_at", datetime.min.replace(tzinfo=timezone.utc)),
+		reverse=True,
+	)
+
+	print()
+	print(f"Manual Demo Operator Runs: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Promotion Actions Taken : 0")
+	print()
+	print("Recent Operator Runs")
+	print("--------------------")
+	if records:
+		for record in records:
+			print(f"- operator_run_id={record.run_id}")
+			print(f"  created_at={record.created_at.isoformat()}")
+			print(f"  decision={record.decision}")
+			print(f"  decision_reason={record.decision_reason}")
+			print(f"  operator_status={record.operator_status}")
+			print(f"  ai_review_action={record.ai_review_action}")
+			print(f"  ai_calls_made={record.ai_calls_made}")
+			print(f"  orders_submitted={record.orders_submitted}")
+			print(f"  orders_cancelled={record.orders_cancelled}")
+			print(f"  positions_closed={record.positions_closed}")
+			print(f"  promotions_performed={record.promotions_performed}")
+			print(f"  human_next_step={record.human_next_step}")
+	else:
+		print("No local demo operator run records are available.")
+	print()
+	print("Summary")
+	print("-------")
+	print(f"runs_loaded={len(records)}")
+	print(f"latest_decision={records[0].decision if records else 'none'}")
+	print(f"latest_human_next_step={records[0].human_next_step if records else 'none'}")
+	return records
+
+
 def _print_latest_ai_review_after_operator(*, ai_review_requested, confirm_ai_call, ai_review_result):
 	"""Print the existing AI review outcome without reading storage or making calls."""
 
@@ -4705,6 +4781,28 @@ def run_manual_demo_daily_operator(
 			decision_packet=decision_packet,
 		)
 		_print_operator_action_ledger(action_ledger)
+		operator_run_record, operator_run_recorded = _append_demo_operator_run_record(
+			storage=storage,
+			symbol=symbol,
+			operator_status="blocked",
+			system_health=health_result.overall_health,
+			system_blocked=True,
+			monitoring_cycle_status="not_run",
+			dashboard_displayed=False,
+			ai_review_requested=False,
+			ai_review_confirmed=False,
+			ai_calls_made=0,
+			daily_ai_reviews_created=0,
+			decision_packet=decision_packet,
+			action_ledger=action_ledger,
+		)
+		print()
+		print("Operator Run Record")
+		print("-------------------")
+		print(f"operator_run_recorded={'yes' if operator_run_recorded else 'no'}")
+		print(f"operator_run_id={operator_run_record.run_id}")
+		print("record_storage=local_append_only")
+		print("demo_only=True")
 		print()
 		print("Records Modified : no")
 		print("AI Calls Allowed : no")
@@ -4743,6 +4841,8 @@ def run_manual_demo_daily_operator(
 			"daily_decision_summary": decision_summary,
 			"operator_decision_packet": decision_packet,
 			"action_ledger": action_ledger,
+			"operator_run_record": operator_run_record,
+			"operator_run_recorded": operator_run_recorded,
 			"monitoring_cycle_status": "not_run",
 			"dashboard_displayed": False,
 			"ai_review_requested": False,
@@ -4965,6 +5065,28 @@ def run_manual_demo_daily_operator(
 	print("promotions_performed=0")
 	_print_operator_decision_packet(decision_packet)
 	_print_operator_action_ledger(action_ledger)
+	operator_run_record, operator_run_recorded = _append_demo_operator_run_record(
+		storage=storage,
+		symbol=symbol,
+		operator_status=operator_status,
+		system_health=health_result.overall_health,
+		system_blocked=False,
+		monitoring_cycle_status=cycle_status,
+		dashboard_displayed=dashboard_displayed,
+		ai_review_requested=ai_review_requested,
+		ai_review_confirmed=ai_review_requested and confirm_ai_call,
+		ai_calls_made=ai_calls_made,
+		daily_ai_reviews_created=daily_reviews_created,
+		decision_packet=decision_packet,
+		action_ledger=action_ledger,
+	)
+	print()
+	print("Operator Run Record")
+	print("-------------------")
+	print(f"operator_run_recorded={'yes' if operator_run_recorded else 'no'}")
+	print(f"operator_run_id={operator_run_record.run_id}")
+	print("record_storage=local_append_only")
+	print("demo_only=True")
 
 	print()
 	print("Reminder:")
@@ -4979,6 +5101,8 @@ def run_manual_demo_daily_operator(
 		"daily_decision_summary": decision_summary,
 		"operator_decision_packet": decision_packet,
 		"action_ledger": action_ledger,
+		"operator_run_record": operator_run_record,
+		"operator_run_recorded": operator_run_recorded,
 		"monitoring_cycle_status": cycle_status,
 		"dashboard_displayed": dashboard_displayed,
 		"ai_review_requested": ai_review_requested,
@@ -5588,6 +5712,17 @@ def _build_arg_parser():
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
 
+	demo_operator_runs_parser = subparsers.add_parser(
+		"demo-operator-runs",
+		help="Show stored local demo operator run records for one symbol.",
+	)
+	demo_operator_runs_parser.add_argument(
+		"symbol",
+		nargs="?",
+		default=DEFAULT_SYMBOL,
+		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
+	)
+
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
 		help="Preview the next safe research steps for one symbol.",
@@ -5864,6 +5999,10 @@ def main(argv=None):
 
 	if args.mode == "demo-operator-runbook":
 		run_manual_demo_operator_runbook(symbol=args.symbol)
+		return 0
+
+	if args.mode == "demo-operator-runs":
+		run_manual_demo_operator_runs(symbol=args.symbol)
 		return 0
 
 	if args.mode == "research-cycle":

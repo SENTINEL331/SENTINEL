@@ -21,6 +21,7 @@ from research.demo_trade_performance_snapshot import DemoTradePerformanceSnapsho
 from research.demo_trade_evaluation import DemoTradeEvaluation
 from research.demo_hypothesis_performance_summary import DemoHypothesisPerformanceSummary
 from research.demo_daily_ai_review import DemoDailyAIReview
+from research.demo_operator_run_record import DemoOperatorRunRecord
 from research.demo_trade_candidate import DemoTradeCandidate
 from research.demo_trade_candidate import DemoTradeCandidateStatus
 from research.demo_trade_queue import DemoTradeQueueItem
@@ -44,6 +45,104 @@ class Storage:
     def __init__(self):
 
         self.base = Path(__file__).parent / "memory"
+
+    def save_demo_operator_run_record(self, record):
+        """Append one finalized demo operator audit record to local JSONL."""
+
+        path = self.base / "demo_operator_runs.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "run_id": record.run_id,
+            "symbol": record.symbol,
+            "created_at": record.created_at.isoformat(),
+            "operator_status": record.operator_status,
+            "system_health": record.system_health,
+            "system_blocked": record.system_blocked,
+            "monitoring_cycle_status": record.monitoring_cycle_status,
+            "dashboard_displayed": record.dashboard_displayed,
+            "ai_review_requested": record.ai_review_requested,
+            "ai_review_confirmed": record.ai_review_confirmed,
+            "ai_calls_made": record.ai_calls_made,
+            "daily_ai_reviews_created": record.daily_ai_reviews_created,
+            "orders_submitted": record.orders_submitted,
+            "orders_cancelled": record.orders_cancelled,
+            "positions_closed": record.positions_closed,
+            "promotions_performed": record.promotions_performed,
+            "decision": record.decision,
+            "decision_reason": record.decision_reason,
+            "position_state": record.position_state,
+            "demo_trade_state": record.demo_trade_state,
+            "evaluation_state": record.evaluation_state,
+            "evaluation_progress": record.evaluation_progress,
+            "evaluation_days_remaining": record.evaluation_days_remaining,
+            "exit_action": record.exit_action,
+            "new_entry_action": record.new_entry_action,
+            "promotion_action": record.promotion_action,
+            "ai_review_action": record.ai_review_action,
+            "ai_review_suggested_action": record.ai_review_suggested_action,
+            "freshness_state": record.freshness_state,
+            "human_next_step": record.human_next_step,
+            "blocked_actions": record.blocked_actions,
+            "action_ledger": dict(record.action_ledger),
+            "demo_only": record.demo_only,
+        }
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload))
+            f.write("\n")
+        return True
+
+    def load_demo_operator_run_records(self, symbol=None):
+        """Load append-only demo operator audit records, optionally for one symbol."""
+
+        path = self.base / "demo_operator_runs.jsonl"
+        if not path.exists():
+            return []
+        records = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                if symbol is not None and item.get("symbol", "") != symbol:
+                    continue
+                records.append(
+                    DemoOperatorRunRecord(
+                        run_id=item.get("run_id", ""),
+                        symbol=item.get("symbol", ""),
+                        created_at=self._parse_timestamp(item.get("created_at")),
+                        operator_status=item.get("operator_status", "unknown"),
+                        system_health=item.get("system_health", "unknown"),
+                        system_blocked=bool(item.get("system_blocked", False)),
+                        monitoring_cycle_status=item.get("monitoring_cycle_status", "unknown"),
+                        dashboard_displayed=bool(item.get("dashboard_displayed", False)),
+                        ai_review_requested=bool(item.get("ai_review_requested", False)),
+                        ai_review_confirmed=bool(item.get("ai_review_confirmed", False)),
+                        ai_calls_made=int(item.get("ai_calls_made", 0)),
+                        daily_ai_reviews_created=int(item.get("daily_ai_reviews_created", 0)),
+                        orders_submitted=int(item.get("orders_submitted", 0)),
+                        orders_cancelled=int(item.get("orders_cancelled", 0)),
+                        positions_closed=int(item.get("positions_closed", 0)),
+                        promotions_performed=int(item.get("promotions_performed", 0)),
+                        decision=item.get("decision", "unknown"),
+                        decision_reason=item.get("decision_reason", "unknown"),
+                        position_state=item.get("position_state", "unknown"),
+                        demo_trade_state=item.get("demo_trade_state", "unknown"),
+                        evaluation_state=item.get("evaluation_state", "unknown"),
+                        evaluation_progress=item.get("evaluation_progress", "unknown"),
+                        evaluation_days_remaining=item.get("evaluation_days_remaining", "unknown"),
+                        exit_action=item.get("exit_action", "unknown"),
+                        new_entry_action=item.get("new_entry_action", "unknown"),
+                        promotion_action=item.get("promotion_action", "unknown"),
+                        ai_review_action=item.get("ai_review_action", "unknown"),
+                        ai_review_suggested_action=item.get("ai_review_suggested_action", "unknown"),
+                        freshness_state=item.get("freshness_state", "unknown"),
+                        human_next_step=item.get("human_next_step", "unknown"),
+                        blocked_actions=item.get("blocked_actions", ""),
+                        action_ledger=dict(item.get("action_ledger", {})),
+                        demo_only=bool(item.get("demo_only", True)),
+                    )
+                )
+        return records
 
     def save_demo_daily_ai_review(self, review):
         """Append one daily demo AI review, suppressing exact fingerprint duplicates."""

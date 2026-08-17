@@ -8,6 +8,7 @@ from research.runner import (
     _operator_action_ledger,
     _operator_decision_packet,
     run_manual_demo_daily_operator,
+    run_manual_demo_operator_runs,
 )
 
 
@@ -226,6 +227,65 @@ class DemoDailyOperatorTests(unittest.TestCase):
         printed_messages = [call.args[0] for call in mock_print.call_args_list if call.args]
         self.assertNotIn("Latest AI Review After Operator", printed_messages)
 
+    def test_daily_operator_appends_finalized_demo_only_run_record(self):
+        storage = Mock()
+        storage.save_demo_operator_run_record.return_value = True
+        with patch("builtins.print") as mock_print:
+            result = run_manual_demo_daily_operator(
+                symbol="NVDA",
+                storage=storage,
+                monitoring_cycle_fn=Mock(return_value=self._successful_cycle()),
+                status_dashboard_fn=Mock(return_value=self._successful_dashboard()),
+                health_fn=Mock(return_value=_healthy_system_health()),
+            )
+
+        storage.save_demo_operator_run_record.assert_called_once()
+        record = storage.save_demo_operator_run_record.call_args.args[0]
+        self.assertTrue(record.demo_only)
+        self.assertEqual("not_requested", record.ai_review_action)
+        self.assertEqual("request_fresh_ai_review", record.decision)
+        self.assertEqual("positive_open", record.demo_trade_state)
+        self.assertEqual("complete", record.action_ledger["ledger_status"])
+        self.assertEqual("blocked_by_demo_operator_policy", record.action_ledger["orders"])
+        self.assertTrue(result["operator_run_recorded"])
+        mock_print.assert_any_call("Operator Run Record")
+        mock_print.assert_any_call("operator_run_recorded=yes")
+        mock_print.assert_any_call("record_storage=local_append_only")
+        mock_print.assert_any_call("demo_only=True")
+
+    def test_operator_runs_is_read_only_and_prints_recent_records(self):
+        record = SimpleNamespace(
+            run_id="dor-NVDA-001",
+            created_at=datetime(2026, 8, 17, tzinfo=timezone.utc),
+            decision="continue_monitoring",
+            decision_reason="monitoring_state_requires_no_action",
+            operator_status="completed",
+            ai_review_action="not_requested",
+            ai_calls_made=0,
+            orders_submitted=0,
+            orders_cancelled=0,
+            positions_closed=0,
+            promotions_performed=0,
+            human_next_step="run_again_next_trading_day",
+        )
+        storage = Mock()
+        storage.load_demo_operator_run_records.return_value = [record]
+        with patch("builtins.print") as mock_print, patch("urllib.request.urlopen") as mock_urlopen:
+            result = run_manual_demo_operator_runs(symbol="NVDA", storage=storage)
+
+        self.assertEqual([record], result)
+        storage.load_demo_operator_run_records.assert_called_once_with(symbol="NVDA")
+        mock_urlopen.assert_not_called()
+        self.assertTrue(all(call[0].startswith("load_") for call in storage.method_calls))
+        mock_print.assert_any_call("Manual Demo Operator Runs: NVDA")
+        mock_print.assert_any_call("Records Modified : no")
+        mock_print.assert_any_call("AI Calls Allowed : no")
+        mock_print.assert_any_call("Broker Calls Allowed : no")
+        mock_print.assert_any_call("Market Data Calls Allowed : no")
+        mock_print.assert_any_call("- operator_run_id=dor-NVDA-001")
+        mock_print.assert_any_call("runs_loaded=1")
+        mock_print.assert_any_call("latest_decision=continue_monitoring")
+
     def test_ai_review_without_confirmation_delegates_without_ai_call(self):
         ai_review = Mock(
             return_value={
@@ -254,6 +314,10 @@ class DemoDailyOperatorTests(unittest.TestCase):
         )
         self.assertEqual("completed_with_warnings", result["operator_status"])
         self.assertEqual(0, result["ai_calls_made"])
+        self.assertEqual(
+            "confirmation_required", result["operator_run_record"].ai_review_action
+        )
+        self.assertEqual(0, result["operator_run_record"].ai_calls_made)
         mock_print.assert_any_call("ai_review_requested=yes")
         mock_print.assert_any_call("ai_review_confirmed=no")
         mock_print.assert_any_call("ai_calls_made=0")
@@ -303,6 +367,9 @@ class DemoDailyOperatorTests(unittest.TestCase):
         self.assertEqual("completed", result["operator_status"])
         self.assertEqual(0, result["ai_calls_made"])
         self.assertEqual(1, result["skipped_existing"])
+        self.assertEqual(
+            "duplicate_latest_state", result["operator_run_record"].ai_review_action
+        )
         mock_print.assert_any_call("ai_review_confirmed=yes")
         mock_print.assert_any_call("skipped_existing=1")
         mock_print.assert_any_call("ai_review_action=duplicate_latest_state")
@@ -342,6 +409,8 @@ class DemoDailyOperatorTests(unittest.TestCase):
             )
 
         self.assertEqual(1, result["daily_reviews_created"])
+        self.assertEqual("reviewed", result["operator_run_record"].ai_review_action)
+        self.assertEqual(1, result["operator_run_record"].ai_calls_made)
         mock_print.assert_any_call("ai_review_action=reviewed")
         mock_print.assert_any_call("ai_review=reviewed")
         mock_print.assert_any_call("Latest AI Review After Operator")
