@@ -4826,7 +4826,61 @@ def _print_demo_operator_latest_brief(*, symbol, record):
 	print(f"safety_verdict={safety['safety_verdict']}")
 	print(f"run_safety={safety['history_health']}")
 	print(f"demo_only={safety['latest_run_demo_only']}")
+	freshness = _operator_run_freshness(record)
+	print()
+	print("Latest Run Freshness")
+	print("--------------------")
+	for name in (
+		"latest_run_created_at",
+		"latest_run_age_hours",
+		"latest_run_freshness",
+		"latest_run_freshness_reason",
+	):
+		print(f"{name}={freshness[name]}")
 	return record
+
+
+def _operator_run_freshness(record):
+	"""Classify the age of one stored operator run using UTC wall time."""
+
+	if record is None:
+		return {
+			"latest_run_created_at": "unknown",
+			"latest_run_age_hours": "unknown",
+			"latest_run_freshness": "unknown",
+			"latest_run_freshness_reason": "no_operator_run_record",
+		}
+	created_at = getattr(record, "created_at", None)
+	if isinstance(created_at, str):
+		try:
+			created_at = datetime.fromisoformat(created_at)
+		except ValueError:
+			created_at = None
+	if (
+		not isinstance(created_at, datetime)
+		or created_at.tzinfo is None
+		or created_at.utcoffset() is None
+	):
+		return {
+			"latest_run_created_at": "unknown",
+			"latest_run_age_hours": "unknown",
+			"latest_run_freshness": "unknown",
+			"latest_run_freshness_reason": "latest_operator_run_timestamp_missing_or_invalid",
+		}
+	created_at = created_at.astimezone(timezone.utc)
+	age_hours = round(max((datetime.now(timezone.utc) - created_at).total_seconds() / 3600, 0.0), 2)
+	if age_hours <= 24:
+		freshness = "fresh"
+		reason = "latest_operator_run_within_24_hours"
+	else:
+		freshness = "stale"
+		reason = "latest_operator_run_older_than_24_hours"
+	return {
+		"latest_run_created_at": created_at.isoformat(),
+		"latest_run_age_hours": age_hours,
+		"latest_run_freshness": freshness,
+		"latest_run_freshness_reason": reason,
+	}
 
 
 def _print_demo_operator_run_detail(*, symbol, record):

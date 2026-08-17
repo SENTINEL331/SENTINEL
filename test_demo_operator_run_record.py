@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -10,6 +10,7 @@ from research.demo_operator_run_record import new_demo_operator_run_record
 from research.runner import (
     _filter_demo_operator_run_records,
 		_operator_run_decision_trend,
+        _operator_run_freshness,
     _operator_run_history_metrics,
 		_print_demo_operator_run_detail,
         _print_demo_operator_latest_brief,
@@ -435,6 +436,32 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
         mock_print.assert_any_call("Latest Safety")
         mock_print.assert_any_call("run_safety=clean")
         mock_print.assert_any_call("safety_verdict=no_operator_safety_violations")
+        mock_print.assert_any_call("Latest Run Freshness")
+        mock_print.assert_any_call("latest_run_freshness=fresh")
+        mock_print.assert_any_call(
+            "latest_run_freshness_reason=latest_operator_run_within_24_hours"
+        )
+
+    def test_latest_run_freshness_handles_fresh_stale_missing_and_empty_safely(self):
+        now = datetime.now(timezone.utc)
+        fresh = _operator_run_freshness(
+            SimpleNamespace(created_at=now - timedelta(hours=1))
+        )
+        stale = _operator_run_freshness(
+            SimpleNamespace(created_at=now - timedelta(hours=25))
+        )
+        missing = _operator_run_freshness(SimpleNamespace(created_at="not-a-timestamp"))
+        empty = _operator_run_freshness(None)
+
+        self.assertEqual("fresh", fresh["latest_run_freshness"])
+        self.assertEqual("stale", stale["latest_run_freshness"])
+        self.assertEqual("unknown", missing["latest_run_freshness"])
+        self.assertEqual(
+            "latest_operator_run_timestamp_missing_or_invalid",
+            missing["latest_run_freshness_reason"],
+        )
+        self.assertEqual("unknown", empty["latest_run_freshness"])
+        self.assertEqual("no_operator_run_record", empty["latest_run_freshness_reason"])
 
     def test_latest_brief_loads_newest_record_and_handles_empty_history_read_only(self):
         older = SimpleNamespace(run_id="dor-old", created_at=datetime(2026, 8, 17, 11, tzinfo=timezone.utc))
@@ -462,6 +489,7 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
         mock_urlopen.assert_not_called()
         mock_print.assert_any_call("operator_run_id=dor-new")
         mock_print.assert_any_call("No operator runs found.")
+        mock_print.assert_any_call("Records Modified : no")
 
 
 if __name__ == "__main__":
