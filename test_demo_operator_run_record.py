@@ -3,11 +3,13 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from ai.storage import Storage
 from research.demo_operator_run_record import new_demo_operator_run_record
 from research.runner import (
     _filter_demo_operator_run_records,
+		_operator_run_decision_trend,
     _operator_run_history_metrics,
 		_print_demo_operator_run_detail,
 		run_manual_demo_operator_runs,
@@ -234,6 +236,67 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
         self.assertEqual([], invalid_limit)
         self.assertEqual("unknown", _operator_run_history_metrics(unknown)["history_health"])
 
+    def test_decision_trend_is_stable_for_matching_recent_records(self):
+        records = [
+            SimpleNamespace(
+                decision="continue_monitoring",
+                ai_review_action="reviewed",
+                human_next_step="run_again_next_trading_day",
+                operator_status="completed",
+                created_at=datetime(2026, 8, 17, 12, tzinfo=timezone.utc),
+            ),
+            SimpleNamespace(
+                decision="continue_monitoring",
+                ai_review_action="reviewed",
+                human_next_step="run_again_next_trading_day",
+                operator_status="completed",
+                created_at=datetime(2026, 8, 17, 11, tzinfo=timezone.utc),
+            ),
+        ]
+
+        trend = _operator_run_decision_trend(records)
+
+        self.assertEqual(2, trend["trend_records"])
+        self.assertEqual("no", trend["decision_changed"])
+        self.assertEqual("no", trend["ai_review_action_changed"])
+        self.assertEqual("stable", trend["trend_summary"])
+
+    def test_decision_trend_reports_changed_fields_and_filtered_history(self):
+        records = [
+            SimpleNamespace(
+                decision="request_fresh_ai_review",
+                ai_review_action="reviewed",
+                human_next_step="optionally_run_confirmed_ai_review",
+                operator_status="completed",
+                created_at=datetime(2026, 8, 17, 12, tzinfo=timezone.utc),
+            ),
+            SimpleNamespace(
+                decision="continue_monitoring",
+                ai_review_action="not_requested",
+                human_next_step="run_again_next_trading_day",
+                operator_status="completed",
+                created_at=datetime(2026, 8, 17, 11, tzinfo=timezone.utc),
+            ),
+            SimpleNamespace(
+                decision="continue_monitoring",
+                ai_review_action="not_requested",
+                human_next_step="run_again_next_trading_day",
+                operator_status="completed",
+                created_at=datetime(2026, 8, 17, 10, tzinfo=timezone.utc),
+            ),
+        ]
+
+        changed = _operator_run_decision_trend(records)
+        limited = _operator_run_decision_trend(
+            _filter_demo_operator_run_records(records=records, limit=1)
+        )
+
+        self.assertEqual("yes", changed["decision_changed"])
+        self.assertEqual("yes", changed["ai_review_action_changed"])
+        self.assertEqual("changed", changed["trend_summary"])
+        self.assertEqual("insufficient_history", limited["trend_summary"])
+        self.assertEqual("unknown", limited["decision_changed"])
+
     def test_run_detail_renders_full_audit_record(self):
         record = SimpleNamespace(
             run_id="dor-detail",
@@ -270,7 +333,7 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
             action_ledger={"monitoring": "performed", "ledger_status": "complete"},
             demo_only=True,
         )
-        with unittest.mock.patch("builtins.print") as mock_print:
+        with patch("builtins.print") as mock_print:
             result = _print_demo_operator_run_detail(symbol="NVDA", record=record)
 
         self.assertIs(record, result)
@@ -284,7 +347,7 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
         mock_print.assert_any_call("run_safety=clean")
 
     def test_run_detail_missing_record_returns_safely(self):
-        with unittest.mock.patch("builtins.print") as mock_print:
+        with patch("builtins.print") as mock_print:
             result = _print_demo_operator_run_detail(symbol="NVDA", record=None)
 
         self.assertIsNone(result)
@@ -304,9 +367,9 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
             promotions_performed=0,
             action_ledger={},
         )
-        storage = unittest.mock.Mock()
+        storage = Mock()
         storage.load_demo_operator_run_records.return_value = [record]
-        with unittest.mock.patch("builtins.print") as mock_print, unittest.mock.patch(
+        with patch("builtins.print") as mock_print, patch(
             "urllib.request.urlopen"
         ) as mock_urlopen:
             matched = run_manual_demo_operator_runs(

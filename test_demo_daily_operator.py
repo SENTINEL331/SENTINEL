@@ -314,6 +314,12 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("latest_run_decision=continue_monitoring")
         mock_print.assert_any_call("latest_run_human_next_step=run_again_next_trading_day")
         mock_print.assert_any_call("safety_verdict=operator_safety_warning")
+        mock_print.assert_any_call("Decision Trend")
+        mock_print.assert_any_call("trend_records=1")
+        mock_print.assert_any_call("latest_decision=continue_monitoring")
+        mock_print.assert_any_call("previous_decision=unknown")
+        mock_print.assert_any_call("decision_changed=unknown")
+        mock_print.assert_any_call("trend_summary=insufficient_history")
 
     def test_ai_review_without_confirmation_delegates_without_ai_call(self):
         ai_review = Mock(

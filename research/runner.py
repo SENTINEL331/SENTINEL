@@ -4711,6 +4711,29 @@ def run_manual_demo_operator_runs(
 		"safety_verdict",
 	):
 		print(f"{name}={metrics[name]}")
+	trend = _operator_run_decision_trend(records)
+	print()
+	print("Decision Trend")
+	print("--------------")
+	for name in (
+		"trend_records",
+		"latest_decision",
+		"previous_decision",
+		"decision_changed",
+		"latest_ai_review_action",
+		"previous_ai_review_action",
+		"ai_review_action_changed",
+		"latest_human_next_step",
+		"previous_human_next_step",
+		"human_next_step_changed",
+		"latest_operator_status",
+		"previous_operator_status",
+		"operator_status_changed",
+		"latest_run_created_at",
+		"previous_run_created_at",
+		"trend_summary",
+	):
+		print(f"{name}={trend[name]}")
 	return records
 
 
@@ -4855,6 +4878,102 @@ def _filter_demo_operator_run_records(*, records, limit=None, decision=None,
 			return []
 		filtered = filtered[:limit]
 	return filtered
+
+
+def _operator_run_decision_trend(records):
+	"""Compare the two newest already-filtered local operator runs."""
+
+	def _created_at(record):
+		value = getattr(record, "created_at", None)
+		return value.isoformat() if hasattr(value, "isoformat") else "unknown"
+
+	if not records:
+		return {
+			"trend_records": 0,
+			"latest_decision": "unknown",
+			"previous_decision": "unknown",
+			"decision_changed": "unknown",
+			"latest_ai_review_action": "unknown",
+			"previous_ai_review_action": "unknown",
+			"ai_review_action_changed": "unknown",
+			"latest_human_next_step": "unknown",
+			"previous_human_next_step": "unknown",
+			"human_next_step_changed": "unknown",
+			"latest_operator_status": "unknown",
+			"previous_operator_status": "unknown",
+			"operator_status_changed": "unknown",
+			"latest_run_created_at": "unknown",
+			"previous_run_created_at": "unknown",
+			"trend_summary": "insufficient_history",
+		}
+
+	latest = records[0]
+	latest_values = {
+		"decision": getattr(latest, "decision", "unknown"),
+		"ai_review_action": getattr(latest, "ai_review_action", "unknown"),
+		"human_next_step": getattr(latest, "human_next_step", "unknown"),
+		"operator_status": getattr(latest, "operator_status", "unknown"),
+	}
+	if len(records) < 2:
+		return {
+			"trend_records": len(records),
+			"latest_decision": latest_values["decision"],
+			"previous_decision": "unknown",
+			"decision_changed": "unknown",
+			"latest_ai_review_action": latest_values["ai_review_action"],
+			"previous_ai_review_action": "unknown",
+			"ai_review_action_changed": "unknown",
+			"latest_human_next_step": latest_values["human_next_step"],
+			"previous_human_next_step": "unknown",
+			"human_next_step_changed": "unknown",
+			"latest_operator_status": latest_values["operator_status"],
+			"previous_operator_status": "unknown",
+			"operator_status_changed": "unknown",
+			"latest_run_created_at": _created_at(latest),
+			"previous_run_created_at": "unknown",
+			"trend_summary": "insufficient_history",
+		}
+
+	previous = records[1]
+	previous_values = {
+		"decision": getattr(previous, "decision", "unknown"),
+		"ai_review_action": getattr(previous, "ai_review_action", "unknown"),
+		"human_next_step": getattr(previous, "human_next_step", "unknown"),
+		"operator_status": getattr(previous, "operator_status", "unknown"),
+	}
+	latest_created_at = _created_at(latest)
+	previous_created_at = _created_at(previous)
+	values_are_known = all(
+		value != "unknown" for value in (*latest_values.values(), *previous_values.values())
+	) and latest_created_at != "unknown" and previous_created_at != "unknown"
+	if not values_are_known:
+		changed_values = {name: "unknown" for name in latest_values}
+		trend_summary = "unknown"
+	else:
+		changed_values = {
+			name: "yes" if latest_values[name] != previous_values[name] else "no"
+			for name in latest_values
+		}
+		trend_summary = "changed" if "yes" in changed_values.values() else "stable"
+
+	return {
+		"trend_records": len(records),
+		"latest_decision": latest_values["decision"],
+		"previous_decision": previous_values["decision"],
+		"decision_changed": changed_values["decision"],
+		"latest_ai_review_action": latest_values["ai_review_action"],
+		"previous_ai_review_action": previous_values["ai_review_action"],
+		"ai_review_action_changed": changed_values["ai_review_action"],
+		"latest_human_next_step": latest_values["human_next_step"],
+		"previous_human_next_step": previous_values["human_next_step"],
+		"human_next_step_changed": changed_values["human_next_step"],
+		"latest_operator_status": latest_values["operator_status"],
+		"previous_operator_status": previous_values["operator_status"],
+		"operator_status_changed": changed_values["operator_status"],
+		"latest_run_created_at": latest_created_at,
+		"previous_run_created_at": previous_created_at,
+		"trend_summary": trend_summary,
+	}
 
 
 def _operator_run_history_metrics(records):
