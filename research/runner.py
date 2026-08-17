@@ -4593,7 +4593,14 @@ def _append_demo_operator_run_record(*, storage, symbol, operator_status, system
 	return record, bool(saver(record)) if callable(saver) else False
 
 
-def run_manual_demo_operator_runs(symbol=DEFAULT_SYMBOL, storage=None):
+def run_manual_demo_operator_runs(
+	symbol=DEFAULT_SYMBOL,
+	storage=None,
+	limit=None,
+	decision=None,
+	ai_review_action=None,
+	status=None,
+):
 	"""Show stored demo operator audit records without calls or mutations."""
 
 	storage = storage or Storage()
@@ -4602,6 +4609,13 @@ def run_manual_demo_operator_runs(symbol=DEFAULT_SYMBOL, storage=None):
 	records.sort(
 		key=lambda record: getattr(record, "created_at", datetime.min.replace(tzinfo=timezone.utc)),
 		reverse=True,
+	)
+	records = _filter_demo_operator_run_records(
+		records=records,
+		limit=limit,
+		decision=decision,
+		ai_review_action=ai_review_action,
+		status=status,
 	)
 
 	print()
@@ -4616,6 +4630,14 @@ def run_manual_demo_operator_runs(symbol=DEFAULT_SYMBOL, storage=None):
 	print("Position Close Allowed : no")
 	print("Live Mode Allowed : no")
 	print("Promotion Actions Taken : 0")
+	print()
+	print("Filters")
+	print("-------")
+	print(f"limit={limit if limit is not None else 'none'}")
+	print(f"decision={decision if decision else 'none'}")
+	print(f"ai_review_action={ai_review_action if ai_review_action else 'none'}")
+	print(f"status={status if status else 'none'}")
+	print(f"records_after_filters={len(records)}")
 	print()
 	print("Recent Operator Runs")
 	print("--------------------")
@@ -4683,6 +4705,36 @@ def run_manual_demo_operator_runs(symbol=DEFAULT_SYMBOL, storage=None):
 	):
 		print(f"{name}={metrics[name]}")
 	return records
+
+
+def _filter_demo_operator_run_records(*, records, limit=None, decision=None,
+									ai_review_action=None, status=None):
+	"""Select already-loaded operator records for read-only display and metrics."""
+
+	filtered = list(records)
+	if decision:
+		filtered = [record for record in filtered if getattr(record, "decision", None) == decision]
+	if ai_review_action:
+		filtered = [
+			record
+			for record in filtered
+			if getattr(record, "ai_review_action", None) == ai_review_action
+		]
+	if status:
+		filtered = [
+			record
+			for record in filtered
+			if getattr(record, "operator_status", None) == status
+		]
+	if limit is not None:
+		try:
+			limit = int(limit)
+		except (TypeError, ValueError):
+			return []
+		if limit <= 0:
+			return []
+		filtered = filtered[:limit]
+	return filtered
 
 
 def _operator_run_history_metrics(records):
@@ -5909,6 +5961,23 @@ def _build_arg_parser():
 		default=DEFAULT_SYMBOL,
 		help=f"Symbol to process (default: {DEFAULT_SYMBOL}).",
 	)
+	demo_operator_runs_parser.add_argument(
+		"--limit",
+		type=int,
+		help="Maximum number of newest matching operator runs to display.",
+	)
+	demo_operator_runs_parser.add_argument(
+		"--decision",
+		help="Filter local operator runs by final decision.",
+	)
+	demo_operator_runs_parser.add_argument(
+		"--ai-review-action",
+		help="Filter local operator runs by AI review action.",
+	)
+	demo_operator_runs_parser.add_argument(
+		"--status",
+		help="Filter local operator runs by operator status.",
+	)
 
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
@@ -6189,7 +6258,13 @@ def main(argv=None):
 		return 0
 
 	if args.mode == "demo-operator-runs":
-		run_manual_demo_operator_runs(symbol=args.symbol)
+		run_manual_demo_operator_runs(
+			symbol=args.symbol,
+			limit=args.limit,
+			decision=args.decision,
+			ai_review_action=args.ai_review_action,
+			status=args.status,
+		)
 		return 0
 
 	if args.mode == "research-cycle":

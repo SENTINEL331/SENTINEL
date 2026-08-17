@@ -18,6 +18,27 @@ class DemoOperatorRunbookTests(unittest.TestCase):
     def test_cli_help_includes_operator_run_history(self):
         self.assertIn("demo-operator-runs", _build_arg_parser().format_help())
 
+    def test_operator_run_history_parser_accepts_filters(self):
+        args = _build_arg_parser().parse_args(
+            [
+                "demo-operator-runs",
+                "NVDA",
+                "--limit",
+                "5",
+                "--decision",
+                "request_fresh_ai_review",
+                "--ai-review-action",
+                "reviewed",
+                "--status",
+                "completed",
+            ]
+        )
+
+        self.assertEqual(5, args.limit)
+        self.assertEqual("request_fresh_ai_review", args.decision)
+        self.assertEqual("reviewed", args.ai_review_action)
+        self.assertEqual("completed", args.status)
+
     def test_prints_commands_safety_notes_and_read_only_contract(self):
         buffer = io.StringIO()
         with redirect_stdout(buffer):
@@ -62,7 +83,13 @@ class DemoOperatorRunbookTests(unittest.TestCase):
             exit_code = main(["demo-operator-runs", "NVDA"])
 
         self.assertEqual(0, exit_code)
-        mock_runs.assert_called_once_with(symbol="NVDA")
+        mock_runs.assert_called_once_with(
+            symbol="NVDA",
+            limit=None,
+            decision=None,
+            ai_review_action=None,
+            status=None,
+        )
         mock_operator.assert_not_called()
 
     def test_makes_no_http_calls(self):

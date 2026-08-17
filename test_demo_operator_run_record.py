@@ -6,7 +6,10 @@ from types import SimpleNamespace
 
 from ai.storage import Storage
 from research.demo_operator_run_record import new_demo_operator_run_record
-from research.runner import _operator_run_history_metrics
+from research.runner import (
+    _filter_demo_operator_run_records,
+    _operator_run_history_metrics,
+)
 
 
 def _packet():
@@ -171,6 +174,63 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
         self.assertEqual("unknown", unknown["history_health"])
         self.assertEqual(0, unknown["records_checked"])
         self.assertEqual("unknown", unknown["safety_verdict"])
+
+    def test_filters_apply_before_display_and_summary_metrics(self):
+        records = [
+            SimpleNamespace(
+                run_id="newest",
+                decision="continue_monitoring",
+                ai_review_action="reviewed",
+                operator_status="completed",
+            ),
+            SimpleNamespace(
+                run_id="middle",
+                decision="request_fresh_ai_review",
+                ai_review_action="confirmation_required",
+                operator_status="completed_with_warnings",
+            ),
+            SimpleNamespace(
+                run_id="oldest",
+                decision="request_fresh_ai_review",
+                ai_review_action="not_requested",
+                operator_status="completed",
+            ),
+        ]
+
+        limited = _filter_demo_operator_run_records(records=records, limit=2)
+        by_decision = _filter_demo_operator_run_records(
+            records=records, decision="request_fresh_ai_review"
+        )
+        by_ai_review = _filter_demo_operator_run_records(
+            records=records, ai_review_action="reviewed"
+        )
+        by_status = _filter_demo_operator_run_records(
+            records=records, status="completed_with_warnings"
+        )
+        combined = _filter_demo_operator_run_records(
+            records=records,
+            decision="request_fresh_ai_review",
+            ai_review_action="confirmation_required",
+            status="completed_with_warnings",
+            limit=1,
+        )
+
+        self.assertEqual(["newest", "middle"], [record.run_id for record in limited])
+        self.assertEqual(["middle", "oldest"], [record.run_id for record in by_decision])
+        self.assertEqual(["newest"], [record.run_id for record in by_ai_review])
+        self.assertEqual(["middle"], [record.run_id for record in by_status])
+        self.assertEqual(["middle"], [record.run_id for record in combined])
+        self.assertEqual(1, _operator_run_history_metrics(combined)["runs_loaded"])
+
+    def test_unknown_filters_and_nonpositive_limit_return_empty_history(self):
+        records = [SimpleNamespace(run_id="only", decision="continue_monitoring")]
+
+        unknown = _filter_demo_operator_run_records(records=records, decision="unknown")
+        invalid_limit = _filter_demo_operator_run_records(records=records, limit=0)
+
+        self.assertEqual([], unknown)
+        self.assertEqual([], invalid_limit)
+        self.assertEqual("unknown", _operator_run_history_metrics(unknown)["history_health"])
 
 
 if __name__ == "__main__":
