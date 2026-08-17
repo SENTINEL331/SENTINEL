@@ -4600,6 +4600,7 @@ def run_manual_demo_operator_runs(
 	decision=None,
 	ai_review_action=None,
 	status=None,
+	run_id=None,
 ):
 	"""Show stored demo operator audit records without calls or mutations."""
 
@@ -4610,6 +4611,12 @@ def run_manual_demo_operator_runs(
 		key=lambda record: getattr(record, "created_at", datetime.min.replace(tzinfo=timezone.utc)),
 		reverse=True,
 	)
+	if run_id:
+		matching_record = next(
+			(record for record in records if getattr(record, "run_id", None) == run_id),
+			None,
+		)
+		return _print_demo_operator_run_detail(symbol=symbol, record=matching_record)
 	records = _filter_demo_operator_run_records(
 		records=records,
 		limit=limit,
@@ -4705,6 +4712,119 @@ def run_manual_demo_operator_runs(
 	):
 		print(f"{name}={metrics[name]}")
 	return records
+
+
+def _print_demo_operator_run_detail(*, symbol, record):
+	"""Render one stored operator audit record without mutating or fetching state."""
+
+	def _value(name, default="unknown"):
+		return getattr(record, name, default) if record is not None else default
+
+	print()
+	print(f"Manual Demo Operator Run Detail: {symbol}")
+	print()
+	print("Records Modified : no")
+	print("AI Calls Allowed : no")
+	print("Broker Calls Allowed : no")
+	print("Market Data Calls Allowed : no")
+	print("Order Placement Allowed : no")
+	print("Order Cancellation Allowed : no")
+	print("Position Close Allowed : no")
+	print("Live Mode Allowed : no")
+	print("Promotion Actions Taken : 0")
+	if record is None:
+		print()
+		print("No matching operator run found.")
+		return None
+
+	created_at = _value("created_at", None)
+	created_at = created_at.isoformat() if hasattr(created_at, "isoformat") else "unknown"
+	print()
+	print("Run Identity")
+	print("------------")
+	print(f"operator_run_id={_value('run_id')}")
+	print(f"created_at={created_at}")
+	print(f"symbol={_value('symbol', symbol)}")
+	print(f"demo_only={_value('demo_only')}")
+	print()
+	print("Operator Summary")
+	print("----------------")
+	for name in (
+		"operator_status",
+		"system_health",
+		"system_blocked",
+		"monitoring_cycle_status",
+		"dashboard_displayed",
+		"ai_review_requested",
+		"ai_review_confirmed",
+		"ai_calls_made",
+		"daily_ai_reviews_created",
+		"orders_submitted",
+		"orders_cancelled",
+		"positions_closed",
+		"promotions_performed",
+	):
+		print(f"{name}={_value(name)}")
+	print()
+	print("Decision Packet")
+	print("---------------")
+	for name in (
+		"decision",
+		"decision_reason",
+		"position_state",
+		"demo_trade_state",
+		"evaluation_state",
+		"evaluation_progress",
+		"evaluation_days_remaining",
+		"exit_action",
+		"new_entry_action",
+		"promotion_action",
+		"ai_review_action",
+		"ai_review_suggested_action",
+		"freshness_state",
+		"human_next_step",
+		"blocked_actions",
+	):
+		print(f"{name}={_value(name)}")
+	print()
+	print("Action Ledger")
+	print("-------------")
+	ledger = _value("action_ledger", {})
+	ledger = ledger if isinstance(ledger, dict) else {}
+	for name in (
+		"monitoring",
+		"monitoring_reason",
+		"ai_review",
+		"ai_review_reason",
+		"exit",
+		"exit_reason",
+		"new_entry",
+		"new_entry_reason",
+		"promotion",
+		"promotion_reason",
+		"orders",
+		"orders_reason",
+		"cancellations",
+		"cancellations_reason",
+		"position_closes",
+		"position_closes_reason",
+		"live_trading",
+		"live_trading_reason",
+		"ledger_status",
+	):
+		print(f"{name}={ledger.get(name, 'unknown')}")
+	safety = _operator_run_history_metrics([record])
+	print()
+	print("Safety Verdict")
+	print("--------------")
+	print(f"run_safety={safety['history_health']}")
+	print(f"run_safety_reason={safety['history_health_reason']}")
+	print(f"demo_only={safety['latest_run_demo_only']}")
+	print(f"orders_submitted={_value('orders_submitted')}")
+	print(f"orders_cancelled={_value('orders_cancelled')}")
+	print(f"positions_closed={_value('positions_closed')}")
+	print(f"promotions_performed={_value('promotions_performed')}")
+	return record
 
 
 def _filter_demo_operator_run_records(*, records, limit=None, decision=None,
@@ -5978,6 +6098,10 @@ def _build_arg_parser():
 		"--status",
 		help="Filter local operator runs by operator status.",
 	)
+	demo_operator_runs_parser.add_argument(
+		"--run-id",
+		help="Show one matching local operator run record in detail.",
+	)
 
 	research_cycle_parser = subparsers.add_parser(
 		"research-cycle",
@@ -6264,6 +6388,7 @@ def main(argv=None):
 			decision=args.decision,
 			ai_review_action=args.ai_review_action,
 			status=args.status,
+			run_id=args.run_id,
 		)
 		return 0
 

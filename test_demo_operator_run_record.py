@@ -9,6 +9,8 @@ from research.demo_operator_run_record import new_demo_operator_run_record
 from research.runner import (
     _filter_demo_operator_run_records,
     _operator_run_history_metrics,
+		_print_demo_operator_run_detail,
+		run_manual_demo_operator_runs,
 )
 
 
@@ -231,6 +233,97 @@ class DemoOperatorRunRecordStorageTests(unittest.TestCase):
         self.assertEqual([], unknown)
         self.assertEqual([], invalid_limit)
         self.assertEqual("unknown", _operator_run_history_metrics(unknown)["history_health"])
+
+    def test_run_detail_renders_full_audit_record(self):
+        record = SimpleNamespace(
+            run_id="dor-detail",
+            symbol="NVDA",
+            created_at=datetime(2026, 8, 17, tzinfo=timezone.utc),
+            operator_status="completed",
+            system_health="healthy",
+            system_blocked=False,
+            monitoring_cycle_status="completed",
+            dashboard_displayed=True,
+            ai_review_requested=False,
+            ai_review_confirmed=False,
+            ai_calls_made=0,
+            daily_ai_reviews_created=0,
+            orders_submitted=0,
+            orders_cancelled=0,
+            positions_closed=0,
+            promotions_performed=0,
+            decision="continue_monitoring",
+            decision_reason="monitoring_state_requires_no_action",
+            position_state="open_demo_position",
+            demo_trade_state="positive_open",
+            evaluation_state="incomplete",
+            evaluation_progress="2/5 trading_days",
+            evaluation_days_remaining=3,
+            exit_action="continue_monitoring",
+            new_entry_action="no_new_entry",
+            promotion_action="no_promotion",
+            ai_review_action="not_requested",
+            ai_review_suggested_action="none",
+            freshness_state="fresh",
+            human_next_step="run_again_next_trading_day",
+            blocked_actions="orders,cancellations,position_closes,promotions,live_trading",
+            action_ledger={"monitoring": "performed", "ledger_status": "complete"},
+            demo_only=True,
+        )
+        with unittest.mock.patch("builtins.print") as mock_print:
+            result = _print_demo_operator_run_detail(symbol="NVDA", record=record)
+
+        self.assertIs(record, result)
+        mock_print.assert_any_call("Manual Demo Operator Run Detail: NVDA")
+        mock_print.assert_any_call("Run Identity")
+        mock_print.assert_any_call("operator_run_id=dor-detail")
+        mock_print.assert_any_call("Operator Summary")
+        mock_print.assert_any_call("Decision Packet")
+        mock_print.assert_any_call("Action Ledger")
+        mock_print.assert_any_call("Safety Verdict")
+        mock_print.assert_any_call("run_safety=clean")
+
+    def test_run_detail_missing_record_returns_safely(self):
+        with unittest.mock.patch("builtins.print") as mock_print:
+            result = _print_demo_operator_run_detail(symbol="NVDA", record=None)
+
+        self.assertIsNone(result)
+        mock_print.assert_any_call("Records Modified : no")
+        mock_print.assert_any_call("AI Calls Allowed : no")
+        mock_print.assert_any_call("No matching operator run found.")
+
+    def test_run_detail_mode_loads_locally_for_match_and_missing_id(self):
+        record = SimpleNamespace(
+            run_id="dor-match",
+            created_at=datetime(2026, 8, 17, tzinfo=timezone.utc),
+            symbol="NVDA",
+            demo_only=True,
+            orders_submitted=0,
+            orders_cancelled=0,
+            positions_closed=0,
+            promotions_performed=0,
+            action_ledger={},
+        )
+        storage = unittest.mock.Mock()
+        storage.load_demo_operator_run_records.return_value = [record]
+        with unittest.mock.patch("builtins.print") as mock_print, unittest.mock.patch(
+            "urllib.request.urlopen"
+        ) as mock_urlopen:
+            matched = run_manual_demo_operator_runs(
+                symbol="NVDA", storage=storage, run_id="dor-match"
+            )
+            missing = run_manual_demo_operator_runs(
+                symbol="NVDA", storage=storage, run_id="dor-missing"
+            )
+
+        self.assertIs(record, matched)
+        self.assertIsNone(missing)
+        self.assertEqual(2, storage.load_demo_operator_run_records.call_count)
+        self.assertTrue(all(call[0].startswith("load_") for call in storage.method_calls))
+        mock_urlopen.assert_not_called()
+        mock_print.assert_any_call("Manual Demo Operator Run Detail: NVDA")
+        mock_print.assert_any_call("operator_run_id=dor-match")
+        mock_print.assert_any_call("No matching operator run found.")
 
 
 if __name__ == "__main__":

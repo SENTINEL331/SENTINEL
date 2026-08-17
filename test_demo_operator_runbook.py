@@ -39,6 +39,13 @@ class DemoOperatorRunbookTests(unittest.TestCase):
         self.assertEqual("reviewed", args.ai_review_action)
         self.assertEqual("completed", args.status)
 
+    def test_operator_run_history_parser_accepts_run_detail_id(self):
+        args = _build_arg_parser().parse_args(
+            ["demo-operator-runs", "NVDA", "--run-id", "dor-detail"]
+        )
+
+        self.assertEqual("dor-detail", args.run_id)
+
     def test_prints_commands_safety_notes_and_read_only_contract(self):
         buffer = io.StringIO()
         with redirect_stdout(buffer):
@@ -89,6 +96,7 @@ class DemoOperatorRunbookTests(unittest.TestCase):
             decision=None,
             ai_review_action=None,
             status=None,
+			run_id=None,
         )
         mock_operator.assert_not_called()
 
