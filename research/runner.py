@@ -3568,6 +3568,23 @@ def run_manual_demo_status_dashboard(
 		print(f"{name}={value if value is not None else 'unknown'}")
 
 	print()
+	print("AI Review Freshness")
+	print("-------------------")
+	for name in (
+		"ai_review_freshness",
+		"latest_ai_review_at",
+		"latest_required_snapshot_at",
+		"ai_review_lag_hours",
+		"ai_review_freshness_reason",
+	):
+		value = getattr(result, name, None)
+		if isinstance(value, datetime):
+			value = value.isoformat()
+		if value is None and name == "latest_ai_review_at":
+			value = "none"
+		print(f"{name}={value if value is not None else 'unknown'}")
+
+	print()
 	print("Latest Daily AI Review")
 	print("----------------------")
 	latest_review = getattr(result, "latest_daily_ai_review", None)
@@ -4150,6 +4167,8 @@ def _daily_decision_summary(*, health_result, dashboard_result, ai_review_reques
 			"system_health": "blocked",
 			"staleness_status": "unknown",
 			"freshness_reason": "system_health_blocked",
+			"ai_review_freshness": "unknown",
+			"ai_review_freshness_reason": "system_health_blocked",
 			"open_demo_trades": "unknown",
 			"total_unrealized_plpc": "unknown",
 			"evaluation_progress": "unknown",
@@ -4224,6 +4243,12 @@ def _daily_decision_summary(*, health_result, dashboard_result, ai_review_reques
 			"freshness_reason",
 			"required_snapshot_timestamp_missing_or_invalid",
 		),
+		"ai_review_freshness": getattr(dashboard_result, "ai_review_freshness", "unknown"),
+		"ai_review_freshness_reason": getattr(
+			dashboard_result,
+			"ai_review_freshness_reason",
+			"ai_review_or_required_snapshot_timestamp_invalid",
+		),
 		"open_demo_trades": getattr(dashboard_result, "open_demo_trades", "unknown"),
 		"total_unrealized_plpc": getattr(dashboard_result, "total_unrealized_plpc", "unknown"),
 		"evaluation_progress": evaluation_progress,
@@ -4248,6 +4273,8 @@ def _print_daily_decision_summary(summary):
 		"system_health",
 		"staleness_status",
 		"freshness_reason",
+		"ai_review_freshness",
+		"ai_review_freshness_reason",
 		"open_demo_trades",
 		"total_unrealized_plpc",
 		"evaluation_progress",

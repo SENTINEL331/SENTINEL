@@ -76,6 +76,10 @@ class DemoStatusDashboardResult:
     latest_ai_review_at: datetime | None = None
     latest_ai_review_age_hours: float | None = None
     freshness_reason: str = "required_snapshot_timestamp_missing_or_invalid"
+    ai_review_freshness: str = "unknown"
+    latest_required_snapshot_at: datetime | None = None
+    ai_review_lag_hours: float | None = None
+    ai_review_freshness_reason: str = "required_snapshot_timestamp_missing_or_invalid"
 
 
 def _timestamp(item, name: str) -> datetime:
@@ -136,6 +140,29 @@ def _snapshot_freshness(*, position_snapshots, performance_snapshots, evaluation
             status = "stale"
             reason = "latest_required_snapshots_stale"
 
+    latest_required_snapshot_at = (
+        max(required_timestamps) if all(required_timestamps) else None
+    )
+    if review_at is None and latest_daily_ai_review is None:
+        ai_review_freshness = "missing"
+        ai_review_freshness_reason = "no_stored_ai_review"
+        ai_review_lag_hours = None
+    elif review_at is None or latest_required_snapshot_at is None:
+        ai_review_freshness = "unknown"
+        ai_review_freshness_reason = "ai_review_or_required_snapshot_timestamp_invalid"
+        ai_review_lag_hours = None
+    elif review_at >= latest_required_snapshot_at:
+        ai_review_freshness = "current"
+        ai_review_freshness_reason = "ai_review_current_with_latest_required_snapshot"
+        ai_review_lag_hours = 0.0
+    else:
+        ai_review_freshness = "behind_latest_snapshot"
+        ai_review_freshness_reason = "ai_review_older_than_latest_required_snapshot"
+        ai_review_lag_hours = round(
+            (latest_required_snapshot_at - review_at).total_seconds() / 3600,
+            2,
+        )
+
     return {
         "staleness_status": status,
         "latest_position_snapshot_at": position_at,
@@ -147,6 +174,10 @@ def _snapshot_freshness(*, position_snapshots, performance_snapshots, evaluation
         "latest_ai_review_at": review_at,
         "latest_ai_review_age_hours": _age_hours(review_at, now),
         "freshness_reason": reason,
+        "ai_review_freshness": ai_review_freshness,
+        "latest_required_snapshot_at": latest_required_snapshot_at,
+        "ai_review_lag_hours": ai_review_lag_hours,
+        "ai_review_freshness_reason": ai_review_freshness_reason,
     }
 
 

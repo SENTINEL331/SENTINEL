@@ -192,6 +192,57 @@ class DemoStatusDashboardTests(unittest.TestCase):
         self.assertEqual("latest_required_snapshots_fresh", result.freshness_reason)
         self.assertIsNone(result.latest_ai_review_at)
         self.assertIsNone(result.latest_ai_review_age_hours)
+        self.assertEqual("missing", result.ai_review_freshness)
+        self.assertEqual("no_stored_ai_review", result.ai_review_freshness_reason)
+
+    def test_ai_review_freshness_detects_behind_and_current_reviews(self):
+        now = datetime.now(timezone.utc)
+        common = {
+            "positions": [_position(synced_at=now - timedelta(hours=2))],
+            "snapshots": [_snapshot(snapshot_at=now - timedelta(hours=2))],
+            "evaluations": [_evaluation(evaluated_at=now - timedelta(hours=1))],
+        }
+        behind = build_demo_status_dashboard(
+            symbol="NVDA",
+            storage=_storage(
+                reviews=[SimpleNamespace(reviewed_at=now - timedelta(hours=3))],
+                **common,
+            ),
+        )
+        current = build_demo_status_dashboard(
+            symbol="NVDA",
+            storage=_storage(
+                reviews=[SimpleNamespace(reviewed_at=now - timedelta(hours=1))],
+                **common,
+            ),
+        )
+
+        self.assertEqual("behind_latest_snapshot", behind.ai_review_freshness)
+        self.assertEqual(
+            "ai_review_older_than_latest_required_snapshot",
+            behind.ai_review_freshness_reason,
+        )
+        self.assertEqual(2.0, behind.ai_review_lag_hours)
+        self.assertEqual("current", current.ai_review_freshness)
+        self.assertEqual(0.0, current.ai_review_lag_hours)
+
+    def test_ai_review_freshness_is_unknown_for_invalid_review_timestamp(self):
+        now = datetime.now(timezone.utc)
+        result = build_demo_status_dashboard(
+            symbol="NVDA",
+            storage=_storage(
+                positions=[_position(synced_at=now)],
+                snapshots=[_snapshot(snapshot_at=now)],
+                evaluations=[_evaluation(evaluated_at=now)],
+                reviews=[SimpleNamespace(reviewed_at="not-a-timestamp")],
+            ),
+        )
+
+        self.assertEqual("unknown", result.ai_review_freshness)
+        self.assertEqual(
+            "ai_review_or_required_snapshot_timestamp_invalid",
+            result.ai_review_freshness_reason,
+        )
 
     def test_freshness_warns_or_stales_for_old_required_snapshots(self):
         now = datetime.now(timezone.utc)
@@ -274,6 +325,7 @@ class DemoStatusDashboardTests(unittest.TestCase):
         mock_print.assert_any_call("Promotion Actions Taken : 0")
         mock_print.assert_any_call("Snapshot Freshness")
         mock_print.assert_any_call("latest_ai_review_at=none")
+        mock_print.assert_any_call("AI Review Freshness")
 
 
 if __name__ == "__main__":

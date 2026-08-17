@@ -25,6 +25,8 @@ def _dashboard_result():
         },
         staleness_status="fresh",
         freshness_reason="latest_required_snapshots_fresh",
+        ai_review_freshness="behind_latest_snapshot",
+        ai_review_freshness_reason="ai_review_older_than_latest_required_snapshot",
     )
 
 
@@ -85,6 +87,10 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("system_health=healthy")
         mock_print.assert_any_call("staleness_status=fresh")
         mock_print.assert_any_call("freshness_reason=latest_required_snapshots_fresh")
+        mock_print.assert_any_call("ai_review_freshness=behind_latest_snapshot")
+        mock_print.assert_any_call(
+            "ai_review_freshness_reason=ai_review_older_than_latest_required_snapshot"
+        )
         mock_print.assert_any_call("open_demo_trades=4")
         mock_print.assert_any_call("evaluation_progress=1/5 trading_days")
         mock_print.assert_any_call("evaluation_days_remaining=4")
