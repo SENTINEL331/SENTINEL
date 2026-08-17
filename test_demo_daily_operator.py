@@ -23,6 +23,8 @@ def _dashboard_result():
             "risk_exit_candidate": 0,
             "max_evaluation_days_remaining": 4,
         },
+        staleness_status="fresh",
+        freshness_reason="latest_required_snapshots_fresh",
     )
 
 
@@ -81,6 +83,8 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("system_blocked=no")
         mock_print.assert_any_call("Daily Decision Summary")
         mock_print.assert_any_call("system_health=healthy")
+        mock_print.assert_any_call("staleness_status=fresh")
+        mock_print.assert_any_call("freshness_reason=latest_required_snapshots_fresh")
         mock_print.assert_any_call("open_demo_trades=4")
         mock_print.assert_any_call("evaluation_progress=1/5 trading_days")
         mock_print.assert_any_call("evaluation_days_remaining=4")

@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -177,6 +177,61 @@ class DemoStatusDashboardTests(unittest.TestCase):
         result = build_demo_status_dashboard(symbol="NVDA", storage=_storage())
         self.assertIsNone(result.latest_daily_ai_review)
 
+    def test_freshness_uses_required_local_snapshots_without_ai_review(self):
+        now = datetime.now(timezone.utc)
+        result = build_demo_status_dashboard(
+            symbol="NVDA",
+            storage=_storage(
+                positions=[_position(synced_at=now - timedelta(hours=1))],
+                snapshots=[_snapshot(snapshot_at=now - timedelta(hours=2))],
+                evaluations=[_evaluation(evaluated_at=now - timedelta(hours=3))],
+            ),
+        )
+
+        self.assertEqual("fresh", result.staleness_status)
+        self.assertEqual("latest_required_snapshots_fresh", result.freshness_reason)
+        self.assertIsNone(result.latest_ai_review_at)
+        self.assertIsNone(result.latest_ai_review_age_hours)
+
+    def test_freshness_warns_or_stales_for_old_required_snapshots(self):
+        now = datetime.now(timezone.utc)
+        common = {
+            "positions": [_position(synced_at=now - timedelta(hours=1))],
+            "evaluations": [_evaluation(evaluated_at=now - timedelta(hours=1))],
+        }
+        warning = build_demo_status_dashboard(
+            symbol="NVDA",
+            storage=_storage(
+                snapshots=[_snapshot(snapshot_at=now - timedelta(hours=25))],
+                **common,
+            ),
+        )
+        stale = build_demo_status_dashboard(
+            symbol="NVDA",
+            storage=_storage(
+                snapshots=[_snapshot(snapshot_at=now - timedelta(hours=49))],
+                **common,
+            ),
+        )
+
+        self.assertEqual("warning", warning.staleness_status)
+        self.assertEqual("stale", stale.staleness_status)
+
+    def test_freshness_is_unknown_for_missing_or_invalid_required_timestamps(self):
+        result = build_demo_status_dashboard(
+            symbol="NVDA",
+            storage=_storage(
+                positions=[_position(synced_at="not-a-timestamp")],
+                snapshots=[_snapshot(snapshot_at=datetime.now(timezone.utc))],
+                evaluations=[_evaluation(evaluated_at=datetime.now(timezone.utc))],
+            ),
+        )
+
+        self.assertEqual("unknown", result.staleness_status)
+        self.assertEqual(
+            "required_snapshot_timestamp_missing_or_invalid", result.freshness_reason
+        )
+
     def test_is_read_only_and_makes_no_network_calls(self):
         storage = _storage()
         with patch("urllib.request.urlopen") as mock_urlopen:
@@ -217,6 +272,8 @@ class DemoStatusDashboardTests(unittest.TestCase):
         mock_print.assert_any_call("Order Placement Allowed : no")
         mock_print.assert_any_call("Position Close Allowed : no")
         mock_print.assert_any_call("Promotion Actions Taken : 0")
+        mock_print.assert_any_call("Snapshot Freshness")
+        mock_print.assert_any_call("latest_ai_review_at=none")
 
 
 if __name__ == "__main__":

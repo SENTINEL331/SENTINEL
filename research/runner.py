@@ -3546,6 +3546,28 @@ def run_manual_demo_status_dashboard(
 		print(f"{name}={result.rating_counts.get(name, 0)}")
 
 	print()
+	print("Snapshot Freshness")
+	print("------------------")
+	for name in (
+		"staleness_status",
+		"latest_position_snapshot_at",
+		"latest_position_snapshot_age_hours",
+		"latest_performance_snapshot_at",
+		"latest_performance_snapshot_age_hours",
+		"latest_trade_evaluation_at",
+		"latest_trade_evaluation_age_hours",
+		"latest_ai_review_at",
+		"latest_ai_review_age_hours",
+		"freshness_reason",
+	):
+		value = getattr(result, name, None)
+		if isinstance(value, datetime):
+			value = value.isoformat()
+		if value is None and name == "latest_ai_review_at":
+			value = "none"
+		print(f"{name}={value if value is not None else 'unknown'}")
+
+	print()
 	print("Latest Daily AI Review")
 	print("----------------------")
 	latest_review = getattr(result, "latest_daily_ai_review", None)
@@ -4126,6 +4148,8 @@ def _daily_decision_summary(*, health_result, dashboard_result, ai_review_reques
 	if health_result.overall_health == "blocked":
 		return {
 			"system_health": "blocked",
+			"staleness_status": "unknown",
+			"freshness_reason": "system_health_blocked",
 			"open_demo_trades": "unknown",
 			"total_unrealized_plpc": "unknown",
 			"evaluation_progress": "unknown",
@@ -4194,6 +4218,12 @@ def _daily_decision_summary(*, health_result, dashboard_result, ai_review_reques
 
 	return {
 		"system_health": health_result.overall_health,
+		"staleness_status": getattr(dashboard_result, "staleness_status", "unknown"),
+		"freshness_reason": getattr(
+			dashboard_result,
+			"freshness_reason",
+			"required_snapshot_timestamp_missing_or_invalid",
+		),
 		"open_demo_trades": getattr(dashboard_result, "open_demo_trades", "unknown"),
 		"total_unrealized_plpc": getattr(dashboard_result, "total_unrealized_plpc", "unknown"),
 		"evaluation_progress": evaluation_progress,
@@ -4216,6 +4246,8 @@ def _print_daily_decision_summary(summary):
 	print("----------------------")
 	for name in (
 		"system_health",
+		"staleness_status",
+		"freshness_reason",
 		"open_demo_trades",
 		"total_unrealized_plpc",
 		"evaluation_progress",

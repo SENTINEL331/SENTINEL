@@ -66,6 +66,16 @@ class DemoStatusDashboardResult:
     total_unrealized_plpc: float = 0.0
     rating_counts: dict[str, int] = field(default_factory=dict)
     latest_daily_ai_review: object | None = None
+    staleness_status: str = "unknown"
+    latest_position_snapshot_at: datetime | None = None
+    latest_position_snapshot_age_hours: float | None = None
+    latest_performance_snapshot_at: datetime | None = None
+    latest_performance_snapshot_age_hours: float | None = None
+    latest_trade_evaluation_at: datetime | None = None
+    latest_trade_evaluation_age_hours: float | None = None
+    latest_ai_review_at: datetime | None = None
+    latest_ai_review_age_hours: float | None = None
+    freshness_reason: str = "required_snapshot_timestamp_missing_or_invalid"
 
 
 def _timestamp(item, name: str) -> datetime:
@@ -75,6 +85,69 @@ def _timestamp(item, name: str) -> datetime:
             return value.replace(tzinfo=timezone.utc)
         return value
     return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _parse_timestamp(value) -> datetime | None:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return None
+    return value.astimezone(timezone.utc)
+
+
+def _latest_timestamp(items, name: str) -> datetime | None:
+    timestamps = [_parse_timestamp(getattr(item, name, None)) for item in items]
+    valid_timestamps = [timestamp for timestamp in timestamps if timestamp is not None]
+    return max(valid_timestamps) if valid_timestamps else None
+
+
+def _age_hours(timestamp: datetime | None, now: datetime) -> float | None:
+    if timestamp is None:
+        return None
+    return round(max((now - timestamp).total_seconds() / 3600, 0.0), 2)
+
+
+def _snapshot_freshness(*, position_snapshots, performance_snapshots, evaluations, latest_daily_ai_review):
+    now = datetime.now(timezone.utc)
+    position_at = _latest_timestamp(position_snapshots, "synced_at")
+    performance_at = _latest_timestamp(performance_snapshots, "snapshot_at")
+    evaluation_at = _latest_timestamp(evaluations, "evaluated_at")
+    review_at = _parse_timestamp(getattr(latest_daily_ai_review, "reviewed_at", None))
+
+    required_timestamps = (position_at, performance_at, evaluation_at)
+    required_ages = tuple(_age_hours(timestamp, now) for timestamp in required_timestamps)
+    if any(timestamp is None for timestamp in required_timestamps):
+        status = "unknown"
+        reason = "required_snapshot_timestamp_missing_or_invalid"
+    else:
+        latest_required_age = max(age for age in required_ages if age is not None)
+        if latest_required_age <= 24:
+            status = "fresh"
+            reason = "latest_required_snapshots_fresh"
+        elif latest_required_age <= 48:
+            status = "warning"
+            reason = "latest_required_snapshots_warning"
+        else:
+            status = "stale"
+            reason = "latest_required_snapshots_stale"
+
+    return {
+        "staleness_status": status,
+        "latest_position_snapshot_at": position_at,
+        "latest_position_snapshot_age_hours": required_ages[0],
+        "latest_performance_snapshot_at": performance_at,
+        "latest_performance_snapshot_age_hours": required_ages[1],
+        "latest_trade_evaluation_at": evaluation_at,
+        "latest_trade_evaluation_age_hours": required_ages[2],
+        "latest_ai_review_at": review_at,
+        "latest_ai_review_age_hours": _age_hours(review_at, now),
+        "freshness_reason": reason,
+    }
 
 
 def _latest_evaluations(evaluations):
@@ -133,11 +206,21 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
         symbol=symbol,
         storage=storage,
     )
+    performance_snapshots = list(
+        storage.load_demo_trade_performance_snapshots(symbol=symbol) or []
+    )
+    position_snapshots = list(storage.load_demo_position_snapshots(symbol=symbol) or [])
     evaluations = list(storage.load_demo_trade_evaluations(symbol=symbol) or [])
     latest_evaluations = _latest_evaluations(evaluations)
     board = build_demo_promotion_board(symbol=symbol, storage=storage)
     opportunity = build_demo_current_opportunity_ratings(symbol=symbol, storage=storage)
     latest_daily_ai_review = _latest_daily_ai_review(storage, symbol)
+    freshness = _snapshot_freshness(
+        position_snapshots=position_snapshots,
+        performance_snapshots=performance_snapshots,
+        evaluations=evaluations,
+        latest_daily_ai_review=latest_daily_ai_review,
+    )
 
     board_by_hypothesis = {item.source_hypothesis_id: item for item in board.board_items}
     summary_risk_by_hypothesis = {
@@ -364,4 +447,5 @@ def build_demo_status_dashboard(*, symbol: str, storage) -> DemoStatusDashboardR
         ),
         rating_counts=rating_counts,
         latest_daily_ai_review=latest_daily_ai_review,
+        **freshness,
     )
