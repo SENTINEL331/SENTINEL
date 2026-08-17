@@ -4635,13 +4635,125 @@ def run_manual_demo_operator_runs(symbol=DEFAULT_SYMBOL, storage=None):
 			print(f"  human_next_step={record.human_next_step}")
 	else:
 		print("No local demo operator run records are available.")
+	metrics = _operator_run_history_metrics(records)
 	print()
 	print("Summary")
 	print("-------")
-	print(f"runs_loaded={len(records)}")
-	print(f"latest_decision={records[0].decision if records else 'none'}")
-	print(f"latest_human_next_step={records[0].human_next_step if records else 'none'}")
+	for name in (
+		"runs_loaded",
+		"latest_decision",
+		"latest_human_next_step",
+		"reviewed_runs",
+		"confirmation_required_runs",
+		"not_requested_runs",
+		"request_fresh_ai_review_runs",
+		"continue_monitoring_runs",
+		"blocked_runs",
+		"completed_runs",
+		"completed_with_warnings_runs",
+		"orders_submitted_total",
+		"orders_cancelled_total",
+		"positions_closed_total",
+		"promotions_performed_total",
+		"latest_run_demo_only",
+		"history_health",
+		"history_health_reason",
+	):
+		print(f"{name}={metrics[name]}")
 	return records
+
+
+def _operator_run_history_metrics(records):
+	"""Summarize loaded local run records without mutating or fetching state."""
+
+	if not records:
+		return {
+			"runs_loaded": 0,
+			"latest_decision": "none",
+			"latest_human_next_step": "none",
+			"reviewed_runs": 0,
+			"confirmation_required_runs": 0,
+			"not_requested_runs": 0,
+			"request_fresh_ai_review_runs": 0,
+			"continue_monitoring_runs": 0,
+			"blocked_runs": 0,
+			"completed_runs": 0,
+			"completed_with_warnings_runs": 0,
+			"orders_submitted_total": 0,
+			"orders_cancelled_total": 0,
+			"positions_closed_total": 0,
+			"promotions_performed_total": 0,
+			"latest_run_demo_only": "unknown",
+			"history_health": "unknown",
+			"history_health_reason": "no_operator_run_records_loaded",
+		}
+
+	def _safe_count(record, name):
+		value = getattr(record, name, None)
+		try:
+			return int(value)
+		except (TypeError, ValueError):
+			return 0
+
+	latest = records[0]
+	totals = {
+		"orders_submitted_total": sum(_safe_count(record, "orders_submitted") for record in records),
+		"orders_cancelled_total": sum(_safe_count(record, "orders_cancelled") for record in records),
+		"positions_closed_total": sum(_safe_count(record, "positions_closed") for record in records),
+		"promotions_performed_total": sum(_safe_count(record, "promotions_performed") for record in records),
+	}
+	demo_only_values = [getattr(record, "demo_only", None) for record in records]
+	latest_demo_only = getattr(latest, "demo_only", None)
+	if any(value is False for value in demo_only_values):
+		history_health = "blocked"
+		history_health_reason = "non_demo_operator_run_record_detected"
+	elif any(totals.values()):
+		history_health = "blocked"
+		history_health_reason = "nonzero_safety_action_total_detected"
+	elif any(value is not True for value in demo_only_values):
+		history_health = "warning"
+		history_health_reason = "demo_only_missing_or_unknown"
+	else:
+		history_health = "clean"
+		history_health_reason = "all_records_demo_only_with_zero_safety_actions"
+
+	return {
+		"runs_loaded": len(records),
+		"latest_decision": getattr(latest, "decision", "unknown"),
+		"latest_human_next_step": getattr(latest, "human_next_step", "unknown"),
+		"reviewed_runs": sum(
+			getattr(record, "ai_review_action", "") == "reviewed" for record in records
+		),
+		"confirmation_required_runs": sum(
+			getattr(record, "ai_review_action", "") == "confirmation_required"
+			for record in records
+		),
+		"not_requested_runs": sum(
+			getattr(record, "ai_review_action", "") == "not_requested" for record in records
+		),
+		"request_fresh_ai_review_runs": sum(
+			getattr(record, "decision", "") == "request_fresh_ai_review" for record in records
+		),
+		"continue_monitoring_runs": sum(
+			getattr(record, "decision", "") == "continue_monitoring" for record in records
+		),
+		"blocked_runs": sum(
+			getattr(record, "decision", "") == "blocked" for record in records
+		),
+		"completed_runs": sum(
+			getattr(record, "operator_status", "") == "completed" for record in records
+		),
+		"completed_with_warnings_runs": sum(
+			getattr(record, "operator_status", "") == "completed_with_warnings"
+			for record in records
+		),
+		**totals,
+		"latest_run_demo_only": (
+			latest_demo_only if latest_demo_only in {True, False} else "unknown"
+		),
+		"history_health": history_health,
+		"history_health_reason": history_health_reason,
+	}
 
 
 def _print_latest_ai_review_after_operator(*, ai_review_requested, confirm_ai_call, ai_review_result):

@@ -285,6 +285,17 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("- operator_run_id=dor-NVDA-001")
         mock_print.assert_any_call("runs_loaded=1")
         mock_print.assert_any_call("latest_decision=continue_monitoring")
+        mock_print.assert_any_call("reviewed_runs=0")
+        mock_print.assert_any_call("confirmation_required_runs=0")
+        mock_print.assert_any_call("not_requested_runs=1")
+        mock_print.assert_any_call("continue_monitoring_runs=1")
+        mock_print.assert_any_call("orders_submitted_total=0")
+        mock_print.assert_any_call("orders_cancelled_total=0")
+        mock_print.assert_any_call("positions_closed_total=0")
+        mock_print.assert_any_call("promotions_performed_total=0")
+        mock_print.assert_any_call("latest_run_demo_only=unknown")
+        mock_print.assert_any_call("history_health=warning")
+        mock_print.assert_any_call("history_health_reason=demo_only_missing_or_unknown")
 
     def test_ai_review_without_confirmation_delegates_without_ai_call(self):
         ai_review = Mock(
