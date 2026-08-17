@@ -80,6 +80,8 @@ class DemoStatusDashboardResult:
     latest_required_snapshot_at: datetime | None = None
     ai_review_lag_hours: float | None = None
     ai_review_freshness_reason: str = "required_snapshot_timestamp_missing_or_invalid"
+    ai_review_suggested_action: str = "unknown"
+    ai_review_action_reason: str = "ai_review_freshness_unknown"
 
 
 def _timestamp(item, name: str) -> datetime:
@@ -116,6 +118,47 @@ def _age_hours(timestamp: datetime | None, now: datetime) -> float | None:
     return round(max((now - timestamp).total_seconds() / 3600, 0.0), 2)
 
 
+def build_ai_review_freshness(*, latest_daily_ai_review, latest_required_snapshot_at):
+    """Compare one stored advisory review with the latest required local snapshot."""
+
+    review_at = _parse_timestamp(getattr(latest_daily_ai_review, "reviewed_at", None))
+    required_at = _parse_timestamp(latest_required_snapshot_at)
+    if review_at is None and latest_daily_ai_review is None:
+        freshness = "missing"
+        freshness_reason = "no_stored_ai_review"
+        suggested_action = "no_review_available"
+        action_reason = "no_stored_ai_review"
+        lag_hours = None
+    elif review_at is None or required_at is None:
+        freshness = "unknown"
+        freshness_reason = "ai_review_or_required_snapshot_timestamp_invalid"
+        suggested_action = "unknown"
+        action_reason = "ai_review_freshness_unknown"
+        lag_hours = None
+    elif review_at >= required_at:
+        freshness = "current"
+        freshness_reason = "ai_review_current_with_latest_required_snapshot"
+        suggested_action = "none"
+        action_reason = "latest_monitoring_snapshot_covered_by_ai_review"
+        lag_hours = 0.0
+    else:
+        freshness = "behind_latest_snapshot"
+        freshness_reason = "ai_review_older_than_latest_required_snapshot"
+        suggested_action = "request_fresh_ai_review"
+        action_reason = "latest_monitoring_snapshot_newer_than_ai_review"
+        lag_hours = round((required_at - review_at).total_seconds() / 3600, 2)
+
+    return {
+        "ai_review_freshness": freshness,
+        "latest_ai_review_at": review_at,
+        "latest_required_snapshot_at": required_at,
+        "ai_review_lag_hours": lag_hours,
+        "ai_review_freshness_reason": freshness_reason,
+        "ai_review_suggested_action": suggested_action,
+        "ai_review_action_reason": action_reason,
+    }
+
+
 def _snapshot_freshness(*, position_snapshots, performance_snapshots, evaluations, latest_daily_ai_review):
     now = datetime.now(timezone.utc)
     position_at = _latest_timestamp(position_snapshots, "synced_at")
@@ -143,25 +186,10 @@ def _snapshot_freshness(*, position_snapshots, performance_snapshots, evaluation
     latest_required_snapshot_at = (
         max(required_timestamps) if all(required_timestamps) else None
     )
-    if review_at is None and latest_daily_ai_review is None:
-        ai_review_freshness = "missing"
-        ai_review_freshness_reason = "no_stored_ai_review"
-        ai_review_lag_hours = None
-    elif review_at is None or latest_required_snapshot_at is None:
-        ai_review_freshness = "unknown"
-        ai_review_freshness_reason = "ai_review_or_required_snapshot_timestamp_invalid"
-        ai_review_lag_hours = None
-    elif review_at >= latest_required_snapshot_at:
-        ai_review_freshness = "current"
-        ai_review_freshness_reason = "ai_review_current_with_latest_required_snapshot"
-        ai_review_lag_hours = 0.0
-    else:
-        ai_review_freshness = "behind_latest_snapshot"
-        ai_review_freshness_reason = "ai_review_older_than_latest_required_snapshot"
-        ai_review_lag_hours = round(
-            (latest_required_snapshot_at - review_at).total_seconds() / 3600,
-            2,
-        )
+    ai_review_freshness = build_ai_review_freshness(
+        latest_daily_ai_review=latest_daily_ai_review,
+        latest_required_snapshot_at=latest_required_snapshot_at,
+    )
 
     return {
         "staleness_status": status,
@@ -174,10 +202,7 @@ def _snapshot_freshness(*, position_snapshots, performance_snapshots, evaluation
         "latest_ai_review_at": review_at,
         "latest_ai_review_age_hours": _age_hours(review_at, now),
         "freshness_reason": reason,
-        "ai_review_freshness": ai_review_freshness,
-        "latest_required_snapshot_at": latest_required_snapshot_at,
-        "ai_review_lag_hours": ai_review_lag_hours,
-        "ai_review_freshness_reason": ai_review_freshness_reason,
+        **ai_review_freshness,
     }
 
 

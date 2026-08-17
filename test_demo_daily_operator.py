@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import ANY, Mock, patch
 
@@ -27,6 +28,12 @@ def _dashboard_result():
         freshness_reason="latest_required_snapshots_fresh",
         ai_review_freshness="behind_latest_snapshot",
         ai_review_freshness_reason="ai_review_older_than_latest_required_snapshot",
+        ai_review_suggested_action="request_fresh_ai_review",
+        ai_review_action_reason="latest_monitoring_snapshot_newer_than_ai_review",
+        latest_required_snapshot_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        latest_daily_ai_review=SimpleNamespace(
+            reviewed_at=datetime.now(timezone.utc) - timedelta(hours=2)
+        ),
     )
 
 
@@ -90,6 +97,10 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("ai_review_freshness=behind_latest_snapshot")
         mock_print.assert_any_call(
             "ai_review_freshness_reason=ai_review_older_than_latest_required_snapshot"
+        )
+        mock_print.assert_any_call("ai_review_suggested_action=request_fresh_ai_review")
+        mock_print.assert_any_call(
+            "ai_review_action_reason=latest_monitoring_snapshot_newer_than_ai_review"
         )
         mock_print.assert_any_call("open_demo_trades=4")
         mock_print.assert_any_call("evaluation_progress=1/5 trading_days")
@@ -222,6 +233,10 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("ai_review_action=confirmation_required")
         mock_print.assert_any_call("Latest AI Review After Operator")
         mock_print.assert_any_call("ai_review_source=confirmation_required")
+        mock_print.assert_any_call("AI Review Freshness After Operator")
+        mock_print.assert_any_call(
+            "ai_review_suggested_action_after_operator=request_fresh_ai_review"
+        )
 
     def test_confirmed_ai_review_delegates_and_reports_duplicate(self):
         existing_review = SimpleNamespace(
@@ -275,6 +290,7 @@ class DemoDailyOperatorTests(unittest.TestCase):
                 "daily_reviews_created": 1,
                 "skipped_existing": 0,
                 "review": SimpleNamespace(
+					reviewed_at=datetime.now(timezone.utc),
                     deeper_ai_review_needed=False,
                     reason="evaluation_window_incomplete",
                 ),
@@ -297,6 +313,9 @@ class DemoDailyOperatorTests(unittest.TestCase):
         mock_print.assert_any_call("ai_review_action=reviewed")
         mock_print.assert_any_call("Latest AI Review After Operator")
         mock_print.assert_any_call("ai_review_source=created_this_run")
+        mock_print.assert_any_call("AI Review Freshness After Operator")
+        mock_print.assert_any_call("ai_review_freshness_after_operator=current")
+        mock_print.assert_any_call("ai_review_suggested_action_after_operator=none")
 
     def test_confirmed_ai_review_without_result_reports_no_ai_call_made(self):
         ai_review = Mock(

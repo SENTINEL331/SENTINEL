@@ -35,7 +35,10 @@ from research.demo_current_opportunity_rating import (
 	OPPORTUNITY_RATING_ORDER,
 	build_demo_current_opportunity_ratings,
 )
-from research.demo_status_dashboard import build_demo_status_dashboard
+from research.demo_status_dashboard import (
+	build_ai_review_freshness,
+	build_demo_status_dashboard,
+)
 from research.demo_exit_readiness import (
 	EXIT_READINESS_ORDER,
 	build_demo_exit_readiness,
@@ -3576,6 +3579,8 @@ def run_manual_demo_status_dashboard(
 		"latest_required_snapshot_at",
 		"ai_review_lag_hours",
 		"ai_review_freshness_reason",
+		"ai_review_suggested_action",
+		"ai_review_action_reason",
 	):
 		value = getattr(result, name, None)
 		if isinstance(value, datetime):
@@ -4169,6 +4174,8 @@ def _daily_decision_summary(*, health_result, dashboard_result, ai_review_reques
 			"freshness_reason": "system_health_blocked",
 			"ai_review_freshness": "unknown",
 			"ai_review_freshness_reason": "system_health_blocked",
+			"ai_review_suggested_action": "unknown",
+			"ai_review_action_reason": "system_health_blocked",
 			"open_demo_trades": "unknown",
 			"total_unrealized_plpc": "unknown",
 			"evaluation_progress": "unknown",
@@ -4249,6 +4256,16 @@ def _daily_decision_summary(*, health_result, dashboard_result, ai_review_reques
 			"ai_review_freshness_reason",
 			"ai_review_or_required_snapshot_timestamp_invalid",
 		),
+		"ai_review_suggested_action": getattr(
+			dashboard_result,
+			"ai_review_suggested_action",
+			"unknown",
+		),
+		"ai_review_action_reason": getattr(
+			dashboard_result,
+			"ai_review_action_reason",
+			"ai_review_freshness_unknown",
+		),
 		"open_demo_trades": getattr(dashboard_result, "open_demo_trades", "unknown"),
 		"total_unrealized_plpc": getattr(dashboard_result, "total_unrealized_plpc", "unknown"),
 		"evaluation_progress": evaluation_progress,
@@ -4275,6 +4292,8 @@ def _print_daily_decision_summary(summary):
 		"freshness_reason",
 		"ai_review_freshness",
 		"ai_review_freshness_reason",
+		"ai_review_suggested_action",
+		"ai_review_action_reason",
 		"open_demo_trades",
 		"total_unrealized_plpc",
 		"evaluation_progress",
@@ -4336,6 +4355,36 @@ def _print_latest_ai_review_after_operator(*, ai_review_requested, confirm_ai_ca
 	print("note=This is the latest advisory AI review after the operator completed.")
 
 	return review, source
+
+
+def _print_ai_review_freshness_after_operator(*, dashboard_result, latest_ai_review):
+	"""Render advisory review recency using state already gathered by the operator."""
+
+	latest_required_snapshot_at = getattr(
+		dashboard_result, "latest_required_snapshot_at", None
+	)
+	freshness = build_ai_review_freshness(
+		latest_daily_ai_review=latest_ai_review,
+		latest_required_snapshot_at=latest_required_snapshot_at,
+	)
+	print()
+	print("AI Review Freshness After Operator")
+	print("-----------------------------------")
+	for name in (
+		"ai_review_freshness",
+		"ai_review_suggested_action",
+		"ai_review_action_reason",
+		"latest_ai_review_at",
+		"latest_required_snapshot_at",
+		"ai_review_lag_hours",
+	):
+		value = freshness[name]
+		if isinstance(value, datetime):
+			value = value.isoformat()
+		if value is None and name == "latest_ai_review_at":
+			value = "none"
+		print(f"{name}_after_operator={value if value is not None else 'unknown'}")
+	return freshness
 
 
 def run_manual_demo_daily_operator(
@@ -4587,6 +4636,15 @@ def run_manual_demo_daily_operator(
 		confirm_ai_call=confirm_ai_call,
 		ai_review_result=ai_review_result,
 	)
+	post_operator_ai_review_freshness = None
+	if ai_review_requested:
+		post_operator_ai_review_freshness = _print_ai_review_freshness_after_operator(
+			dashboard_result=dashboard_result,
+			latest_ai_review=(
+				latest_ai_review
+				or getattr(dashboard_result, "latest_daily_ai_review", None)
+			),
+		)
 
 	print()
 	print("Operator Summary")
@@ -4624,6 +4682,7 @@ def run_manual_demo_daily_operator(
 		"skipped_existing": skipped_existing,
 		"latest_ai_review": latest_ai_review,
 		"latest_ai_review_source": latest_ai_review_source,
+		"post_operator_ai_review_freshness": post_operator_ai_review_freshness,
 		"cycle_result": cycle_result,
 		"dashboard_result": dashboard_result,
 	}

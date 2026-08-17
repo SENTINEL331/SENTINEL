@@ -194,6 +194,7 @@ class DemoStatusDashboardTests(unittest.TestCase):
         self.assertIsNone(result.latest_ai_review_age_hours)
         self.assertEqual("missing", result.ai_review_freshness)
         self.assertEqual("no_stored_ai_review", result.ai_review_freshness_reason)
+        self.assertEqual("no_review_available", result.ai_review_suggested_action)
 
     def test_ai_review_freshness_detects_behind_and_current_reviews(self):
         now = datetime.now(timezone.utc)
@@ -223,8 +224,14 @@ class DemoStatusDashboardTests(unittest.TestCase):
             behind.ai_review_freshness_reason,
         )
         self.assertEqual(2.0, behind.ai_review_lag_hours)
+        self.assertEqual("request_fresh_ai_review", behind.ai_review_suggested_action)
+        self.assertEqual(
+            "latest_monitoring_snapshot_newer_than_ai_review",
+            behind.ai_review_action_reason,
+        )
         self.assertEqual("current", current.ai_review_freshness)
         self.assertEqual(0.0, current.ai_review_lag_hours)
+        self.assertEqual("none", current.ai_review_suggested_action)
 
     def test_ai_review_freshness_is_unknown_for_invalid_review_timestamp(self):
         now = datetime.now(timezone.utc)
@@ -311,6 +318,9 @@ class DemoStatusDashboardTests(unittest.TestCase):
             total_unrealized_pl=0.0,
             total_unrealized_plpc=0.0,
             rating_counts={},
+			ai_review_freshness="behind_latest_snapshot",
+			ai_review_suggested_action="request_fresh_ai_review",
+			ai_review_action_reason="latest_monitoring_snapshot_newer_than_ai_review",
         )
         with patch("builtins.print") as mock_print:
             run_manual_demo_status_dashboard(
@@ -326,6 +336,10 @@ class DemoStatusDashboardTests(unittest.TestCase):
         mock_print.assert_any_call("Snapshot Freshness")
         mock_print.assert_any_call("latest_ai_review_at=none")
         mock_print.assert_any_call("AI Review Freshness")
+        mock_print.assert_any_call("ai_review_suggested_action=request_fresh_ai_review")
+        mock_print.assert_any_call(
+            "ai_review_action_reason=latest_monitoring_snapshot_newer_than_ai_review"
+        )
 
 
 if __name__ == "__main__":
